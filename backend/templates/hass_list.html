@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Home Assistant – {{ request.state.site_name }}{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-2xl font-bold text-white">Home Assistant</h1>
+      <p class="text-slate-500 text-sm mt-0.5">Monitor your Home Assistant instances</p>
+    </div>
+    <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
+            class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+      </svg>
+      Add Home Assistant
+    </button>
+  </div>
+
+  {% if not rows %}
+  <!-- Empty state -->
+  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-12 text-center">
+    <div class="w-16 h-16 rounded-2xl bg-orange-500/10 flex items-center justify-center mx-auto mb-4">
+      <svg class="w-8 h-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+      </svg>
+    </div>
+    <p class="text-white font-medium mb-1">No Home Assistant instances</p>
+    <p class="text-slate-500 text-sm mb-4">Add your first Home Assistant instance to start monitoring.</p>
+    <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+      </svg>
+      Add Home Assistant
+    </button>
+  </div>
+  {% else %}
+
+  <!-- Instances table -->
+  <div class="bg-[#13151f] border border-[#252836] rounded-xl overflow-hidden">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-[#252836]">
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Status</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Name</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Location</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Version</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Entities</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Automations</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Last Check</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-[#252836]">
+        {% for row in rows %}
+        {% set inst = row.instance %}
+        {% set snap = row.snap %}
+        {% set data = row.data %}
+        <tr class="hover:bg-[#1a1d2e] transition-colors">
+          <!-- Status -->
+          <td class="px-5 py-3">
+            {% if snap is none %}
+              <span class="inline-flex items-center gap-1.5 text-slate-500 text-xs">
+                <span class="w-2 h-2 rounded-full bg-slate-600"></span> No data
+              </span>
+            {% elif snap.ok %}
+              <span class="inline-flex items-center gap-1.5 text-emerald-400 text-xs">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]"></span> Online
+              </span>
+            {% else %}
+              <span class="inline-flex items-center gap-1.5 text-red-400 text-xs">
+                <span class="w-2 h-2 rounded-full bg-red-400"></span> Error
+              </span>
+            {% endif %}
+          </td>
+          <!-- Name + host -->
+          <td class="px-5 py-3">
+            <a href="/hass/{{ inst.id }}" class="text-white font-medium hover:text-blue-400 transition-colors">{{ inst.name }}</a>
+            <p class="text-slate-500 text-xs mt-0.5">{{ inst.host }}</p>
+          </td>
+          <!-- Location -->
+          <td class="px-5 py-3 text-slate-300 text-xs">
+            {% if data %}{{ data.location_name }}{% else %}<span class="text-slate-600">—</span>{% endif %}
+          </td>
+          <!-- Version -->
+          <td class="px-5 py-3 text-slate-300 text-xs tabular-nums">
+            {% if data %}{{ data.version }}{% else %}<span class="text-slate-600">—</span>{% endif %}
+          </td>
+          <!-- Entities -->
+          <td class="px-5 py-3 text-slate-300 text-xs tabular-nums">
+            {% if data %}
+              <span class="text-white font-medium">{{ data.entities.total }}</span>
+            {% else %}<span class="text-slate-600">—</span>{% endif %}
+          </td>
+          <!-- Automations -->
+          <td class="px-5 py-3 text-slate-300 text-xs tabular-nums">
+            {% if data %}
+              {{ data.automations | length }}
+            {% else %}<span class="text-slate-600">—</span>{% endif %}
+          </td>
+          <!-- Last check -->
+          <td class="px-5 py-3 text-slate-500 text-xs">
+            {% if snap %}{{ snap.timestamp.strftime('%Y-%m-%d %H:%M') }}{% else %}<span class="text-slate-600">Never</span>{% endif %}
+          </td>
+          <!-- Actions -->
+          <td class="px-5 py-3 text-right">
+            <a href="/hass/{{ inst.id }}"
+               class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#252836] hover:bg-[#2a2d3e] text-slate-300 text-xs rounded-lg transition-colors">
+              View
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- Add Modal -->
+<div id="add-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+     onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 w-full max-w-md shadow-2xl">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-white font-semibold">Add Home Assistant Instance</h2>
+      <button onclick="document.getElementById('add-modal').classList.add('hidden')"
+              class="text-slate-500 hover:text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <form method="post" action="/hass/add" class="space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-slate-400 mb-1.5">Name</label>
+        <input type="text" name="name" placeholder="Home Assistant" required
+               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                      placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-400 mb-1.5">URL</label>
+        <input type="url" name="host" placeholder="http://homeassistant.local:8123" required
+               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                      placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+        <p class="text-slate-600 text-xs mt-1">e.g. http://homeassistant.local:8123</p>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-400 mb-1.5">Long-lived Access Token</label>
+        <input type="password" name="token" placeholder="eyJ..." required
+               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                      placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+        <p class="text-slate-600 text-xs mt-1">Create in HA → Profile → Long-lived access tokens</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="verify_ssl" id="add_verify_ssl"
+               class="w-4 h-4 rounded border-[#252836] bg-[#0b0d14] accent-blue-600">
+        <label for="add_verify_ssl" class="text-sm text-slate-400">Verify SSL certificate</label>
+      </div>
+      <div class="flex justify-end gap-3 pt-2">
+        <button type="button" onclick="document.getElementById('add-modal').classList.add('hidden')"
+                class="px-4 py-2 text-slate-400 hover:text-white text-sm transition-colors">Cancel</button>
+        <button type="submit"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+          Add Instance
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

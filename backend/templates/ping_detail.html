@@ -16,9 +16,14 @@
       </svg>
     </a>
     <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2.5">
+      <div class="flex items-center gap-2.5 flex-wrap">
         <h1 class="text-2xl font-bold text-white">{{ host.name }}</h1>
-        {% if latest and latest.success %}
+
+        {% if host.maintenance %}
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400 text-xs font-medium border border-yellow-500/20">
+            Maintenance
+          </span>
+        {% elif latest and latest.success %}
           <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Online
           </span>
@@ -31,11 +36,42 @@
             No data
           </span>
         {% endif %}
+
+        {% for ct in (host.check_type or "icmp").split(",") %}{% set ct = ct.strip() %}
+        <span class="px-2 py-0.5 rounded-full text-xs font-mono
+          {% if ct == 'http' %}bg-blue-500/10 text-blue-400{% elif ct == 'https' %}bg-emerald-500/10 text-emerald-300{% elif ct == 'tcp' %}bg-purple-500/10 text-purple-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+          {{ ct | upper }}
+        </span>{% endfor %}
+
         {% if not host.enabled %}
           <span class="px-2 py-0.5 rounded-full bg-[#252836] text-slate-500 text-xs font-medium">disabled</span>
         {% endif %}
+
+        {% if host.ssl_expiry_days is not none %}
+          <span class="px-2 py-0.5 rounded-full text-xs
+            {% if host.ssl_expiry_days <= 7 %}bg-red-500/10 text-red-400 border border-red-500/20
+            {% elif host.ssl_expiry_days <= 30 %}bg-yellow-500/10 text-yellow-400 border border-yellow-500/20
+            {% else %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{% endif %}">
+            SSL {{ host.ssl_expiry_days }}d
+          </span>
+        {% endif %}
+
+        {% if threshold_alarm %}
+          <span class="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20 text-xs font-medium">
+            Latency threshold exceeded
+          </span>
+        {% endif %}
       </div>
-      <p class="text-slate-500 text-sm mt-0.5">{{ host.hostname }}</p>
+      <p class="text-slate-500 text-sm mt-0.5">
+        {{ host.hostname }}
+        {% if dns_info.ip and dns_info.fqdn %}
+          {% if host.hostname == dns_info.ip or host.hostname.split('/')[-1].split(':')[0] == dns_info.ip %}
+            <span class="text-slate-600 mx-1">·</span><span class="text-slate-600 text-xs font-mono">{{ dns_info.fqdn }}</span>
+          {% else %}
+            <span class="text-slate-600 mx-1">·</span><span class="text-slate-600 text-xs font-mono">{{ dns_info.ip }}</span>
+          {% endif %}
+        {% endif %}
+      </p>
     </div>
   </div>
 
@@ -51,6 +87,18 @@
             class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px">
       Monitoring
     </button>
+    {% if unifi_client and unifi_client.get('has_ports') %}
+    <button type="button" id="tab-ports"
+            onclick="switchTab('ports')"
+            class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px">
+      Ports
+      <span class="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px]
+        {% set up_count = unifi_client.port_table | selectattr('up') | list | length %}
+        {% if up_count > 0 %}bg-emerald-500/20 text-emerald-400{% else %}bg-slate-500/10 text-slate-500{% endif %}">
+        {{ up_count }}/{{ unifi_client.port_table | length }}
+      </span>
+    </button>
+    {% endif %}
   </div>
 
   <!-- ── INFO TAB ──────────────────────────────────────────────────────────── -->
@@ -70,15 +118,45 @@
         <form method="post" action="/ping/{{ host.id }}/edit" class="space-y-4">
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-1.5">Display name</label>
-            <input type="text" name="name" value="{{ host.name }}" aria-label="Display name"
+            <input type="text" name="name" value="{{ host.name }}"
                    class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
                           focus:outline-none focus:border-blue-500 transition-colors" required>
           </div>
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-1.5">Hostname / IP address</label>
-            <input type="text" name="hostname" value="{{ host.hostname }}" aria-label="Hostname or IP address"
+            <input type="text" name="hostname" value="{{ host.hostname }}"
                    class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
                           focus:outline-none focus:border-blue-500 transition-colors" required>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-2">Check types</label>
+            {% set active_types = (host.check_type or "icmp").split(",") | map("trim") | list %}
+            <div class="flex gap-4 flex-wrap mb-3">
+              {% for ct, label in [("icmp","ICMP Ping"),("http","HTTP"),("https","HTTPS"),("tcp","TCP")] %}
+              <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                <input type="checkbox" name="check_types" value="{{ ct }}"
+                       {% if ct in active_types %}checked{% endif %}
+                       onchange="updateEditPort()"
+                       class="w-3.5 h-3.5 rounded border-[#3a3d4e] bg-[#0b0d14] text-blue-500 accent-blue-500">
+                <span class="text-sm text-slate-300">{{ label }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            <div id="edit-port-wrap">
+              <label class="block text-xs font-medium text-slate-400 mb-1.5">Port <span class="text-slate-600">(for HTTP/HTTPS/TCP)</span></label>
+              <input type="number" name="port" id="edit-port"
+                     value="{{ host.port or '' }}" placeholder="e.g. 443" min="1" max="65535"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                            focus:outline-none focus:border-blue-500 transition-colors">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Latency threshold (ms)</label>
+            <input type="number" name="latency_threshold_ms"
+                   value="{{ host.latency_threshold_ms or '' }}" placeholder="e.g. 100 – leave empty to disable"
+                   min="1" step="1"
+                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                          focus:outline-none focus:border-blue-500 transition-colors">
           </div>
           <div class="flex gap-2 pt-1">
             <button type="submit"
@@ -93,14 +171,15 @@
       <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
         <h2 class="text-sm font-semibold text-slate-300 mb-5">Actions</h2>
         <div class="space-y-3">
+
+          <!-- Monitoring enabled toggle -->
           <div class="flex items-center justify-between py-3 border-b border-[#252836]">
             <div>
               <p class="text-sm text-white">Monitoring enabled</p>
-              <p class="text-xs text-slate-500 mt-0.5">Include this host in ping checks</p>
+              <p class="text-xs text-slate-500 mt-0.5">Include this host in checks</p>
             </div>
             <form method="post" action="/ping/{{ host.id }}/toggle">
               <button type="submit"
-                      title="{% if host.enabled %}Disable monitoring{% else %}Enable monitoring{% endif %}"
                       class="relative w-10 h-5 rounded-full transition-colors focus:outline-none
                              {% if host.enabled %}bg-blue-600{% else %}bg-[#252836]{% endif %}">
                 <span class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all
@@ -108,6 +187,24 @@
               </button>
             </form>
           </div>
+
+          <!-- Maintenance toggle -->
+          <div class="flex items-center justify-between py-3 border-b border-[#252836]">
+            <div>
+              <p class="text-sm text-white">Maintenance mode</p>
+              <p class="text-xs text-slate-500 mt-0.5">Pauses checks, hides from alarms</p>
+            </div>
+            <form method="post" action="/ping/{{ host.id }}/maintenance">
+              <button type="submit"
+                      class="relative w-10 h-5 rounded-full transition-colors focus:outline-none
+                             {% if host.maintenance %}bg-yellow-500{% else %}bg-[#252836]{% endif %}">
+                <span class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all
+                             {% if host.maintenance %}left-5{% else %}left-0.5{% endif %}"></span>
+              </button>
+            </form>
+          </div>
+
+          <!-- Delete -->
           <div class="flex items-center justify-between py-3">
             <div>
               <p class="text-sm text-white">Delete host</p>
@@ -125,6 +222,33 @@
 
         <!-- Meta info -->
         <div class="mt-4 pt-4 border-t border-[#252836] space-y-2">
+          {% if dns_info.ip %}
+          <div class="flex justify-between text-xs">
+            <span class="text-slate-500">IP address</span>
+            <span class="text-slate-300 font-mono">{{ dns_info.ip }}</span>
+          </div>
+          {% endif %}
+          {% if dns_info.fqdn and dns_info.fqdn != host.hostname %}
+          <div class="flex justify-between text-xs">
+            <span class="text-slate-500">DNS name</span>
+            <span class="text-slate-300 font-mono">{{ dns_info.fqdn }}</span>
+          </div>
+          {% endif %}
+          <div class="flex justify-between text-xs">
+            <span class="text-slate-500">Source</span>
+            <span>
+              {% set src = host.source or 'manual' %}
+              <span class="px-1.5 py-0.5 rounded text-[10px]
+                {% if src == 'proxmox' %}bg-orange-500/10 text-orange-400
+                {% elif src == 'phpipam' %}bg-cyan-500/10 text-cyan-400
+                {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                {{ src }}
+              </span>
+              {% if host.source_detail %}
+              <span class="text-slate-500 ml-1">{{ host.source_detail }}</span>
+              {% endif %}
+            </span>
+          </div>
           <div class="flex justify-between text-xs">
             <span class="text-slate-500">Added</span>
             <span class="text-slate-300">{{ host.created_at.strftime("%d.%m.%Y %H:%M") if host.created_at else "—" }}</span>
@@ -137,6 +261,14 @@
             <span class="text-slate-500">Last latency</span>
             <span class="text-slate-300">{% if latest and latest.latency_ms %}{{ latest.latency_ms }} ms{% else %}—{% endif %}</span>
           </div>
+          {% if host.ssl_expiry_days is not none %}
+          <div class="flex justify-between text-xs">
+            <span class="text-slate-500">SSL expiry</span>
+            <span class="{% if host.ssl_expiry_days <= 7 %}text-red-400{% elif host.ssl_expiry_days <= 30 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+              {{ host.ssl_expiry_days }} days
+            </span>
+          </div>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -145,8 +277,8 @@
   <!-- ── MONITORING TAB ────────────────────────────────────────────────────── -->
   <div id="panel-monitoring" class="hidden">
 
-    <!-- Stats -->
-    <div class="grid grid-cols-4 gap-4 mb-6">
+    <!-- SLA Stats -->
+    <div class="grid grid-cols-6 gap-4 mb-6">
       <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
         <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Uptime 24h</p>
         <p class="text-2xl font-bold {% if uptime_pct >= 99 %}text-emerald-400{% elif uptime_pct >= 90 %}text-yellow-400{% else %}text-red-400{% endif %}">
@@ -154,47 +286,350 @@
         </p>
       </div>
       <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Uptime 7d</p>
+        <p class="text-2xl font-bold {% if uptime_7d >= 99 %}text-emerald-400{% elif uptime_7d >= 90 %}text-yellow-400{% else %}text-red-400{% endif %}">
+          {{ uptime_7d }}%
+        </p>
+      </div>
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Uptime 30d</p>
+        <p class="text-2xl font-bold {% if uptime_30d >= 99 %}text-emerald-400{% elif uptime_30d >= 90 %}text-yellow-400{% else %}text-red-400{% endif %}">
+          {{ uptime_30d }}%
+        </p>
+      </div>
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
         <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Avg latency</p>
         <p class="text-2xl font-bold text-white">{% if avg_latency is not none %}{{ avg_latency }} ms{% else %}<span class="text-slate-600">—</span>{% endif %}</p>
       </div>
-      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
-        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Min latency</p>
-        <p class="text-2xl font-bold text-white">{% if min_latency is not none %}{{ min_latency }} ms{% else %}<span class="text-slate-600">—</span>{% endif %}</p>
-      </div>
-      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
-        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Max latency</p>
-        <p class="text-2xl font-bold text-white">{% if max_latency is not none %}{{ max_latency }} ms{% else %}<span class="text-slate-600">—</span>{% endif %}</p>
+
+      <!-- Latency mini-chart (spans 2 cols) -->
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5 col-span-2">
+        <div class="flex items-center justify-between mb-1">
+          <p class="text-slate-500 text-xs uppercase tracking-wider">Latency  <span class="normal-case text-slate-600 ml-1">
+            {% if min_latency is not none %}min {{ min_latency }}  /  max {{ max_latency }} ms{% endif %}
+          </span></p>
+          <div class="flex gap-0.5">
+            {% for rng, label in [("2h","2h"),("24h","24h"),("15d","15d")] %}
+            <button type="button" onclick="setRange('{{ rng }}')" id="range-btn-{{ rng }}"
+                    class="range-btn px-2 py-0.5 text-[10px] font-medium rounded transition-colors">{{ label }}</button>
+            {% endfor %}
+          </div>
+        </div>
+        <canvas id="latencyChart" height="55"
+                class="{% if not chart_labels and not chart_2h_labels and not chart_15d_labels %}hidden{% endif %}"></canvas>
+        {% if not chart_labels and not chart_2h_labels and not chart_15d_labels %}
+        <div class="h-14 flex items-center justify-center text-slate-600 text-xs">No data yet</div>
+        {% endif %}
       </div>
     </div>
 
-    <!-- Chart -->
-    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
-      <div class="flex items-center justify-between mb-5">
-        <h2 class="text-sm font-semibold text-slate-300">Latency – last 24h</h2>
-        <span class="text-xs text-slate-600">{{ chart_labels | length }} data points</span>
+    <!-- 30-day heatmap -->
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 mb-6">
+      <h2 class="text-sm font-semibold text-slate-300 mb-4">30-day availability</h2>
+      <div class="flex gap-1">
+        {% for sq in heatmap_30d %}
+        <div class="flex-1 h-8 rounded
+                    {% if sq.color == 'emerald' %}bg-emerald-500/70
+                    {% elif sq.color == 'yellow' %}bg-yellow-500/70
+                    {% elif sq.color == 'red' %}bg-red-500/60
+                    {% else %}bg-[#252836]{% endif %}"
+             title="{{ sq.date }}"></div>
+        {% endfor %}
       </div>
-      {% if chart_labels %}
-      <canvas id="latencyChart" height="70"></canvas>
-      {% else %}
-      <div class="h-32 flex items-center justify-center text-slate-600 text-sm">
-        No data yet — checks will appear after the first ping cycle.
+      <div class="flex justify-between mt-2 text-xs text-slate-600">
+        <span>{{ heatmap_30d[0].date if heatmap_30d }}</span>
+        <span class="flex gap-3">
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-emerald-500/70 inline-block"></span>≥95%</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-yellow-500/70 inline-block"></span>80–95%</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-red-500/60 inline-block"></span>&lt;80%</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-[#252836] inline-block"></span>No data</span>
+        </span>
+        <span>{{ heatmap_30d[-1].date if heatmap_30d }}</span>
+      </div>
+    </div>
+
+    <!-- Proxmox metrics (if this host is also a VM/LXC) -->
+    {% if proxmox_guest %}
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm font-semibold text-slate-300">Proxmox</h2>
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-medium
+            {% if proxmox_guest.type == 'VM' %}bg-blue-500/10 text-blue-400{% else %}bg-orange-500/10 text-orange-400{% endif %}">
+            {{ proxmox_guest.type }}
+          </span>
+          <span class="text-slate-600 text-xs">{{ proxmox_guest.cluster_name }} / {{ proxmox_guest.node }}</span>
+        </div>
+        <span class="text-slate-600 text-xs">{{ proxmox_guest.snap_time.strftime("%H:%M") }}</span>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+
+        <!-- CPU -->
+        <div>
+          <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">CPU</p>
+          <p class="text-xl font-bold
+            {% if proxmox_guest.cpu_pct >= 85 %}text-red-400{% elif proxmox_guest.cpu_pct >= 60 %}text-yellow-400{% else %}text-white{% endif %}">
+            {{ proxmox_guest.cpu_pct }}%
+          </p>
+          <div class="mt-1.5 h-1 bg-[#252836] rounded-full overflow-hidden">
+            <div class="h-full rounded-full
+              {% if proxmox_guest.cpu_pct >= 85 %}bg-red-400{% elif proxmox_guest.cpu_pct >= 60 %}bg-yellow-400{% else %}bg-blue-500{% endif %}"
+                 style="width: {{ [proxmox_guest.cpu_pct, 100]|min }}%"></div>
+          </div>
+        </div>
+
+        <!-- RAM -->
+        {% set mem_pct = (proxmox_guest.mem_used_gb / proxmox_guest.mem_total_gb * 100)|round(1) if proxmox_guest.mem_total_gb > 0 else 0 %}
+        <div>
+          <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">RAM</p>
+          <p class="text-xl font-bold
+            {% if mem_pct >= 85 %}text-red-400{% elif mem_pct >= 70 %}text-yellow-400{% else %}text-white{% endif %}">
+            {{ mem_pct }}%
+          </p>
+          <p class="text-slate-500 text-xs">{{ proxmox_guest.mem_used_gb }} / {{ proxmox_guest.mem_total_gb }} GB</p>
+          <div class="mt-1.5 h-1 bg-[#252836] rounded-full overflow-hidden">
+            <div class="h-full rounded-full
+              {% if mem_pct >= 85 %}bg-red-400{% elif mem_pct >= 70 %}bg-yellow-400{% else %}bg-purple-500{% endif %}"
+                 style="width: {{ [mem_pct, 100]|min }}%"></div>
+          </div>
+        </div>
+
+        <!-- Disk -->
+        <div>
+          <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Disk</p>
+          {% if proxmox_guest.disk_used_gb > 0 %}
+          <p class="text-xl font-bold
+            {% if proxmox_guest.disk_pct >= 90 %}text-red-400{% elif proxmox_guest.disk_pct >= 75 %}text-yellow-400{% else %}text-white{% endif %}">
+            {{ proxmox_guest.disk_pct }}%
+          </p>
+          <p class="text-slate-500 text-xs">{{ proxmox_guest.disk_used_gb }} / {{ proxmox_guest.disk_total_gb }} GB</p>
+          <div class="mt-1.5 h-1 bg-[#252836] rounded-full overflow-hidden">
+            <div class="h-full rounded-full
+              {% if proxmox_guest.disk_pct >= 90 %}bg-red-400{% elif proxmox_guest.disk_pct >= 75 %}bg-yellow-400{% else %}bg-emerald-500{% endif %}"
+                 style="width: {{ [proxmox_guest.disk_pct, 100]|min }}%"></div>
+          </div>
+          {% else %}
+          <p class="text-xl font-bold text-white">{{ proxmox_guest.disk_total_gb }} GB</p>
+          <p class="text-slate-500 text-xs">allokiert</p>
+          {% endif %}
+        </div>
+
+        <!-- Uptime -->
+        <div>
+          <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Uptime (VM)</p>
+          <p class="text-xl font-bold text-white">
+            {% if proxmox_guest.running and proxmox_guest.uptime_h > 0 %}
+              {% set _d = (proxmox_guest.uptime_h / 24)|int %}{% set _h = (proxmox_guest.uptime_h % 24)|int %}
+              {% if _d > 0 %}{{ _d }}d {% endif %}{{ _h }}h
+            {% else %}<span class="text-slate-600">—</span>{% endif %}
+          </p>
+          <p class="text-slate-500 text-xs">
+            {% if proxmox_guest.running %}<span class="text-emerald-400">running</span>{% else %}<span class="text-slate-600">stopped</span>{% endif %}
+          </p>
+        </div>
+      </div>
+
+      <!-- Proxmox history charts -->
+      {% if proxmox_history and proxmox_history['24h'] and proxmox_history['24h'].labels %}
+      <div class="mt-5 pt-5 border-t border-[#252836]">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-4">
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">History</h3>
+            <div class="flex items-center gap-3 text-[10px]">
+              <span class="flex items-center gap-1"><span class="inline-block w-3 h-0.5 bg-blue-400 rounded"></span>CPU %</span>
+              <span class="flex items-center gap-1"><span class="inline-block w-3 h-0.5 bg-purple-400 rounded"></span>RAM %</span>
+              {% if proxmox_history['24h'].disk | select | list %}<span class="flex items-center gap-1"><span class="inline-block w-3 h-0.5 bg-emerald-400 rounded"></span>Disk %</span>{% endif %}
+            </div>
+          </div>
+          <div class="flex gap-0.5">
+            {% for rng, label in [("2h","2h"),("24h","24h"),("7d","7d")] %}
+            <button type="button" onclick="setPxRange('{{ rng }}')" id="px-range-btn-{{ rng }}"
+                    class="px-range-btn px-2 py-0.5 text-[10px] font-medium rounded transition-colors">{{ label }}</button>
+            {% endfor %}
+          </div>
+        </div>
+        <canvas id="proxmoxChart" height="60"></canvas>
       </div>
       {% endif %}
     </div>
+    {% endif %}
+
+    <!-- UniFi network info (if this host is seen as a client/device) -->
+    {% if unifi_client %}
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/>
+          </svg>
+          <h2 class="text-sm font-semibold text-slate-300">UniFi</h2>
+          {% if unifi_client.get('_is_device') %}
+          <span class="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/10 text-purple-400">Network Device</span>
+          {% else %}
+          <span class="px-1.5 py-0.5 rounded text-[10px] {% if unifi_client.is_wireless %}bg-blue-500/10 text-blue-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+            {{ 'WiFi' if unifi_client.is_wireless else 'Wired' }}
+          </span>
+          {% endif %}
+        </div>
+        <span class="text-slate-600 text-xs font-mono">{{ unifi_client.mac }}</span>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {% if unifi_client.is_wireless and unifi_client.signal %}
+        <div>
+          <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Signal</p>
+          {% set sig = unifi_client.signal %}
+          <p class="text-xl font-bold {% if sig >= -50 %}text-emerald-400{% elif sig >= -65 %}text-yellow-400{% elif sig >= -75 %}text-orange-400{% else %}text-red-400{% endif %}">
+            {{ sig }} <span class="text-sm font-normal">dBm</span>
+          </p>
+          {% if unifi_client.ssid %}<p class="text-slate-500 text-xs mt-0.5">{{ unifi_client.ssid }}</p>{% endif %}
+        </div>
+        {% endif %}
+        {% if unifi_client.ap_name or unifi_client.ap_mac %}
+        <div>
+          <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Access Point</p>
+          <p class="text-white text-sm font-medium">{{ unifi_client.ap_name or unifi_client.ap_mac }}</p>
+          {% if unifi_client.channel %}<p class="text-slate-500 text-xs mt-0.5">Kanal {{ unifi_client.channel }}</p>{% endif %}
+        </div>
+        {% endif %}
+        {% if unifi_client.rx_bytes_r is defined or unifi_client.tx_bytes_r is defined %}
+        <div>
+          <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Traffic (live)</p>
+          <p class="text-white text-sm">↓ {{ unifi_client.rx_bytes_r | default(0) | int }} B/s</p>
+          <p class="text-slate-500 text-xs">↑ {{ unifi_client.tx_bytes_r | default(0) | int }} B/s</p>
+        </div>
+        {% endif %}
+        {% if unifi_client.uptime %}
+        <div>
+          <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Verbunden seit</p>
+          {% set u = unifi_client.uptime %}
+          {% set ud = (u // 86400) %}{% set uh = ((u % 86400) // 3600) %}{% set um = ((u % 3600) // 60) %}
+          <p class="text-white text-sm font-medium">{% if ud > 0 %}{{ ud }}d {% endif %}{% if uh > 0 %}{{ uh }}h {% endif %}{{ um }}m</p>
+          {% if unifi_client.satisfaction is defined and unifi_client.satisfaction >= 0 %}
+          <p class="text-slate-500 text-xs mt-0.5">Zufriedenheit: {{ unifi_client.satisfaction }}%</p>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
   </div>
+
+  <!-- ── PORTS TAB ─────────────────────────────────────────────────────────── -->
+  {% if unifi_client and unifi_client.get('has_ports') %}
+  <div id="panel-ports" class="hidden">
+
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 mb-6">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-sm font-semibold text-slate-300">Switch Ports</h2>
+        <div class="flex gap-4 text-xs text-slate-500">
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-emerald-500/70 inline-block"></span>1G+</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-yellow-500/70 inline-block"></span>100M</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-blue-500/70 inline-block"></span>Uplink</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-[#252836] inline-block border border-[#3a3d4e]"></span>No link</span>
+        </div>
+      </div>
+
+      <!-- Port grid -->
+      <div class="flex flex-wrap gap-1.5 mb-6">
+        {% for p in unifi_client.port_table %}
+        <div class="relative group">
+          <div class="w-10 h-10 rounded-md flex items-center justify-center text-[10px] font-bold cursor-default
+            {% if not p.enable %}opacity-30 bg-[#1a1d2e] text-slate-600 border border-[#252836]
+            {% elif p.is_uplink and p.up %}bg-blue-500/70 text-white
+            {% elif p.up and p.speed >= 1000 %}bg-emerald-500/70 text-white
+            {% elif p.up and p.speed >= 100 %}bg-yellow-500/70 text-black
+            {% elif p.up %}bg-teal-500/70 text-white
+            {% else %}bg-[#252836] text-slate-500 border border-[#3a3d4e]{% endif %}">
+            {{ p.idx }}
+            {% if p.poe_enable and p.poe_power > 0 %}
+            <span class="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+            {% endif %}
+          </div>
+          <!-- Tooltip -->
+          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-44 bg-[#1a1d2e] border border-[#3a3d4e] rounded-lg p-2.5 text-xs hidden group-hover:block z-20 shadow-xl pointer-events-none">
+            <p class="font-semibold text-white mb-1 truncate">{{ p.name }}</p>
+            <div class="space-y-0.5 text-slate-400">
+              {% if p.up %}
+              <p>Speed: <span class="text-white">{{ p.speed_label }}</span></p>
+              {% if p.is_uplink %}<p class="text-blue-400">Uplink</p>{% endif %}
+              {% if p.poe_enable and p.poe_power > 0 %}<p>PoE: <span class="text-amber-400">{{ p.poe_power }}W</span></p>{% endif %}
+              <p>↓ {{ (p.rx_bytes_r / 1000) | round(1) }} KB/s</p>
+              <p>↑ {{ (p.tx_bytes_r / 1000) | round(1) }} KB/s</p>
+              {% elif p.enable %}
+              <p class="text-slate-500">No link</p>
+              {% else %}
+              <p class="text-slate-600">Disabled</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Active ports table -->
+      {% set active_ports = unifi_client.port_table | selectattr('up') | list %}
+      {% if active_ports %}
+      <div>
+        <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Active ports</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs text-slate-500 border-b border-[#252836]">
+                <th class="pb-2 font-medium">#</th>
+                <th class="pb-2 font-medium">Name</th>
+                <th class="pb-2 font-medium">Speed</th>
+                <th class="pb-2 font-medium text-right">Download</th>
+                <th class="pb-2 font-medium text-right">Upload</th>
+                <th class="pb-2 font-medium text-right">PoE</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#252836]">
+              {% for p in active_ports %}
+              <tr class="text-slate-300">
+                <td class="py-2 text-slate-500 text-xs">{{ p.idx }}</td>
+                <td class="py-2 font-medium text-white">
+                  {{ p.name }}
+                  {% if p.is_uplink %}<span class="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">Uplink</span>{% endif %}
+                </td>
+                <td class="py-2">
+                  <span class="text-[11px] px-1.5 py-0.5 rounded
+                    {% if p.speed >= 1000 %}bg-emerald-500/10 text-emerald-400{% elif p.speed >= 100 %}bg-yellow-500/10 text-yellow-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                    {{ p.speed_label }}
+                  </span>
+                </td>
+                <td class="py-2 text-right font-mono text-xs">{{ (p.rx_bytes_r / 1000) | round(1) }} KB/s</td>
+                <td class="py-2 text-right font-mono text-xs">{{ (p.tx_bytes_r / 1000) | round(1) }} KB/s</td>
+                <td class="py-2 text-right text-xs">
+                  {% if p.poe_enable and p.poe_power > 0 %}
+                  <span class="text-amber-400">{{ p.poe_power }}W</span>
+                  {% else %}—{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+  {% endif %}
 
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-  // Tab switching
   const activeTab = "{{ active_tab }}";
 
   function switchTab(name) {
-    ['info', 'monitoring'].forEach(t => {
+    ['info', 'monitoring', 'ports'].forEach(t => {
       const btn = document.getElementById('tab-' + t);
       const panel = document.getElementById('panel-' + t);
+      if (!btn || !panel) return;
       if (t === name) {
         btn.classList.add('border-blue-500', 'text-white');
         btn.classList.remove('border-transparent', 'text-slate-400');
@@ -205,64 +640,115 @@
         panel.classList.add('hidden');
       }
     });
-    // Update URL without reload
     const url = new URL(window.location);
     url.searchParams.set('tab', name);
     url.searchParams.delete('saved');
     history.replaceState(null, '', url);
   }
 
-  // Init on load
   switchTab(activeTab);
 
-  {% if chart_labels %}
-  // Chart
-  const ctx = document.getElementById('latencyChart').getContext('2d');
-  new Chart(ctx, {
+  function updateEditPort() {
+    const checked = [...document.querySelectorAll('input[name="check_types"]:checked')].map(c => c.value);
+    const wrap = document.getElementById('edit-port-wrap');
+    wrap.style.display = checked.some(c => ['http','https','tcp'].includes(c)) ? '' : 'none';
+  }
+  updateEditPort();
+
+  const chartRanges = {
+    '2h':  { labels: {{ chart_2h_labels  | tojson }}, data: {{ chart_2h_latency  | tojson }} },
+    '24h': { labels: {{ chart_labels     | tojson }}, data: {{ chart_latency     | tojson }} },
+    '15d': { labels: {{ chart_15d_labels | tojson }}, data: {{ chart_15d_latency | tojson }} },
+  };
+
+  const latencyChart = new Chart(document.getElementById('latencyChart').getContext('2d'), {
     type: 'line',
-    data: {
-      labels: {{ chart_labels | tojson }},
-      datasets: [{
-        label: 'Latency (ms)',
-        data: {{ chart_latency | tojson }},
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59,130,246,0.06)',
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        fill: true,
-        tension: 0.3,
-        spanGaps: false,
-      }]
-    },
+    data: { labels: [], datasets: [{ label: 'Latency (ms)', data: [],
+      borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.06)',
+      borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.3, spanGaps: true,
+    }] },
     options: {
       responsive: true,
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#1a1d2e',
-          borderColor: '#252836',
-          borderWidth: 1,
-          titleColor: '#94a3b8',
-          bodyColor: '#e2e8f0',
-          callbacks: {
-            label: ctx => ctx.parsed.y !== null ? `${ctx.parsed.y} ms` : 'Offline'
-          }
+          backgroundColor: '#1a1d2e', borderColor: '#252836', borderWidth: 1,
+          titleColor: '#94a3b8', bodyColor: '#e2e8f0',
+          callbacks: { label: c => c.parsed.y === 0 ? 'Offline' : `${c.parsed.y} ms` }
         }
       },
       scales: {
-        x: {
-          ticks: { color: '#475569', maxTicksLimit: 12, font: { size: 11 } },
-          grid: { color: '#252836' }
-        },
-        y: {
-          ticks: { color: '#475569', callback: v => v + ' ms', font: { size: 11 } },
-          grid: { color: '#252836' },
-          beginAtZero: true,
-        }
-      }
+        x: { ticks: { color: '#475569', maxTicksLimit: 12, font: { size: 11 } }, grid: { color: '#252836' } },
+        y: { ticks: { color: '#475569', callback: v => v + ' ms', font: { size: 11 } }, grid: { color: '#252836' }, beginAtZero: true }
+      },
+      animation: false,
     }
   });
+
+  function setRange(rng) {
+    const r = chartRanges[rng];
+    latencyChart.data.labels = r.labels;
+    latencyChart.data.datasets[0].data = r.data.map(v => v === null ? 0 : v);
+    latencyChart.update();
+    document.querySelectorAll('.range-btn').forEach(b => {
+      const active = b.id === 'range-btn-' + rng;
+      b.className = 'range-btn px-2 py-0.5 text-[10px] font-medium rounded transition-colors ' +
+        (active ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-white hover:bg-[#252836]');
+    });
+  }
+  setRange('24h');
+
+  {% if proxmox_history and proxmox_history['24h'] and proxmox_history['24h'].labels %}
+  (function() {
+    const pxRanges = {{ proxmox_history | tojson }};
+    const hasDisk = Object.values(pxRanges).some(r => r.disk && r.disk.some(v => v > 0));
+
+    const makeDatasets = (rng) => {
+      const r = pxRanges[rng];
+      const ds = [
+        { label: 'CPU %', data: r.cpu, borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.06)', borderWidth: 1.5, fill: true, tension: 0.3, pointRadius: 0, pointHoverRadius: 3 },
+        { label: 'RAM %', data: r.mem, borderColor: '#c084fc', backgroundColor: 'rgba(192,132,252,0.06)', borderWidth: 1.5, fill: true, tension: 0.3, pointRadius: 0, pointHoverRadius: 3 },
+      ];
+      if (hasDisk) ds.push({ label: 'Disk %', data: r.disk, borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.04)', borderWidth: 1.5, fill: false, tension: 0.3, pointRadius: 0, pointHoverRadius: 3 });
+      return ds;
+    };
+
+    const pxChart = new Chart(document.getElementById('proxmoxChart').getContext('2d'), {
+      type: 'line',
+      data: { labels: pxRanges['24h'].labels, datasets: makeDatasets('24h') },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: true, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } },
+          tooltip: {
+            backgroundColor: '#1a1d2e', borderColor: '#252836', borderWidth: 1,
+            titleColor: '#94a3b8', bodyColor: '#e2e8f0',
+            callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%` }
+          }
+        },
+        scales: {
+          x: { ticks: { color: '#475569', maxTicksLimit: 10, font: { size: 10 } }, grid: { color: '#252836' } },
+          y: { ticks: { color: '#475569', callback: v => v + '%', font: { size: 10 } }, grid: { color: '#252836' }, min: 0, max: 100 }
+        },
+        animation: false,
+      }
+    });
+
+    window.setPxRange = function(rng) {
+      const r = pxRanges[rng];
+      pxChart.data.labels = r.labels;
+      pxChart.data.datasets.forEach((ds, i) => {
+        ds.data = [r.cpu, r.mem, r.disk][i] || [];
+      });
+      pxChart.update();
+      document.querySelectorAll('.px-range-btn').forEach(b => {
+        const active = b.id === 'px-range-btn-' + rng;
+        b.className = 'px-range-btn px-2 py-0.5 text-[10px] font-medium rounded transition-colors ' +
+          (active ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-white hover:bg-[#252836]');
+      });
+    };
+    setPxRange('24h');
+  })();
   {% endif %}
 </script>
 {% endblock %}

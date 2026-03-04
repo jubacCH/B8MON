@@ -1,4 +1,9 @@
+import asyncio
+import ipaddress
+import json
+import socket
 from datetime import datetime, timedelta
+from typing import List
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -6,18 +11,85 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from collectors.ping import ping_host
-from database import PingHost, PingResult, get_db
+from collectors.ping import check_host
+from database import PingHost, PingResult, ProxmoxCluster, ProxmoxSnapshot, UnifiSnapshot, get_db
 
 router = APIRouter(prefix="/ping")
 templates = Jinja2Templates(directory="templates")
 
 
-# ── API (JSON) — must be before /{host_id} to avoid int-cast conflict ─────────
+async def _dns_resolve(hostname: str) -> dict:
+    """Resolve hostname→IP or IP→hostname. Returns {ip, fqdn}, either may be None."""
+    # Strip URL scheme / path to get raw host
+    raw = hostname
+    for prefix in ("https://", "http://"):
+        if raw.startswith(prefix):
+            raw = raw[len(prefix):]
+            break
+    raw = raw.split("/")[0].split(":")[0]
+
+    loop = asyncio.get_event_loop()
+    result: dict = {"ip": None, "fqdn": None}
+    try:
+        ipaddress.ip_address(raw)
+        # It's an IP → reverse lookup
+        result["ip"] = raw
+        try:
+            fqdn = await asyncio.wait_for(
+                loop.run_in_executor(None, lambda: socket.gethostbyaddr(raw)[0]),
+                timeout=2.0,
+            )
+            result["fqdn"] = fqdn
+        except Exception:
+            pass
+    except ValueError:
+        # It's a hostname → forward lookup
+        result["fqdn"] = raw
+        try:
+            ip = await asyncio.wait_for(
+                loop.run_in_executor(None, lambda: socket.gethostbyname(raw)),
+                timeout=2.0,
+            )
+            result["ip"] = ip
+        except Exception:
+            pass
+    return result
+
+
+def _heatmap_30d(results_30d: list) -> list[dict]:
+    """Return list of 30 dicts {date, color} for heatmap, oldest first."""
+    now = datetime.utcnow().date()
+    by_day: dict = {}
+    for r in results_30d:
+        d = r.timestamp.date()
+        if d not in by_day:
+            by_day[d] = {"total": 0, "ok": 0}
+        by_day[d]["total"] += 1
+        if r.success:
+            by_day[d]["ok"] += 1
+
+    result = []
+    for i in range(29, -1, -1):
+        day = now - timedelta(days=i)
+        if day in by_day:
+            pct = by_day[day]["ok"] / by_day[day]["total"] * 100
+            color = "emerald" if pct >= 95 else "yellow" if pct >= 80 else "red"
+        else:
+            color = "slate"
+        result.append({"date": day.strftime("%d.%m"), "color": color})
+    return result
+
+
+def _uptime_pct(results: list) -> float:
+    if not results:
+        return 0.0
+    return round(sum(1 for r in results if r.success) / len(results) * 100, 1)
+
+
+# ── API (JSON) ─────────────────────────────────────────────────────────────────
 
 @router.get("/api/status")
 async def api_status(db: AsyncSession = Depends(get_db)):
-    """JSON status for all ping hosts (used by dashboard live-update)."""
     result = await db.execute(select(PingHost).where(PingHost.enabled == True))
     hosts = result.scalars().all()
     out = []
@@ -33,6 +105,8 @@ async def api_status(db: AsyncSession = Depends(get_db)):
             "id": host.id,
             "name": host.name,
             "hostname": host.hostname,
+            "check_type": host.check_type or "icmp",
+            "maintenance": host.maintenance or False,
             "online": lr.success if lr else None,
             "latency_ms": lr.latency_ms if lr else None,
         })
@@ -44,7 +118,7 @@ async def test_ping(host_id: int, db: AsyncSession = Depends(get_db)):
     host = await db.get(PingHost, host_id)
     if not host:
         return {"success": False, "error": "Host not found"}
-    ok, latency = await ping_host(host.hostname)
+    ok, latency = await check_host(host)
     return {"success": ok, "latency_ms": latency}
 
 
@@ -58,15 +132,16 @@ async def ping_list(request: Request, db: AsyncSession = Depends(get_db)):
     host_data = []
     now = datetime.utcnow()
     window_24h = now - timedelta(hours=24)
+    window_30d = now - timedelta(days=30)
 
     for host in hosts:
-        latest = await db.execute(
+        latest_q = await db.execute(
             select(PingResult)
             .where(PingResult.host_id == host.id)
             .order_by(PingResult.timestamp.desc())
             .limit(1)
         )
-        latest_result = latest.scalar_one_or_none()
+        latest_result = latest_q.scalar_one_or_none()
 
         total = await db.execute(
             select(func.count()).where(
@@ -85,12 +160,20 @@ async def ping_list(request: Request, db: AsyncSession = Depends(get_db)):
         success_c = success.scalar() or 0
         uptime = round((success_c / total_c * 100) if total_c > 0 else 0, 1)
 
+        # 30-day heatmap
+        results_30d_q = await db.execute(
+            select(PingResult)
+            .where(PingResult.host_id == host.id, PingResult.timestamp >= window_30d)
+        )
+        heatmap = _heatmap_30d(results_30d_q.scalars().all())
+
         host_data.append({
             "host": host,
             "online": latest_result.success if latest_result else None,
             "latency": latest_result.latency_ms if latest_result else None,
             "last_check": latest_result.timestamp if latest_result else None,
             "uptime_pct": uptime,
+            "heatmap": heatmap,
         })
 
     return templates.TemplateResponse("ping.html", {
@@ -106,24 +189,70 @@ async def ping_detail(host_id: int, request: Request, db: AsyncSession = Depends
     if not host:
         return RedirectResponse(url="/ping")
 
-    window = datetime.utcnow() - timedelta(hours=24)
-    results_q = await db.execute(
+    dns_info = await _dns_resolve(host.hostname)
+
+    now = datetime.utcnow()
+    window_2h  = now - timedelta(hours=2)
+    window_24h = now - timedelta(hours=24)
+    window_7d  = now - timedelta(days=7)
+    window_15d = now - timedelta(days=15)
+    window_30d = now - timedelta(days=30)
+
+    # Fetch 15d of results in one query — used for all chart ranges + SLA
+    results_15d_q = await db.execute(
         select(PingResult)
-        .where(PingResult.host_id == host_id, PingResult.timestamp >= window)
+        .where(PingResult.host_id == host_id, PingResult.timestamp >= window_15d)
         .order_by(PingResult.timestamp.asc())
     )
-    results = results_q.scalars().all()
+    results_15d_all = results_15d_q.scalars().all()
 
-    chart_labels = [r.timestamp.strftime("%H:%M") for r in results]
-    chart_latency = [r.latency_ms if r.success else None for r in results]
+    # Split into time windows
+    results    = [r for r in results_15d_all if r.timestamp >= window_24h]  # 24h subset
+    results_2h = [r for r in results_15d_all if r.timestamp >= window_2h]
+
+    def _build_chart(rows, window_start, window_end, fmt="%d.%m %H:%M", max_pts=600):
+        """Downsample rows and pad to full window so axis always spans the range."""
+        if rows:
+            step = max(1, len(rows) // max_pts)
+            sampled = rows[::step]
+            labels = [r.timestamp.strftime(fmt) for r in sampled]
+            values = [round(r.latency_ms, 2) if r.success and r.latency_ms else 0 for r in sampled]
+        else:
+            labels, values = [], []
+        # Prepend window start if not already there
+        start_lbl = window_start.strftime(fmt)
+        if not labels or labels[0] != start_lbl:
+            labels.insert(0, start_lbl)
+            values.insert(0, 0)
+        # Append window end (now)
+        end_lbl = window_end.strftime(fmt)
+        if labels[-1] != end_lbl:
+            labels.append(end_lbl)
+            values.append(values[-1])
+        return labels, values
+
+    chart_labels,     chart_latency     = _build_chart(results,         window_24h, now)
+    chart_2h_labels,  chart_2h_latency  = _build_chart(results_2h,      window_2h,  now, fmt="%H:%M", max_pts=120)
+    chart_15d_labels, chart_15d_latency = _build_chart(results_15d_all, window_15d, now)
 
     total = len(results)
     success_c = sum(1 for r in results if r.success)
-    uptime = round((success_c / total * 100) if total > 0 else 0, 1)
+    uptime_24h = round((success_c / total * 100) if total > 0 else 0, 1)
     latencies = [r.latency_ms for r in results if r.success and r.latency_ms is not None]
     avg_lat = round(sum(latencies) / len(latencies), 2) if latencies else None
     min_lat = round(min(latencies), 2) if latencies else None
     max_lat = round(max(latencies), 2) if latencies else None
+
+    # 7d SLA (from 15d cache), 30d needs separate query
+    results_7d = [r for r in results_15d_all if r.timestamp >= window_7d]
+    uptime_7d = _uptime_pct(results_7d)
+
+    results_30d_q = await db.execute(
+        select(PingResult).where(PingResult.host_id == host_id, PingResult.timestamp >= window_30d)
+    )
+    results_30d = results_30d_q.scalars().all()
+    uptime_30d = _uptime_pct(results_30d)
+    heatmap_30d = _heatmap_30d(results_30d)
 
     latest_q = await db.execute(
         select(PingResult)
@@ -133,16 +262,131 @@ async def ping_detail(host_id: int, request: Request, db: AsyncSession = Depends
     )
     latest = latest_q.scalar_one_or_none()
 
+    # latency threshold alarm
+    threshold_alarm = (
+        latest is not None
+        and latest.success
+        and latest.latency_ms is not None
+        and host.latency_threshold_ms is not None
+        and latest.latency_ms > host.latency_threshold_ms
+    )
+
+    # Look up Proxmox metrics for this host (by name or hostname match)
+    proxmox_guest = None
+    proxmox_history: dict = {}
+    clusters = (await db.execute(select(ProxmoxCluster))).scalars().all()
+    for cluster in clusters:
+        snap = (await db.execute(
+            select(ProxmoxSnapshot)
+            .where(ProxmoxSnapshot.cluster_id == cluster.id, ProxmoxSnapshot.ok == True)
+            .order_by(ProxmoxSnapshot.timestamp.desc())
+            .limit(1)
+        )).scalar_one_or_none()
+        if not snap:
+            continue
+        snap_data = json.loads(snap.data_json)
+        for g in snap_data.get("vms", []) + snap_data.get("containers", []):
+            if g.get("name") in (host.hostname, host.name):
+                proxmox_guest = {**g, "cluster_name": cluster.name, "snap_time": snap.timestamp}
+                break
+        if proxmox_guest:
+            # Historical snapshots for charts (last 7d, split into 2h/24h/7d ranges)
+            hist_snaps = (await db.execute(
+                select(ProxmoxSnapshot)
+                .where(
+                    ProxmoxSnapshot.cluster_id == cluster.id,
+                    ProxmoxSnapshot.ok == True,
+                    ProxmoxSnapshot.timestamp >= window_7d,
+                )
+                .order_by(ProxmoxSnapshot.timestamp.asc())
+            )).scalars().all()
+
+            all_px = []
+            for hs in hist_snaps:
+                hs_data = json.loads(hs.data_json)
+                for g in hs_data.get("vms", []) + hs_data.get("containers", []):
+                    if g.get("name") in (host.hostname, host.name):
+                        mem_total = g.get("mem_total_gb", 0)
+                        mem_pct = round(g.get("mem_used_gb", 0) / mem_total * 100, 1) if mem_total > 0 else 0
+                        all_px.append({
+                            "ts": hs.timestamp,
+                            "cpu": g.get("cpu_pct", 0),
+                            "mem": mem_pct,
+                            "disk": g.get("disk_pct", 0),
+                        })
+                        break
+
+            def _px_range(rows, fmt, max_pts=300):
+                step = max(1, len(rows) // max_pts)
+                sampled = rows[::step]
+                return {
+                    "labels": [r["ts"].strftime(fmt) for r in sampled],
+                    "cpu":    [r["cpu"]  for r in sampled],
+                    "mem":    [r["mem"]  for r in sampled],
+                    "disk":   [r["disk"] for r in sampled],
+                }
+
+            rows_2h  = [r for r in all_px if r["ts"] >= window_2h]
+            rows_24h = [r for r in all_px if r["ts"] >= window_24h]
+            proxmox_history = {
+                "2h":  _px_range(rows_2h,  "%H:%M", 120),
+                "24h": _px_range(rows_24h, "%H:%M", 288),
+                "7d":  _px_range(all_px,   "%d.%m %H:%M", 504),
+            }
+            break
+
+    # Look up UniFi client info by host IP or MAC
+    unifi_client = None
+    host_ip  = (dns_info.get("ip") or "").strip()
+    host_mac = (host.mac_address or "").strip().lower()
+
+    unifi_snaps = (await db.execute(
+        select(UnifiSnapshot).where(UnifiSnapshot.ok == True)
+        .order_by(UnifiSnapshot.timestamp.desc())
+        .limit(20)
+    )).scalars().all()
+    seen_ctrl: set[int] = set()
+    for us in unifi_snaps:
+        if us.controller_id in seen_ctrl:
+            continue
+        seen_ctrl.add(us.controller_id)
+        try:
+            ud = json.loads(us.data_json)
+            for c in ud.get("clients", []) + [
+                {**d, "_is_device": True} for d in ud.get("devices", [])
+            ]:
+                c_ip  = (c.get("ip") or "").strip()
+                c_mac = (c.get("mac") or "").strip().lower()
+                if (host_ip and c_ip == host_ip) or (host_mac and c_mac == host_mac):
+                    unifi_client = c
+                    break
+        except Exception:
+            pass
+        if unifi_client:
+            break
+
     return templates.TemplateResponse("ping_detail.html", {
         "request": request,
         "host": host,
+        "dns_info": dns_info,
         "latest": latest,
-        "uptime_pct": uptime,
+        "uptime_pct": uptime_24h,
+        "uptime_7d": uptime_7d,
+        "uptime_30d": uptime_30d,
         "avg_latency": avg_lat,
         "min_latency": min_lat,
         "max_latency": max_lat,
         "chart_labels": chart_labels,
         "chart_latency": chart_latency,
+        "chart_2h_labels": chart_2h_labels,
+        "chart_2h_latency": chart_2h_latency,
+        "chart_15d_labels": chart_15d_labels,
+        "chart_15d_latency": chart_15d_latency,
+        "heatmap_30d": heatmap_30d,
+        "threshold_alarm": threshold_alarm,
+        "proxmox_guest": proxmox_guest,
+        "proxmox_history": proxmox_history,
+        "unifi_client": unifi_client,
         "active_page": "ping",
         "saved": request.query_params.get("saved"),
         "active_tab": request.query_params.get("tab", "info"),
@@ -155,9 +399,19 @@ async def ping_detail(host_id: int, request: Request, db: AsyncSession = Depends
 async def add_ping_host(
     name: str = Form(...),
     hostname: str = Form(...),
+    check_types: List[str] = Form(default=["icmp"]),
+    port: str = Form(""),
+    latency_threshold_ms: str = Form(""),
     db: AsyncSession = Depends(get_db),
 ):
-    db.add(PingHost(name=name.strip(), hostname=hostname.strip()))
+    check_type = ",".join(t.strip() for t in check_types if t.strip()) or "icmp"
+    db.add(PingHost(
+        name=name.strip(),
+        hostname=hostname.strip(),
+        check_type=check_type,
+        port=int(port) if port.strip() else None,
+        latency_threshold_ms=float(latency_threshold_ms) if latency_threshold_ms.strip() else None,
+    ))
     await db.commit()
     return RedirectResponse(url="/ping", status_code=303)
 
@@ -167,12 +421,18 @@ async def edit_ping_host(
     host_id: int,
     name: str = Form(...),
     hostname: str = Form(...),
+    check_types: List[str] = Form(default=["icmp"]),
+    port: str = Form(""),
+    latency_threshold_ms: str = Form(""),
     db: AsyncSession = Depends(get_db),
 ):
     host = await db.get(PingHost, host_id)
     if host:
         host.name = name.strip()
         host.hostname = hostname.strip()
+        host.check_type = ",".join(t.strip() for t in check_types if t.strip()) or "icmp"
+        host.port = int(port) if port.strip() else None
+        host.latency_threshold_ms = float(latency_threshold_ms) if latency_threshold_ms.strip() else None
         await db.commit()
     return RedirectResponse(url=f"/ping/{host_id}?tab=info&saved=1", status_code=303)
 
@@ -191,5 +451,14 @@ async def toggle_ping_host(host_id: int, db: AsyncSession = Depends(get_db)):
     host = await db.get(PingHost, host_id)
     if host:
         host.enabled = not host.enabled
+        await db.commit()
+    return RedirectResponse(url=f"/ping/{host_id}?tab=info", status_code=303)
+
+
+@router.post("/{host_id}/maintenance")
+async def toggle_maintenance(host_id: int, db: AsyncSession = Depends(get_db)):
+    host = await db.get(PingHost, host_id)
+    if host:
+        host.maintenance = not host.maintenance
         await db.commit()
     return RedirectResponse(url=f"/ping/{host_id}?tab=info", status_code=303)

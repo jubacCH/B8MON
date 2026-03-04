@@ -6,9 +6,10 @@ To add a new integration:
 2. Import and add it to COLLECTORS below
 """
 from collectors.ping import PingCollector
+from collectors.proxmox import ProxmoxCollector
 
 COLLECTORS: dict = {
     "ping": PingCollector,
-    # "proxmox": ProxmoxCollector,   # coming soon
-    # "unifi":   UnifiCollector,     # coming soon
+    "proxmox": ProxmoxCollector,
+    # "unifi": UnifiCollector,   # coming soon
 }

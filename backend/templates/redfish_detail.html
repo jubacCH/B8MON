@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+{% block title %}{{ server.name }} – Redfish – {{ request.state.site_name }}{% endblock %}
+
+{% block content %}
+<div class="p-5">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+      <a href="/redfish" class="text-slate-500 hover:text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+      </a>
+      <div>
+        <h1 class="text-xl font-bold text-white">{{ server.name }}</h1>
+        <p class="text-slate-500 text-xs mt-0.5">{{ server.host }}</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      {% if snap %}
+      <span class="text-slate-600 text-xs">{{ snap.timestamp.strftime("%Y-%m-%d %H:%M UTC") }}</span>
+      {% endif %}
+      <form method="post" action="/redfish/{{ server.id }}/refresh">
+        <button type="submit"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a1d2e] hover:bg-[#252836] border border-[#252836] text-slate-300 text-xs rounded-lg transition-colors">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Refresh
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {% if saved %}
+  <div class="mb-4 px-4 py-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-sm">
+    Settings saved.
+  </div>
+  {% endif %}
+
+  <!-- Tabs -->
+  <div class="flex gap-1 mb-5 bg-[#0b0d14] p-1 rounded-lg border border-[#252836] w-fit">
+    <button onclick="showTab('overview')" id="tab-overview"
+            class="px-4 py-1.5 rounded-md text-sm font-medium transition-colors tab-btn active-tab">
+      Overview
+    </button>
+    <button onclick="showTab('temps')" id="tab-temps"
+            class="px-4 py-1.5 rounded-md text-sm font-medium transition-colors tab-btn">
+      Temperatures
+    </button>
+    <button onclick="showTab('settings')" id="tab-settings"
+            class="px-4 py-1.5 rounded-md text-sm font-medium transition-colors tab-btn">
+      Settings
+    </button>
+  </div>
+
+  <!-- ── Overview Tab ───────────────────────────────────────────────────── -->
+  <div id="pane-overview">
+
+    {% if error and not data %}
+    <div class="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-300 text-sm mb-5">
+      {{ error }}
+    </div>
+    {% endif %}
+
+    {% if data %}
+    <!-- System info + health -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+
+      <!-- System Info -->
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+        <p class="text-slate-500 text-xs uppercase tracking-wider mb-4">System Information</p>
+        <div class="space-y-3 text-sm">
+          {% if data.hostname %}
+          <div class="flex justify-between">
+            <span class="text-slate-500">Hostname</span>
+            <span class="text-white font-medium">{{ data.hostname }}</span>
+          </div>
+          {% endif %}
+          <div class="flex justify-between">
+            <span class="text-slate-500">Manufacturer</span>
+            <span class="text-white">{{ data.manufacturer or "—" }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">Model</span>
+            <span class="text-white">{{ data.model or "—" }}</span>
+          </div>
+          {% if data.serial %}
+          <div class="flex justify-between">
+            <span class="text-slate-500">Serial</span>
+            <span class="text-slate-300 font-mono text-xs">{{ data.serial }}</span>
+          </div>
+          {% endif %}
+          {% if data.bios_version %}
+          <div class="flex justify-between">
+            <span class="text-slate-500">BIOS Version</span>
+            <span class="text-slate-300 text-xs">{{ data.bios_version }}</span>
+          </div>
+          {% endif %}
+          <div class="flex justify-between">
+            <span class="text-slate-500">CPU Count</span>
+            <span class="text-white">{{ data.cpu_count or "—" }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">Memory</span>
+            <span class="text-white">{{ data.memory_gb }} GB</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Health + Power -->
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+        <p class="text-slate-500 text-xs uppercase tracking-wider mb-4">Health &amp; Power</p>
+        <div class="space-y-4">
+
+          <!-- Health badge -->
+          <div>
+            <p class="text-slate-500 text-xs mb-2">Overall Status</p>
+            {% if data.status == 'OK' %}
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-500/15 border border-emerald-500/30 rounded-lg text-emerald-300 font-semibold text-sm">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Healthy
+            </span>
+            {% elif data.status == 'Warning' %}
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-500/15 border border-amber-500/30 rounded-lg text-amber-300 font-semibold text-sm">
+              <span class="w-2 h-2 rounded-full bg-amber-400"></span> Warning
+            </span>
+            {% elif data.status == 'Critical' %}
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 bg-red-500/15 border border-red-500/30 rounded-lg text-red-300 font-semibold text-sm">
+              <span class="w-2 h-2 rounded-full bg-red-400 animate-pulse"></span> Critical
+            </span>
+            {% else %}
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-500/15 border border-slate-500/30 rounded-lg text-slate-300 font-semibold text-sm">
+              <span class="w-2 h-2 rounded-full bg-slate-400"></span> {{ data.status or "Unknown" }}
+            </span>
+            {% endif %}
+            {% if data.health_summary and data.health_summary != data.status %}
+            <p class="text-slate-500 text-xs mt-1">{{ data.health_summary }}</p>
+            {% endif %}
+          </div>
+
+          <div class="border-t border-[#252836] pt-4 space-y-3 text-sm">
+            <div class="flex justify-between">
+              <span class="text-slate-500">Power State</span>
+              {% if data.power_state == 'On' %}
+              <span class="text-emerald-400 font-medium">On</span>
+              {% else %}
+              <span class="text-slate-400">{{ data.power_state }}</span>
+              {% endif %}
+            </div>
+
+            {% if data.power_watts is not none %}
+            <div class="flex justify-between">
+              <span class="text-slate-500">Power Draw</span>
+              <span class="text-white font-medium tabular-nums">{{ data.power_watts }} W</span>
+            </div>
+            {% endif %}
+
+            {% if data.temperatures %}
+            {% set critical_temps = data.temperatures | selectattr('status', 'equalto', 'Critical') | list %}
+            {% set warning_temps  = data.temperatures | selectattr('status', 'equalto', 'Warning')  | list %}
+            {% if critical_temps %}
+            <div class="flex justify-between">
+              <span class="text-slate-500">Critical Sensors</span>
+              <span class="text-red-400 font-medium">{{ critical_temps | length }}</span>
+            </div>
+            {% endif %}
+            {% if warning_temps %}
+            <div class="flex justify-between">
+              <span class="text-slate-500">Warning Sensors</span>
+              <span class="text-amber-400 font-medium">{{ warning_temps | length }}</span>
+            </div>
+            {% endif %}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fans summary (compact) -->
+    {% if data.fans %}
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+      <p class="text-slate-500 text-xs uppercase tracking-wider mb-3">Fans ({{ data.fans | length }})</p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+        {% for fan in data.fans %}
+        <div class="bg-[#0b0d14] border border-[#252836] rounded-lg p-3">
+          <p class="text-slate-500 text-[10px] truncate mb-1">{{ fan.name }}</p>
+          {% if fan.rpm is not none %}
+          <p class="text-white text-sm font-medium tabular-nums">{{ fan.rpm }} <span class="text-slate-500 text-xs">RPM</span></p>
+          {% endif %}
+          <div class="mt-1">
+            {% if fan.status == 'Critical' %}
+            <span class="text-[10px] text-red-400">Critical</span>
+            {% elif fan.status == 'Warning' %}
+            <span class="text-[10px] text-amber-400">Warning</span>
+            {% elif fan.status == 'OK' %}
+            <span class="text-[10px] text-emerald-400">OK</span>
+            {% else %}
+            <span class="text-[10px] text-slate-600">{{ fan.status }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% elif not error %}
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-12 text-center">
+      <p class="text-slate-400">No data available. Click Refresh to poll this server.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Temperatures Tab ───────────────────────────────────────────────── -->
+  <div id="pane-temps" class="hidden">
+    {% if data and data.temperatures %}
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl overflow-hidden">
+      <div class="px-5 py-3 border-b border-[#252836] flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-300">Temperature Sensors</h2>
+        <span class="text-slate-600 text-xs">{{ data.temperatures | length }} sensors</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-[#252836]">
+              <th class="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Sensor</th>
+              <th class="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Reading</th>
+              <th class="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Threshold</th>
+              <th class="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in data.temperatures | sort(attribute='reading_c', reverse=true) %}
+            <tr class="border-t border-[#252836] hover:bg-[#1a1d2e] transition-colors
+              {% if t.status == 'Critical' %}bg-red-500/5{% elif t.status == 'Warning' %}bg-amber-500/5{% endif %}">
+              <td class="px-5 py-2.5 text-slate-300 text-xs">{{ t.name }}</td>
+              <td class="px-5 py-2.5 text-right tabular-nums font-medium text-sm
+                {% if t.status == 'Critical' %}text-red-400
+                {% elif t.status == 'Warning' %}text-amber-400
+                {% elif t.reading_c >= 70 %}text-red-400
+                {% elif t.reading_c >= 55 %}text-amber-400
+                {% else %}text-emerald-400{% endif %}">
+                {{ t.reading_c }} °C
+              </td>
+              <td class="px-5 py-2.5 text-right tabular-nums text-slate-500 text-xs">
+                {% if t.threshold_c is not none %}{{ t.threshold_c }} °C{% else %}—{% endif %}
+              </td>
+              <td class="px-5 py-2.5">
+                {% if t.status == 'Critical' %}
+                <span class="inline-flex items-center gap-1.5 text-xs text-red-300">
+                  <span class="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span> Critical
+                </span>
+                {% elif t.status == 'Warning' %}
+                <span class="inline-flex items-center gap-1.5 text-xs text-amber-300">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Warning
+                </span>
+                {% elif t.status == 'OK' %}
+                <span class="inline-flex items-center gap-1.5 text-xs text-emerald-400">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> OK
+                </span>
+                {% else %}
+                <span class="text-slate-600 text-xs">{{ t.status }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-12 text-center">
+      <p class="text-slate-400">No temperature data available.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Settings Tab ───────────────────────────────────────────────────── -->
+  <div id="pane-settings" class="hidden">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+      <!-- Edit form -->
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+        <h2 class="text-sm font-semibold text-slate-300 mb-4">Edit Server</h2>
+        <form method="post" action="/redfish/{{ server.id }}/edit" class="space-y-4">
+          <div>
+            <label class="block text-xs text-slate-500 mb-1.5">Display Name</label>
+            <input type="text" name="name" value="{{ server.name }}" required
+                   class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
+                          focus:outline-none focus:border-blue-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-500 mb-1.5">Host URL</label>
+            <input type="text" name="host" value="{{ server.host }}" required
+                   class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
+                          focus:outline-none focus:border-blue-500 transition-colors">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-500 mb-1.5">Username</label>
+              <input type="text" name="username" value="{{ server.username }}" required
+                     class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
+                            focus:outline-none focus:border-blue-500 transition-colors">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-500 mb-1.5">New Password</label>
+              <input type="password" name="password" placeholder="(unchanged)"
+                     class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
+                            focus:outline-none focus:border-blue-500 transition-colors">
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" name="verify_ssl" id="verify_ssl" value="on"
+                   {% if server.verify_ssl %}checked{% endif %}
+                   class="rounded border-[#252836] bg-[#0b0d14]">
+            <label for="verify_ssl" class="text-sm text-slate-400">Verify SSL certificate</label>
+          </div>
+          <button type="submit"
+                  class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+            Save Changes
+          </button>
+        </form>
+      </div>
+
+      <!-- Danger zone -->
+      <div class="bg-[#13151f] border border-red-500/20 rounded-xl p-5">
+        <h2 class="text-sm font-semibold text-red-400 mb-4">Danger Zone</h2>
+        <p class="text-slate-500 text-sm mb-4">
+          Deleting this server will remove all associated snapshots.
+        </p>
+        <form method="post" action="/redfish/{{ server.id }}/delete"
+              onsubmit="return confirm('Delete {{ server.name }}? This cannot be undone.')">
+          <button type="submit"
+                  class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors">
+            Delete Server
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<style>
+  .tab-btn { color: #64748b; }
+  .tab-btn:hover { color: #e2e8f0; }
+  .active-tab { background: #1a1d2e; color: #e2e8f0; }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showTab(name) {
+  ['overview', 'temps', 'settings'].forEach(t => {
+    document.getElementById('pane-' + t).classList.add('hidden');
+    document.getElementById('tab-' + t).classList.remove('active-tab');
+  });
+  document.getElementById('pane-' + name).classList.remove('hidden');
+  document.getElementById('tab-' + name).classList.add('active-tab');
+}
+
+{% if saved %}showTab('settings');{% endif %}
+</script>
+{% endblock %}

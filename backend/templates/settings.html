@@ -1,37 +1,289 @@
 {% extends "base.html" %}
-{% block title %}Settings – Homelab Monitor{% endblock %}
+{% block title %}Settings – {{ request.state.site_name }}{% endblock %}
 
 {% block content %}
-<div class="mb-6">
-  <h1 class="text-xl font-semibold text-white">Settings</h1>
-  <p class="text-slate-400 text-sm mt-1">Application configuration</p>
-</div>
+<div class="p-8">
 
-{% if saved %}
-<div class="mb-5 px-4 py-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm">
-  Settings saved.
-</div>
-{% endif %}
+  <!-- Header -->
+  <div class="mb-8">
+    <h1 class="text-2xl font-bold text-white">Settings</h1>
+    <p class="text-slate-500 text-sm mt-0.5">Application configuration</p>
+  </div>
 
-<div class="bg-[#1a1d27] border border-[#2a2d3a] rounded-xl p-6 max-w-lg">
-  <form method="post" action="/settings/save" class="space-y-5">
-    <div>
-      <label class="block text-sm font-medium text-slate-300 mb-1.5">Site name</label>
-      <input type="text" name="site_name" value="{{ site_name }}"
-             class="w-full px-3 py-2 bg-[#0f1117] border border-[#2a2d3a] rounded-lg text-white text-sm
-                    focus:outline-none focus:border-blue-500 transition-colors">
+  {% if saved %}
+  <div class="mb-6 px-4 py-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm">
+    Settings saved.
+  </div>
+  {% endif %}
+
+  <form method="post" action="/settings/save">
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+
+      <!-- LEFT COLUMN -->
+      <div class="space-y-6">
+
+        <!-- General -->
+        <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-5">General</h2>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-1.5">Site name</label>
+              <input type="text" name="site_name" value="{{ site_name }}"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                            focus:outline-none focus:border-blue-500 transition-colors">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-1.5">Timezone</label>
+              <input type="text" name="timezone" value="{{ timezone }}" placeholder="Europe/Zurich"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                            focus:outline-none focus:border-blue-500 transition-colors">
+              <p class="text-slate-600 text-xs mt-1">e.g. UTC, Europe/Zurich, America/New_York</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Poll intervals -->
+        <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-5">Poll intervals</h2>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-1.5">Ping (seconds)</label>
+              <input type="number" name="ping_interval" value="{{ ping_interval }}" min="10" max="3600"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                            focus:outline-none focus:border-blue-500 transition-colors">
+              <p class="text-slate-600 text-xs mt-1">10 – 3600 s</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-1.5">Proxmox (seconds)</label>
+              <input type="number" name="proxmox_interval" value="{{ proxmox_interval }}" min="10" max="3600"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                            focus:outline-none focus:border-blue-500 transition-colors">
+              <p class="text-slate-600 text-xs mt-1">10 – 3600 s</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Data retention -->
+        <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-5">Data retention</h2>
+          <div class="grid grid-cols-3 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-1.5">Ping results (days)</label>
+              <input type="number" name="ping_retention" value="{{ ping_retention }}" min="1" max="365"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                            focus:outline-none focus:border-blue-500 transition-colors">
+              <p class="text-slate-600 text-xs mt-1">1 – 365 days</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-1.5">Proxmox snapshots (days)</label>
+              <input type="number" name="proxmox_retention" value="{{ proxmox_retention }}" min="1" max="90"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                            focus:outline-none focus:border-blue-500 transition-colors">
+              <p class="text-slate-600 text-xs mt-1">1 – 90 days</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-1.5">Integration snapshots (days)</label>
+              <input type="number" name="integration_retention" value="{{ integration_retention }}" min="1" max="90"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                            focus:outline-none focus:border-blue-500 transition-colors">
+              <p class="text-slate-600 text-xs mt-1">1 – 90 days (alle Integrationen)</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="space-y-6">
+
+        <!-- Alert thresholds -->
+        <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Alert thresholds</h2>
+          <p class="text-slate-600 text-xs mb-5">Global defaults — individual hosts can override the latency threshold.</p>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-1.5">Ping latency threshold (ms)</label>
+              <input type="number" name="latency_threshold" value="{{ latency_threshold }}" min="1" max="10000"
+                     placeholder="e.g. 500 (leave empty to disable)"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                            focus:outline-none focus:border-blue-500 transition-colors">
+              <p class="text-slate-600 text-xs mt-1">Alert when latency exceeds this value. Empty = no global threshold.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2">Proxmox resource thresholds (%)</label>
+              <div class="grid grid-cols-3 gap-3">
+                <div>
+                  <p class="text-xs text-slate-500 mb-1">CPU</p>
+                  <input type="number" name="cpu_threshold" value="{{ cpu_threshold }}" min="1" max="100"
+                         class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                                focus:outline-none focus:border-blue-500 transition-colors">
+                </div>
+                <div>
+                  <p class="text-xs text-slate-500 mb-1">RAM</p>
+                  <input type="number" name="ram_threshold" value="{{ ram_threshold }}" min="1" max="100"
+                         class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                                focus:outline-none focus:border-blue-500 transition-colors">
+                </div>
+                <div>
+                  <p class="text-xs text-slate-500 mb-1">Disk</p>
+                  <input type="number" name="disk_threshold" value="{{ disk_threshold }}" min="1" max="100"
+                         class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                                focus:outline-none focus:border-blue-500 transition-colors">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Anomaly detection -->
+        <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Anomaly detection</h2>
+          <p class="text-slate-600 text-xs mb-5">Flags metrics that deviate significantly from their 24h average.</p>
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1.5">Multiplier (× 24h average)</label>
+            <input type="number" name="anomaly_threshold" value="{{ anomaly_threshold }}"
+                   min="1.5" max="10" step="0.1"
+                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                          focus:outline-none focus:border-blue-500 transition-colors">
+            <p class="text-slate-600 text-xs mt-1">
+              2.0 = alert when a metric is &gt; 2× its 24h average. Range: 1.5 – 10.
+            </p>
+          </div>
+        </div>
+
+      </div>
     </div>
-    <div>
-      <label class="block text-sm font-medium text-slate-300 mb-1.5">Ping interval (seconds)</label>
-      <input type="number" name="ping_interval" value="{{ ping_interval }}" min="10" max="3600"
-             class="w-full px-3 py-2 bg-[#0f1117] border border-[#2a2d3a] rounded-lg text-white text-sm
-                    focus:outline-none focus:border-blue-500 transition-colors">
-      <p class="text-slate-500 text-xs mt-1">Min 10s, max 3600s</p>
-    </div>
+
     <button type="submit"
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
-      Save
+            class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+      Save settings
     </button>
   </form>
+
+  <!-- phpIPAM Integration -->
+  <div class="mt-10">
+    <div class="flex items-center gap-2 mb-1">
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">phpIPAM Integration</h2>
+      <span class="px-2 py-0.5 rounded-full text-[10px] bg-slate-500/10 text-slate-500 border border-slate-600/30">Optional</span>
+    </div>
+    <p class="text-slate-600 text-xs mb-5">
+      Import IP addresses from phpIPAM as monitored hosts. Only new entries are added — existing hosts are not modified.
+    </p>
+
+    <form method="post" action="/settings/phpipam/save" class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1.5">phpIPAM URL</label>
+          <input type="text" name="phpipam_url" value="{{ phpipam_url }}"
+                 placeholder="http://phpipam.local"
+                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                        focus:outline-none focus:border-blue-500 transition-colors">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1.5">App ID</label>
+          <input type="text" name="phpipam_app_id" value="{{ phpipam_app_id }}"
+                 placeholder="monitoring"
+                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                        focus:outline-none focus:border-blue-500 transition-colors">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1.5">Username</label>
+          <input type="text" name="phpipam_username" value="{{ phpipam_username }}"
+                 placeholder="admin (leave empty for App-Code mode)"
+                 autocomplete="off"
+                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                        focus:outline-none focus:border-blue-500 transition-colors">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
+          <input type="password" name="phpipam_password"
+                 placeholder="{% if phpipam_has_pw %}••••••••{% else %}Enter password{% endif %}"
+                 autocomplete="new-password"
+                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                        focus:outline-none focus:border-blue-500 transition-colors">
+          {% if phpipam_has_pw %}
+          <p class="text-slate-600 text-xs mt-1">Password set — leave empty to keep current</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-end gap-4 mb-5">
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1.5">Auto-sync interval (hours)</label>
+          <input type="number" name="phpipam_sync_hours" value="{{ phpipam_sync_hours }}"
+                 min="0" max="168" placeholder="0 = disabled"
+                 class="w-40 px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                        focus:outline-none focus:border-blue-500 transition-colors">
+          <p class="text-slate-600 text-xs mt-1">0 = no automatic sync</p>
+        </div>
+        <div class="pb-1">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" name="phpipam_verify_ssl"
+                   {% if phpipam_verify_ssl == "1" %}checked{% endif %}
+                   class="w-4 h-4 rounded border-[#252836] bg-[#0b0d14] text-blue-500 accent-blue-500">
+            <span class="text-sm text-slate-300">Verify SSL certificate</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button type="submit"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+          Save
+        </button>
+        {% if phpipam_url and phpipam_app_id %}
+        <button type="button" id="phpipam-sync-btn" onclick="runPhpIpamSync()"
+                class="px-4 py-2 bg-[#1e2030] hover:bg-[#252836] text-slate-300 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 border border-[#252836]">
+          <svg id="phpipam-spin" class="w-3.5 h-3.5 hidden animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Sync now
+        </button>
+        {% endif %}
+      </div>
+    </form>
+
+    <div id="phpipam-result" class="hidden mt-3 px-4 py-3 rounded-lg text-sm border"></div>
+  </div>
+
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function runPhpIpamSync() {
+  const btn = document.getElementById('phpipam-sync-btn');
+  const spin = document.getElementById('phpipam-spin');
+  const result = document.getElementById('phpipam-result');
+
+  btn.disabled = true;
+  spin.classList.remove('hidden');
+  result.classList.add('hidden');
+
+  try {
+    const resp = await fetch('/settings/phpipam/sync', { method: 'POST' });
+    const data = await resp.json();
+
+    result.classList.remove('hidden', 'bg-emerald-500/10', 'border-emerald-500/20', 'text-emerald-400',
+                                       'bg-red-500/10', 'border-red-500/20', 'text-red-400');
+
+    if (data.errors && data.errors.length > 0 && data.added === 0) {
+      result.classList.add('bg-red-500/10', 'border-red-500/20', 'text-red-400');
+      result.textContent = 'Error: ' + data.errors[0];
+    } else {
+      result.classList.add('bg-emerald-500/10', 'border-emerald-500/20', 'text-emerald-400');
+      result.textContent = `Sync: ${data.added} added, ${data.merged ?? 0} updated, ${data.skipped} skipped` +
+        (data.errors.length > 0 ? ` · ${data.errors.length} error(s)` : '');
+    }
+  } catch(e) {
+    result.classList.remove('hidden');
+    result.classList.add('bg-red-500/10', 'border-red-500/20', 'text-red-400');
+    result.textContent = 'Connection error';
+  } finally {
+    btn.disabled = false;
+    spin.classList.add('hidden');
+  }
+}
+</script>
 {% endblock %}

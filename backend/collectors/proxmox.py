@@ -4,7 +4,12 @@ via the Proxmox REST API using API token authentication.
 """
 from __future__ import annotations
 
+import asyncio
+import re
+
 import httpx
+
+from collectors.base import BaseCollector, CollectorResult, ConfigField
 
 
 class ProxmoxAPI:
@@ -30,6 +35,47 @@ class ProxmoxAPI:
     async def cluster_resources(self) -> list[dict]:
         """Returns all cluster resources: nodes, VMs (qemu), and containers (lxc)."""
         return await self.get("/cluster/resources")
+
+    async def vm_config(self, node: str, vmid: int) -> dict:
+        try:
+            return await self.get(f"/nodes/{node}/qemu/{vmid}/config")
+        except Exception:
+            return {}
+
+    async def lxc_config(self, node: str, ctid: int) -> dict:
+        try:
+            return await self.get(f"/nodes/{node}/lxc/{ctid}/config")
+        except Exception:
+            return {}
+
+    async def fetch_guest_macs(self, guests: list[dict]) -> dict[int, str]:
+        """
+        Fetch the first NIC MAC address for each VM/LXC.
+        Returns {vmid: mac_address}.
+        """
+        _mac_re = re.compile(r"([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})", re.I)
+
+        async def _one(g):
+            vmid = g.get("id") or g.get("vmid")
+            node = g.get("node", "")
+            gtype = g.get("type", "VM")
+            try:
+                cfg = await (self.vm_config(node, vmid) if gtype == "VM"
+                             else self.lxc_config(node, vmid))
+                # net0/net1 keys hold the interface config string
+                for key in sorted(cfg.keys()):
+                    if not key.startswith("net"):
+                        continue
+                    val = str(cfg[key])
+                    m = _mac_re.search(val)
+                    if m:
+                        return vmid, m.group(1).upper()
+            except Exception:
+                pass
+            return vmid, None
+
+        results = await asyncio.gather(*[_one(g) for g in guests])
+        return {vmid: mac for vmid, mac in results if mac}
 
     async def health_check(self) -> bool:
         try:
@@ -75,6 +121,8 @@ def parse_cluster_data(resources: list[dict], cluster_status: list[dict]) -> dic
             mem_used = r.get("mem") or 0
             mem_total = r.get("maxmem") or 1
             mem_pct = round(mem_used / mem_total * 100, 1)
+            disk_used = r.get("disk") or 0
+            disk_total = r.get("maxdisk") or 1
             uptime_s = r.get("uptime") or 0
             nodes.append({
                 "name": r.get("node", r.get("name", "?")),
@@ -84,6 +132,11 @@ def parse_cluster_data(resources: list[dict], cluster_status: list[dict]) -> dic
                 "mem_pct": mem_pct,
                 "mem_used_gb": round(mem_used / 1024**3, 1),
                 "mem_total_gb": round(mem_total / 1024**3, 1),
+                "disk_used_gb": round(disk_used / 1024**3, 1),
+                "disk_total_gb": round(disk_total / 1024**3, 1),
+                "disk_pct": round(disk_used / disk_total * 100, 1) if disk_total else 0,
+                "netin": r.get("netin") or 0,
+                "netout": r.get("netout") or 0,
                 "uptime_h": round(uptime_s / 3600, 1),
             })
 
@@ -91,6 +144,8 @@ def parse_cluster_data(resources: list[dict], cluster_status: list[dict]) -> dic
             cpu_pct = round((r.get("cpu") or 0) * 100, 1)
             mem_used = r.get("mem") or 0
             mem_total = r.get("maxmem") or 1
+            disk_used = r.get("disk") or 0
+            disk_total = r.get("maxdisk") or 1
             vms.append({
                 "id": r.get("vmid"),
                 "name": r.get("name", f"vm-{r.get('vmid')}"),
@@ -100,13 +155,23 @@ def parse_cluster_data(resources: list[dict], cluster_status: list[dict]) -> dic
                 "cpu_pct": cpu_pct,
                 "mem_used_gb": round(mem_used / 1024**3, 2),
                 "mem_total_gb": round(mem_total / 1024**3, 2),
+                "disk_used_gb": round(disk_used / 1024**3, 2),
+                "disk_total_gb": round(disk_total / 1024**3, 2),
+                "disk_pct": round(disk_used / disk_total * 100, 1) if disk_total else 0,
+                "netin": r.get("netin") or 0,
+                "netout": r.get("netout") or 0,
+                "diskread": r.get("diskread") or 0,
+                "diskwrite": r.get("diskwrite") or 0,
                 "uptime_h": round((r.get("uptime") or 0) / 3600, 1),
+                "type": "VM",
             })
 
         elif rtype == "lxc":
             cpu_pct = round((r.get("cpu") or 0) * 100, 1)
             mem_used = r.get("mem") or 0
             mem_total = r.get("maxmem") or 1
+            disk_used = r.get("disk") or 0
+            disk_total = r.get("maxdisk") or 1
             containers.append({
                 "id": r.get("vmid"),
                 "name": r.get("name", f"ct-{r.get('vmid')}"),
@@ -116,13 +181,21 @@ def parse_cluster_data(resources: list[dict], cluster_status: list[dict]) -> dic
                 "cpu_pct": cpu_pct,
                 "mem_used_gb": round(mem_used / 1024**3, 2),
                 "mem_total_gb": round(mem_total / 1024**3, 2),
+                "disk_used_gb": round(disk_used / 1024**3, 2),
+                "disk_total_gb": round(disk_total / 1024**3, 2),
+                "disk_pct": round(disk_used / disk_total * 100, 1) if disk_total else 0,
+                "netin": r.get("netin") or 0,
+                "netout": r.get("netout") or 0,
+                "diskread": r.get("diskread") or 0,
+                "diskwrite": r.get("diskwrite") or 0,
                 "uptime_h": round((r.get("uptime") or 0) / 3600, 1),
+                "type": "LXC",
             })
 
     # Sort
     nodes.sort(key=lambda n: n["name"])
     vms.sort(key=lambda v: (v["node"], v["name"]))
-    containers.sort(key=lambda c: (c["node"], c["name"]))
+    containers.sort(key=lambda c: (c["node"], c["name"]))  # noqa: E501
 
     # Totals
     online_nodes = [n for n in nodes if n["online"]]
@@ -151,3 +224,103 @@ def parse_cluster_data(resources: list[dict], cluster_status: list[dict]) -> dic
         "containers": containers,
         "totals": totals,
     }
+
+
+async def import_proxmox_hosts(cluster_name: str, data: dict, db) -> dict:
+    """
+    Import VMs and LXC containers from a parsed Proxmox snapshot as PingHosts.
+
+    Uses the VM/container name as hostname (relies on DNS).
+    Running guests get check_type="icmp"; stopped guests are added but disabled.
+    Existing hosts (matched by hostname) are merged: source updated to "proxmox".
+
+    Returns: {"added": int, "merged": int, "skipped": int}
+    """
+    from database import PingHost
+    from sqlalchemy import select
+
+    existing_q = await db.execute(select(PingHost))
+    existing: dict[str, PingHost] = {h.hostname: h for h in existing_q.scalars().all()}
+
+    guests = data.get("vms", []) + data.get("containers", [])
+    added = merged = skipped = 0
+    dirty = False
+
+    for g in guests:
+        hostname = (g.get("name") or "").strip()
+        if not hostname:
+            skipped += 1
+            continue
+
+        label = f"{g['type']}: {g['name']} ({g['node']})"
+
+        if hostname in existing:
+            host = existing[hostname]
+            changed = False
+            if host.source == "manual":
+                host.source = "proxmox"
+                host.source_detail = cluster_name
+                changed = True
+            if changed:
+                dirty = True
+            merged += 1
+        else:
+            db.add(PingHost(
+                name=g["name"],
+                hostname=hostname,
+                check_type="icmp",
+                enabled=g.get("running", False),
+                source="proxmox",
+                source_detail=cluster_name,
+            ))
+            existing[hostname] = True  # type: ignore[assignment]
+            added += 1
+            dirty = True
+
+    if dirty:
+        await db.commit()
+
+    return {"added": added, "merged": merged, "skipped": skipped}
+
+
+class ProxmoxCollector(BaseCollector):
+    """Background collector for a single Proxmox VE cluster."""
+
+    name = "proxmox"
+    display_name = "Proxmox VE"
+    description = "Monitor Proxmox VE clusters via the REST API."
+    icon = "🖥️"
+
+    @classmethod
+    def get_config_fields(cls) -> list[ConfigField]:
+        return [
+            ConfigField(key="host", label="Host URL", field_type="url",
+                        placeholder="https://proxmox.local:8006"),
+            ConfigField(key="token_id", label="Token ID",
+                        placeholder="user@realm!tokenid"),
+            ConfigField(key="token_secret", label="Token Secret",
+                        field_type="password", encrypted=True),
+            ConfigField(key="verify_ssl", label="Verify SSL",
+                        field_type="checkbox", required=False, default=False),
+        ]
+
+    def _api(self) -> ProxmoxAPI:
+        return ProxmoxAPI(
+            host=self.settings["host"],
+            token_id=self.settings["token_id"],
+            token_secret=self.settings["token_secret"],
+            verify_ssl=self.settings.get("verify_ssl", False),
+        )
+
+    async def collect(self) -> CollectorResult:
+        try:
+            api = self._api()
+            resources = await api.cluster_resources()
+            status = await api.cluster_status()
+            data = parse_cluster_data(resources, status)
+            return CollectorResult(success=True, data=data)
+        except Exception as exc:
+            return CollectorResult(success=False, error=str(exc))
+
+    async def health_check(self) -> bool:
+        return await self._api().health_check()

@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}{{ server.name }} – phpIPAM – {{ request.state.site_name }}{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+  <!-- Header -->
+  <div class="flex items-center gap-3 mb-6">
+    <a href="/phpipam" title="Back to servers"
+       class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-[#252836] transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+    </a>
+    <div class="flex-1 min-w-0">
+      <h1 class="text-2xl font-bold text-white">{{ server.name }}</h1>
+      <p class="text-slate-500 text-sm mt-0.5">{{ server.host }} · App ID: <span class="text-slate-400">{{ server.app_id }}</span></p>
+    </div>
+    <div class="flex gap-2">
+      <form method="post" action="/phpipam/{{ server.id }}/sync">
+        <button type="submit"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/20 text-sm rounded-lg transition-colors">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Sync Now
+        </button>
+      </form>
+      <form method="post" action="/phpipam/{{ server.id }}/delete"
+            onsubmit="return confirm('Delete {{ server.name }}?')">
+        <button type="submit"
+                class="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-sm rounded-lg transition-colors">
+          Delete
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+    <!-- Sync History Timeline -->
+    <div class="xl:col-span-2">
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Sync History (last 10)</h2>
+
+      {% if snap_rows %}
+      <div class="space-y-3">
+        {% for row in snap_rows %}
+        {% set snap = row.snap %}
+        {% set data = row.data %}
+        <div class="bg-[#13151f] border {% if snap.ok %}border-[#252836]{% else %}border-red-500/20{% endif %} rounded-xl p-4">
+          <div class="flex items-start gap-3">
+            <!-- Timeline dot -->
+            <div class="mt-0.5 shrink-0">
+              {% if snap.ok %}
+                <div class="w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"></div>
+              {% else %}
+                <div class="w-3 h-3 rounded-full bg-red-400"></div>
+              {% endif %}
+            </div>
+
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-4 mb-2">
+                <p class="text-white font-medium text-sm">
+                  {% if snap.ok %}Sync completed{% else %}Sync failed{% endif %}
+                </p>
+                <span class="text-slate-500 text-xs shrink-0">{{ snap.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+              </div>
+
+              {% if data %}
+              <div class="flex flex-wrap gap-3">
+                <div class="flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span class="text-emerald-400 text-xs font-medium">+{{ data.added }} added</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                  <span class="text-blue-400 text-xs font-medium">~{{ data.merged }} merged</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                  <span class="text-slate-400 text-xs">{{ data.skipped }} skipped</span>
+                </div>
+                {% if data.errors %}
+                <div class="flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                  <span class="text-amber-400 text-xs">{{ data.errors | length }} error(s)</span>
+                </div>
+                {% endif %}
+              </div>
+              {% if data.errors and data.errors | length > 0 %}
+              <div class="mt-2 p-2 bg-[#0b0d14] rounded-lg">
+                <p class="text-red-400/80 text-xs font-mono">{{ data.errors | join(', ') | truncate(120) }}</p>
+              </div>
+              {% endif %}
+              {% elif snap.error %}
+              <p class="text-red-400/80 text-xs font-mono mt-1">{{ snap.error }}</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-8 text-center">
+        <p class="text-slate-500 text-sm">No sync history yet. Click "Sync Now" to run the first sync.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Right column: Edit form -->
+    <div>
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Server Settings</h2>
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+        <form method="post" action="/phpipam/{{ server.id }}/edit" class="space-y-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Name</label>
+            <input type="text" name="name" value="{{ server.name }}" required
+                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                          focus:outline-none focus:border-blue-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">URL</label>
+            <input type="url" name="host" value="{{ server.host }}" required
+                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                          focus:outline-none focus:border-blue-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">App ID</label>
+            <input type="text" name="app_id" value="{{ server.app_id }}" required
+                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                          focus:outline-none focus:border-blue-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">
+              Username <span class="text-slate-600">(optional)</span>
+            </label>
+            <input type="text" name="username" value="{{ server.username or '' }}"
+                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                          focus:outline-none focus:border-blue-500 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">
+              Password <span class="text-slate-600">(leave empty to keep)</span>
+            </label>
+            <input type="password" name="password" placeholder="Leave empty to keep current"
+                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                          placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" name="verify_ssl" id="edit_verify_ssl"
+                   {% if server.verify_ssl %}checked{% endif %}
+                   class="w-4 h-4 rounded border-[#252836] bg-[#0b0d14] accent-blue-600">
+            <label for="edit_verify_ssl" class="text-sm text-slate-400">Verify SSL</label>
+          </div>
+          <div class="flex flex-col gap-2 pt-2">
+            <button type="submit"
+                    class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+              Save Changes
+            </button>
+            <form method="post" action="/phpipam/{{ server.id }}/delete"
+                  onsubmit="return confirm('Delete {{ server.name }}? This cannot be undone.')">
+              <button type="submit"
+                      class="w-full px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-sm rounded-lg transition-colors">
+                Delete Server
+              </button>
+            </form>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

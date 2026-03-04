@@ -22,23 +22,66 @@
   <!-- Add host form (hidden by default) -->
   <div id="add-form" class="hidden bg-[#13151f] border border-[#252836] rounded-xl p-5 mb-6">
     <h2 class="text-sm font-medium text-slate-300 mb-4">New host</h2>
-    <form method="post" action="/ping/add" class="flex gap-3">
+    <form method="post" action="/ping/add" class="grid grid-cols-2 gap-3">
       <input type="text" name="name" placeholder="Display name (e.g. Router)"
-             class="flex-1 px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+             class="px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
                     placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors" required>
-      <input type="text" name="hostname" placeholder="Hostname or IP (e.g. 192.168.1.1)"
-             class="flex-1 px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+      <input type="text" name="hostname" placeholder="Hostname or IP"
+             class="px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
                     placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors" required>
-      <button type="submit"
-              class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
-        Add
-      </button>
-      <button type="button" onclick="document.getElementById('add-form').classList.add('hidden')"
-              class="px-4 py-2 text-slate-400 hover:text-white text-sm rounded-lg transition-colors">
-        Cancel
-      </button>
+
+      <!-- Check types checkboxes -->
+      <div class="col-span-2">
+        <p class="text-xs font-medium text-slate-400 mb-2">Check types</p>
+        <div class="flex gap-4 flex-wrap">
+          {% for ct, label in [("icmp","ICMP Ping"),("http","HTTP"),("https","HTTPS"),("tcp","TCP")] %}
+          <label class="flex items-center gap-1.5 cursor-pointer select-none">
+            <input type="checkbox" name="check_types" value="{{ ct }}"
+                   {% if ct == "icmp" %}checked{% endif %}
+                   onchange="updateAddPort()"
+                   class="w-3.5 h-3.5 rounded border-[#3a3d4e] bg-[#0b0d14] text-blue-500 accent-blue-500">
+            <span class="text-sm text-slate-300">{{ label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <input type="number" name="port" id="add-port" placeholder="Port (for HTTP/HTTPS/TCP)" min="1" max="65535"
+             class="hidden px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                    placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+      <input type="number" name="latency_threshold_ms" placeholder="Latency threshold ms (optional)"
+             min="1" step="1"
+             class="px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                    placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+      <div class="col-span-2 flex gap-2">
+        <button type="submit"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+          Add
+        </button>
+        <button type="button" onclick="document.getElementById('add-form').classList.add('hidden')"
+                class="px-4 py-2 text-slate-400 hover:text-white text-sm rounded-lg transition-colors">
+          Cancel
+        </button>
+      </div>
     </form>
   </div>
+
+  <!-- Search -->
+  {% if host_data %}
+  <div class="mb-4">
+    <div class="relative max-w-sm">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none"
+           fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+      </svg>
+      <input type="text" id="host-search" placeholder="Search by name, hostname or IP…"
+             oninput="filterHosts(this.value)"
+             class="w-full pl-9 pr-3 py-2 bg-[#13151f] border border-[#252836] rounded-lg text-white text-sm
+                    placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Host list -->
   {% if host_data %}
@@ -50,21 +93,57 @@
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Status</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Latency</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Uptime 24h</th>
-          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Last check</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">30-day history</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Enabled</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-[#252836]">
         {% for d in host_data %}
-        <tr class="hover:bg-[#1a1d2e] transition-colors cursor-pointer {% if not d.host.enabled %}opacity-40{% endif %}"
+        <tr class="host-row hover:bg-[#1a1d2e] transition-colors cursor-pointer {% if not d.host.enabled %}opacity-40{% endif %}"
+            data-search="{{ d.host.name | lower }} {{ d.host.hostname | lower }}"
             onclick="window.location='/ping/{{ d.host.id }}'">
           <td class="px-5 py-3.5">
-            <p class="text-white font-medium">{{ d.host.name }}</p>
-            <p class="text-slate-500 text-xs mt-0.5">{{ d.host.hostname }}</p>
+            <div class="flex items-center gap-2 flex-wrap">
+              <p class="text-white font-medium">{{ d.host.name }}</p>
+              {% for ct in (d.host.check_type or "icmp").split(",") %}
+              {% set ct = ct.strip() %}
+              <span class="px-1.5 py-0.5 rounded text-xs font-mono
+                {% if ct == 'http' %}bg-blue-500/10 text-blue-400{% elif ct == 'https' %}bg-emerald-500/10 text-emerald-400{% elif ct == 'tcp' %}bg-purple-500/10 text-purple-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                {{ ct | upper }}
+              </span>
+              {% endfor %}
+              {% if d.host.maintenance %}
+              <span class="px-1.5 py-0.5 rounded text-xs bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                maintenance
+              </span>
+              {% endif %}
+              {% if d.host.ssl_expiry_days is not none and d.host.ssl_expiry_days <= 30 %}
+              <span class="px-1.5 py-0.5 rounded text-xs
+                {% if d.host.ssl_expiry_days <= 7 %}bg-red-500/10 text-red-400{% else %}bg-yellow-500/10 text-yellow-400{% endif %}">
+                SSL {{ d.host.ssl_expiry_days }}d
+              </span>
+              {% endif %}
+            </div>
+            <div class="flex items-center gap-1.5 mt-0.5">
+              <p class="text-slate-500 text-xs">{{ d.host.hostname }}</p>
+              {% set src = d.host.source or 'manual' %}
+              {% if src != 'manual' %}
+              <span class="px-1 py-0 rounded text-[10px] leading-4
+                {% if src == 'proxmox' %}bg-orange-500/10 text-orange-400
+                {% elif src == 'phpipam' %}bg-cyan-500/10 text-cyan-400
+                {% else %}bg-slate-500/10 text-slate-500{% endif %}">
+                {{ src }}{% if d.host.source_detail %}: {{ d.host.source_detail }}{% endif %}
+              </span>
+              {% endif %}
+            </div>
           </td>
           <td class="px-5 py-3.5">
             {% if not d.host.enabled %}
               <span class="text-slate-600 text-xs">disabled</span>
+            {% elif d.host.maintenance %}
+              <span class="inline-flex items-center gap-1.5 text-yellow-400 text-xs">
+                <span class="w-1.5 h-1.5 rounded-full bg-yellow-400"></span> Maintenance
+              </span>
             {% elif d.online is none %}
               <span class="inline-flex items-center gap-1.5 text-slate-400 text-xs">
                 <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> No data
@@ -92,8 +171,17 @@
               <span class="text-slate-300 text-sm">{{ d.uptime_pct }}%</span>
             </div>
           </td>
-          <td class="px-5 py-3.5 text-slate-500 text-xs">
-            {% if d.last_check %}{{ d.last_check.strftime("%H:%M:%S") }}{% else %}<span class="text-slate-600">—</span>{% endif %}
+          <td class="px-5 py-3.5">
+            <div class="flex gap-0.5">
+              {% for sq in d.heatmap %}
+              <div class="w-2 h-4 rounded-sm
+                          {% if sq.color == 'emerald' %}bg-emerald-500/70
+                          {% elif sq.color == 'yellow' %}bg-yellow-500/70
+                          {% elif sq.color == 'red' %}bg-red-500/70
+                          {% else %}bg-[#252836]{% endif %}"
+                   title="{{ sq.date }}"></div>
+              {% endfor %}
+            </div>
           </td>
           <td class="px-5 py-3.5" onclick="event.stopPropagation()">
             <form method="post" action="/ping/{{ d.host.id }}/toggle">
@@ -108,6 +196,9 @@
           </td>
         </tr>
         {% endfor %}
+        <tr id="search-empty" style="display:none">
+          <td colspan="6" class="px-5 py-8 text-center text-slate-600 text-sm">No hosts match your search.</td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -126,4 +217,28 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterHosts(q) {
+  const term = q.trim().toLowerCase();
+  let visible = 0;
+  document.querySelectorAll('.host-row').forEach(row => {
+    const match = !term || row.dataset.search.includes(term);
+    row.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  const empty = document.getElementById('search-empty');
+  if (empty) empty.style.display = visible === 0 ? '' : 'none';
+}
+
+function updateAddPort() {
+  const checked = [...document.querySelectorAll('input[name="check_types"]:checked')].map(c => c.value);
+  const portEl = document.getElementById('add-port');
+  const needsPort = checked.some(c => ['http', 'https', 'tcp'].includes(c));
+  portEl.classList.toggle('hidden', !needsPort);
+  if (!needsPort) portEl.value = '';
+}
+</script>
 {% endblock %}
