@@ -1,4 +1,4 @@
-# B8MON – Homelab Monitor
+# Vigil – Homelab Monitor
 
 A self-hosted homelab monitoring dashboard built with **FastAPI**, **SQLAlchemy (async/aiosqlite)**, **Jinja2** templates and **Tailwind CSS**.
 
@@ -58,7 +58,7 @@ A self-hosted homelab monitoring dashboard built with **FastAPI**, **SQLAlchemy 
 
 ```bash
 git clone https://github.com/jubacCH/B8MON.git
-cd B8MON
+cd B8MON  # rename to vigil if desired
 docker compose up -d
 ```
 
@@ -78,7 +78,7 @@ All settings are available at **`/settings`**:
 
 | Setting | Default | Description |
 |---|---|---|
-| Site name | Homelab Monitor | Shown in page title and sidebar |
+| Site name | Vigil | Shown in page title and sidebar |
 | Timezone | UTC | Display timezone |
 | Ping interval | 60 s | How often hosts are checked |
 | Proxmox interval | 60 s | How often Proxmox is polled |
@@ -96,7 +96,7 @@ phpIPAM credentials are also configured in Settings (separate form, auto-sync av
 ## Architecture
 
 ```
-B8MON/
+vigil/
 ├── backend/
 │   ├── main.py               # FastAPI app, middleware, router registration
 │   ├── database.py           # SQLAlchemy models, async session, helpers

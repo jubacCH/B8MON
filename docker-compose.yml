@@ -1,7 +1,7 @@
 services:
   monitor:
     build: ./backend
-    container_name: homelab-monitor
+    container_name: vigil
     ports:
       - "8000:8000"
     volumes:

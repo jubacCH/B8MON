@@ -11,7 +11,7 @@ templates = Jinja2Templates(directory="templates")
 
 @router.get("", response_class=HTMLResponse)
 async def settings_page(request: Request, db: AsyncSession = Depends(get_db)):
-    site_name           = await get_setting(db, "site_name", "Homelab Monitor")
+    site_name           = await get_setting(db, "site_name", "Vigil")
     ping_interval       = await get_setting(db, "ping_interval", "60")
     proxmox_interval    = await get_setting(db, "proxmox_interval", "60")
     ping_retention      = await get_setting(db, "ping_retention_days", "30")

@@ -32,7 +32,7 @@ class SynologyAPI:
                 "method": "login",
                 "account": self.username,
                 "passwd": self.password,
-                "session": "B8MON",
+                "session": "Vigil",
                 "format": "sid",
             },
         )
@@ -52,7 +52,7 @@ class SynologyAPI:
                     "api": "SYNO.API.Auth",
                     "version": "1",
                     "method": "logout",
-                    "session": "B8MON",
+                    "session": "Vigil",
                     "_sid": sid,
                 },
             )

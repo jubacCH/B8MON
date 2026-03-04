@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
 
 
-app = FastAPI(title="Homelab Monitor", lifespan=lifespan)
+app = FastAPI(title="Vigil", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -36,7 +36,7 @@ def _count(q):
 @app.middleware("http")
 async def inject_globals(request: Request, call_next):
     async with AsyncSessionLocal() as db:
-        request.state.site_name = await get_setting(db, "site_name", "Homelab Monitor")
+        request.state.site_name = await get_setting(db, "site_name", "Vigil")
         # Count configured integrations so nav links are only shown when set up
         counts = {}
         for key, model in [
