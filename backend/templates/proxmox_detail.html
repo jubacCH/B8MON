@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}{{ cluster.name }} – {{ request.state.site_name }}{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+  <!-- Header -->
+  <div class="flex items-center gap-3 mb-6">
+    <a href="/proxmox" title="Back to clusters"
+       class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-[#252836] transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+    </a>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2.5">
+        <h1 class="text-2xl font-bold text-white">{{ cluster.name }}</h1>
+        {% if data %}
+          {% if data.quorum_ok %}
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Quorum OK
+            </span>
+          {% else %}
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-red-400"></span> No Quorum
+            </span>
+          {% endif %}
+        {% endif %}
+      </div>
+      <p class="text-slate-500 text-sm mt-0.5">{{ cluster.host }}</p>
+    </div>
+    <div class="flex gap-2">
+      <button type="button" onclick="refreshData()"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-[#252836] hover:bg-[#2a2d3e] text-slate-300 text-sm rounded-lg transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" id="refresh-icon">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        Refresh
+      </button>
+      <form method="post" action="/proxmox/{{ cluster.id }}/delete"
+            onsubmit="return confirm('Delete {{ cluster.name }}?')">
+        <button type="submit"
+                class="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-sm rounded-lg transition-colors">
+          Delete
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {% if error %}
+  <!-- Error state -->
+  <div class="bg-red-500/10 border border-red-500/20 rounded-xl p-5 mb-6">
+    <div class="flex items-start gap-3">
+      <svg class="w-5 h-5 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <div>
+        <p class="text-red-400 font-medium text-sm">Connection failed</p>
+        <p class="text-red-400/70 text-xs mt-1 font-mono">{{ error }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit form on error -->
+  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 max-w-lg">
+    <h2 class="text-sm font-semibold text-slate-300 mb-5">Update connection settings</h2>
+    <form method="post" action="/proxmox/{{ cluster.id }}/edit" class="space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-slate-400 mb-1.5">Host URL</label>
+        <input type="text" name="host" value="{{ cluster.host }}" aria-label="Host URL"
+               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                      focus:outline-none focus:border-blue-500 transition-colors" required>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-400 mb-1.5">API Token ID</label>
+        <input type="text" name="token_id" value="{{ cluster.token_id }}" aria-label="API Token ID"
+               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                      focus:outline-none focus:border-blue-500 transition-colors" required>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-400 mb-1.5">New API Token Secret <span class="text-slate-600">(leave empty to keep current)</span></label>
+        <input type="password" name="token_secret" placeholder="Leave empty to keep current secret" aria-label="API Token Secret"
+               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                      placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+      </div>
+      <input type="hidden" name="name" value="{{ cluster.name }}">
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="verify_ssl" id="verify_ssl" {% if cluster.verify_ssl %}checked{% endif %}
+               class="w-4 h-4 rounded border-[#252836] bg-[#0b0d14] accent-blue-600">
+        <label for="verify_ssl" class="text-sm text-slate-400">Verify SSL certificate</label>
+      </div>
+      <button type="submit"
+              class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+        Save &amp; retry
+      </button>
+    </form>
+  </div>
+
+  {% elif data %}
+
+  <!-- ── CLUSTER SUMMARY ──────────────────────────────────────────────────── -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-4">
+      <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Nodes</p>
+      <p class="text-2xl font-bold text-white">{{ data.totals.nodes_online }}<span class="text-slate-600 text-base font-normal">/{{ data.totals.nodes_total }}</span></p>
+      <p class="text-slate-600 text-xs mt-0.5">online</p>
+    </div>
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-4">
+      <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">VMs</p>
+      <p class="text-2xl font-bold text-white">{{ data.totals.vms_running }}<span class="text-slate-600 text-base font-normal">/{{ data.totals.vms_total }}</span></p>
+      <p class="text-slate-600 text-xs mt-0.5">running</p>
+    </div>
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-4">
+      <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Containers</p>
+      <p class="text-2xl font-bold text-white">{{ data.totals.lxc_running }}<span class="text-slate-600 text-base font-normal">/{{ data.totals.lxc_total }}</span></p>
+      <p class="text-slate-600 text-xs mt-0.5">running</p>
+    </div>
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-4">
+      <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">CPU avg</p>
+      <p class="text-2xl font-bold {% if data.totals.cpu_avg_pct > 80 %}text-red-400{% elif data.totals.cpu_avg_pct > 60 %}text-yellow-400{% else %}text-white{% endif %}">
+        {{ data.totals.cpu_avg_pct }}%
+      </p>
+      <p class="text-slate-600 text-xs mt-0.5">across nodes</p>
+    </div>
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-4 col-span-2">
+      <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Memory</p>
+      <p class="text-2xl font-bold text-white">{{ data.totals.mem_used_gb }} <span class="text-slate-600 text-base font-normal">/ {{ data.totals.mem_total_gb }} GB</span></p>
+      <div class="mt-2 w-full h-1.5 bg-[#252836] rounded-full overflow-hidden">
+        <div class="h-full rounded-full {% if data.totals.mem_pct > 85 %}bg-red-400{% elif data.totals.mem_pct > 65 %}bg-yellow-400{% else %}bg-blue-400{% endif %}"
+             style="width: {{ data.totals.mem_pct }}%"></div>
+      </div>
+      <p class="text-slate-600 text-xs mt-1">{{ data.totals.mem_pct }}% used</p>
+    </div>
+  </div>
+
+  <!-- ── NODES ─────────────────────────────────────────────────────────────── -->
+  <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Nodes</h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
+    {% for node in data.nodes %}
+    <div class="bg-[#13151f] border rounded-xl p-5
+                {% if node.online %}border-[#252836]{% else %}border-red-500/20{% endif %}">
+      <div class="flex items-start justify-between mb-3">
+        <div>
+          <p class="text-white font-semibold text-sm">{{ node.name }}</p>
+          <p class="text-slate-500 text-xs mt-0.5">Uptime {{ node.uptime_h }}h</p>
+        </div>
+        <span class="w-2.5 h-2.5 rounded-full shrink-0 mt-0.5
+                     {% if node.online %}bg-emerald-400 shadow-[0_0_6px_1px_rgba(52,211,153,0.6)]{% else %}bg-red-400{% endif %}"></span>
+      </div>
+      <div class="space-y-2">
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-500">CPU</span>
+            <span class="{% if node.cpu_pct > 80 %}text-red-400{% elif node.cpu_pct > 60 %}text-yellow-400{% else %}text-slate-300{% endif %}">{{ node.cpu_pct }}%</span>
+          </div>
+          <div class="w-full h-1 bg-[#252836] rounded-full overflow-hidden">
+            <div class="h-full rounded-full {% if node.cpu_pct > 80 %}bg-red-400{% elif node.cpu_pct > 60 %}bg-yellow-400{% else %}bg-blue-400{% endif %}"
+                 style="width: {{ node.cpu_pct }}%"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-500">RAM</span>
+            <span class="{% if node.mem_pct > 85 %}text-red-400{% elif node.mem_pct > 65 %}text-yellow-400{% else %}text-slate-300{% endif %}">
+              {{ node.mem_used_gb }} / {{ node.mem_total_gb }} GB
+            </span>
+          </div>
+          <div class="w-full h-1 bg-[#252836] rounded-full overflow-hidden">
+            <div class="h-full rounded-full {% if node.mem_pct > 85 %}bg-red-400{% elif node.mem_pct > 65 %}bg-yellow-400{% else %}bg-purple-400{% endif %}"
+                 style="width: {{ node.mem_pct }}%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ── VMs & CONTAINERS ──────────────────────────────────────────────────── -->
+  {% set all_guests = [] %}
+  {% for v in data.vms %}{% set _ = all_guests.append(v | dict(type='VM')) %}{% endfor %}
+  {% for c in data.containers %}{% set _ = all_guests.append(c | dict(type='LXC')) %}{% endfor %}
+
+  {% if all_guests %}
+  <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">VMs &amp; Containers</h2>
+  <div class="bg-[#13151f] border border-[#252836] rounded-xl overflow-hidden">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-[#252836]">
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Name</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Type</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Node</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Status</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">CPU</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Memory</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Uptime</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-[#252836]">
+        {% for g in all_guests | sort(attribute='node') %}
+        <tr class="hover:bg-[#1a1d2e] transition-colors {% if not g.running %}opacity-50{% endif %}">
+          <td class="px-5 py-3">
+            <p class="text-white font-medium">{{ g.name }}</p>
+            <p class="text-slate-600 text-xs">ID {{ g.id }}</p>
+          </td>
+          <td class="px-5 py-3">
+            <span class="px-2 py-0.5 rounded text-xs font-medium
+                         {% if g.type == 'VM' %}bg-blue-500/10 text-blue-400{% else %}bg-purple-500/10 text-purple-400{% endif %}">
+              {{ g.type }}
+            </span>
+          </td>
+          <td class="px-5 py-3 text-slate-400 text-xs">{{ g.node }}</td>
+          <td class="px-5 py-3">
+            {% if g.running %}
+              <span class="inline-flex items-center gap-1.5 text-emerald-400 text-xs">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Running
+              </span>
+            {% else %}
+              <span class="inline-flex items-center gap-1.5 text-slate-500 text-xs">
+                <span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span> {{ g.status | capitalize }}
+              </span>
+            {% endif %}
+          </td>
+          <td class="px-5 py-3">
+            {% if g.running %}
+              <div class="flex items-center gap-2">
+                <div class="w-12 h-1 bg-[#252836] rounded-full overflow-hidden">
+                  <div class="h-full rounded-full {% if g.cpu_pct > 80 %}bg-red-400{% elif g.cpu_pct > 60 %}bg-yellow-400{% else %}bg-blue-400{% endif %}"
+                       style="width: {{ [g.cpu_pct, 100] | min }}%"></div>
+                </div>
+                <span class="text-slate-300 text-xs">{{ g.cpu_pct }}%</span>
+              </div>
+            {% else %}
+              <span class="text-slate-600 text-xs">—</span>
+            {% endif %}
+          </td>
+          <td class="px-5 py-3 text-slate-300 text-xs">
+            {% if g.running %}{{ g.mem_used_gb }} / {{ g.mem_total_gb }} GB{% else %}<span class="text-slate-600">—</span>{% endif %}
+          </td>
+          <td class="px-5 py-3 text-slate-400 text-xs">
+            {% if g.running and g.uptime_h > 0 %}{{ g.uptime_h }}h{% else %}<span class="text-slate-600">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function refreshData() {
+    const icon = document.getElementById('refresh-icon');
+    icon.classList.add('animate-spin');
+    // Simple page reload — keeps things clean
+    window.location.reload();
+  }
+</script>
+{% endblock %}

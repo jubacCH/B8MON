@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – {{ request.state.site_name }}{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-2xl font-bold text-white">Dashboard</h1>
+      <p class="text-slate-500 text-sm mt-0.5">Live overview of your infrastructure</p>
+    </div>
+    <div class="flex items-center gap-2 text-xs text-slate-500">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
+      <span id="last-updated">Live</span>
+    </div>
+  </div>
+
+  <!-- Summary bar -->
+  <div class="grid grid-cols-4 gap-4 mb-8">
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5 col-span-1">
+      <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Total</p>
+      <p class="text-3xl font-bold text-white">{{ total_count }}</p>
+      <p class="text-slate-500 text-xs mt-1">hosts monitored</p>
+    </div>
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5 relative overflow-hidden">
+      <div class="absolute inset-0 bg-emerald-500/5"></div>
+      <p class="text-slate-500 text-xs uppercase tracking-wider mb-2 relative">Online</p>
+      <p class="text-3xl font-bold text-emerald-400 relative">{{ online_count }}</p>
+      <p class="text-slate-500 text-xs mt-1 relative">reachable</p>
+    </div>
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5 relative overflow-hidden">
+      {% if offline_count > 0 %}
+      <div class="absolute inset-0 bg-red-500/5"></div>
+      {% endif %}
+      <p class="text-slate-500 text-xs uppercase tracking-wider mb-2 relative">Offline</p>
+      <p class="text-3xl font-bold relative {% if offline_count > 0 %}text-red-400{% else %}text-slate-500{% endif %}">{{ offline_count }}</p>
+      <p class="text-slate-500 text-xs mt-1 relative">unreachable</p>
+    </div>
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+      <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Uptime</p>
+      {% if total_count > 0 %}
+        {% set pct = ((online_count / total_count) * 100) | round(0) | int %}
+        <p class="text-3xl font-bold {% if pct >= 99 %}text-emerald-400{% elif pct >= 90 %}text-yellow-400{% else %}text-red-400{% endif %}">{{ pct }}%</p>
+      {% else %}
+        <p class="text-3xl font-bold text-slate-500">—</p>
+      {% endif %}
+      <p class="text-slate-500 text-xs mt-1">current</p>
+    </div>
+  </div>
+
+  <!-- Host cards -->
+  {% if host_stats %}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="host-grid">
+    {% for s in host_stats %}
+    <a href="/ping/{{ s.host.id }}"
+       class="host-card block bg-[#13151f] border rounded-xl p-5 transition-all hover:border-[#3a3d4e] hover:translate-y-[-1px] hover:shadow-lg hover:shadow-black/30
+              {% if s.online is none %}border-[#252836]{% elif s.online %}border-[#252836] hover:border-emerald-500/30{% else %}border-[#252836] hover:border-red-500/30{% endif %}"
+       data-host-id="{{ s.host.id }}">
+
+      <!-- Card top: name + status dot -->
+      <div class="flex items-start justify-between mb-3">
+        <div class="min-w-0">
+          <p class="text-white font-semibold text-sm truncate">{{ s.host.name }}</p>
+          <p class="text-slate-500 text-xs truncate mt-0.5">{{ s.host.hostname }}</p>
+        </div>
+        <span class="status-dot shrink-0 ml-2 mt-0.5 w-2.5 h-2.5 rounded-full
+                     {% if s.online is none %}bg-slate-600{% elif s.online %}bg-emerald-400{% else %}bg-red-400{% endif %}
+                     {% if s.online %}shadow-[0_0_6px_1px_rgba(52,211,153,0.6)]{% endif %}"></span>
+      </div>
+
+      <!-- Divider -->
+      <div class="border-t border-[#252836] mb-3"></div>
+
+      <!-- Stats row -->
+      <div class="grid grid-cols-2 gap-2 mb-3">
+        <div>
+          <p class="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">Latency</p>
+          <p class="text-sm font-medium latency-val
+                    {% if s.latency is not none %}text-white{% else %}text-slate-600{% endif %}">
+            {% if s.latency is not none %}{{ s.latency }} ms{% else %}—{% endif %}
+          </p>
+        </div>
+        <div>
+          <p class="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">Uptime 24h</p>
+          <p class="text-sm font-medium {% if s.uptime_pct >= 99 %}text-emerald-400{% elif s.uptime_pct >= 90 %}text-yellow-400{% else %}text-red-400{% endif %}">
+            {{ s.uptime_pct }}%
+          </p>
+        </div>
+      </div>
+
+      <!-- Uptime bar -->
+      <div class="w-full h-1 bg-[#252836] rounded-full overflow-hidden">
+        <div class="h-full rounded-full transition-all
+                    {% if s.uptime_pct >= 99 %}bg-emerald-400{% elif s.uptime_pct >= 90 %}bg-yellow-400{% else %}bg-red-400{% endif %}"
+             style="width: {{ s.uptime_pct }}%"></div>
+      </div>
+
+      <!-- Last check -->
+      <p class="text-[10px] text-slate-600 mt-2">
+        {% if s.last_check %}Last check {{ s.last_check.strftime("%H:%M:%S") }}{% else %}No data yet{% endif %}
+      </p>
+    </a>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-16 text-center">
+    <div class="w-12 h-12 rounded-full bg-[#252836] flex items-center justify-center mx-auto mb-4">
+      <svg class="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
+      </svg>
+    </div>
+    <p class="text-slate-400 font-medium">No hosts configured</p>
+    <p class="text-slate-600 text-sm mt-1">Add hosts to start monitoring</p>
+    <a href="/ping" class="inline-block mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors">
+      Add your first host
+    </a>
+  </div>
+  {% endif %}
+
+  <!-- ── PROXMOX SECTION ─────────────────────────────────────────────────── -->
+  {% if proxmox_clusters %}
+  <div class="mt-10">
+    <div class="flex items-center gap-2 mb-4">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Proxmox</h2>
+      <span class="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse"></span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="proxmox-grid">
+      {% for cluster in proxmox_clusters %}
+      <a href="/proxmox/{{ cluster.id }}"
+         class="block bg-[#13151f] border border-[#252836] rounded-xl p-5 transition-all
+                hover:border-[#3a3d4e] hover:translate-y-[-1px] hover:shadow-lg hover:shadow-black/30"
+         id="px-card-{{ cluster.id }}">
+        <div class="flex items-start justify-between mb-3">
+          <div class="min-w-0">
+            <p class="text-white font-semibold text-sm truncate">{{ cluster.name }}</p>
+            <p class="text-slate-500 text-xs truncate mt-0.5">{{ cluster.host }}</p>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0 ml-2">
+            <svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </div>
+        </div>
+        <div class="border-t border-[#252836] pt-3">
+          <div class="px-status text-slate-500 text-xs">Loading...</div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Auto-refresh host status every 30s
+  async function refreshStatus() {
+    try {
+      const res = await fetch('/ping/api/status');
+      const hosts = await res.json();
+      hosts.forEach(h => {
+        const card = document.querySelector(`[data-host-id="${h.id}"]`);
+        if (!card) return;
+        const dot = card.querySelector('.status-dot');
+        const latEl = card.querySelector('.latency-val');
+
+        // Update dot
+        dot.className = dot.className.replace(/bg-(slate|emerald|red)-\d+/g, '').replace(/shadow-\[.*?\]/g, '').trim();
+        if (h.online === null) {
+          dot.classList.add('bg-slate-600');
+        } else if (h.online) {
+          dot.classList.add('bg-emerald-400', 'shadow-[0_0_6px_1px_rgba(52,211,153,0.6)]');
+        } else {
+          dot.classList.add('bg-red-400');
+        }
+
+        // Update latency
+        if (latEl) {
+          latEl.textContent = h.latency_ms !== null ? `${h.latency_ms} ms` : '—';
+        }
+      });
+      document.getElementById('last-updated').textContent =
+        'Updated ' + new Date().toLocaleTimeString();
+    } catch (e) {}
+  }
+
+  setInterval(refreshStatus, 30000);
+
+  // Load Proxmox cluster summaries
+  const proxmoxIds = [{% for c in proxmox_clusters %}{{ c.id }}{% if not loop.last %},{% endif %}{% endfor %}];
+
+  async function loadProxmoxCard(id) {
+    const card = document.getElementById(`px-card-${id}`);
+    if (!card) return;
+    const statusEl = card.querySelector('.px-status');
+    try {
+      const res = await fetch(`/proxmox/api/${id}/status`);
+      const d = await res.json();
+      if (!d.ok) {
+        statusEl.innerHTML = `<span class="text-red-400">⚠ ${d.error || 'Connection failed'}</span>`;
+        return;
+      }
+      const t = d.totals;
+      const quorum = d.quorum_ok
+        ? `<span class="text-emerald-400">● Quorum OK</span>`
+        : `<span class="text-red-400">● No Quorum</span>`;
+      statusEl.innerHTML = `
+        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          <span>${quorum}</span>
+          <span class="text-slate-400">${t.nodes_online}/${t.nodes_total} nodes</span>
+          <span class="text-slate-400">${t.vms_running} VMs · ${t.lxc_running} LXC</span>
+        </div>
+        <div class="mt-2 grid grid-cols-2 gap-2">
+          <div>
+            <div class="flex justify-between text-[10px] text-slate-500 mb-0.5">
+              <span>CPU avg</span><span>${t.cpu_avg_pct}%</span>
+            </div>
+            <div class="w-full h-1 bg-[#252836] rounded-full overflow-hidden">
+              <div class="h-full rounded-full ${t.cpu_avg_pct > 80 ? 'bg-red-400' : t.cpu_avg_pct > 60 ? 'bg-yellow-400' : 'bg-blue-400'}"
+                   style="width:${Math.min(t.cpu_avg_pct, 100)}%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between text-[10px] text-slate-500 mb-0.5">
+              <span>RAM</span><span>${t.mem_pct}%</span>
+            </div>
+            <div class="w-full h-1 bg-[#252836] rounded-full overflow-hidden">
+              <div class="h-full rounded-full ${t.mem_pct > 85 ? 'bg-red-400' : t.mem_pct > 65 ? 'bg-yellow-400' : 'bg-purple-400'}"
+                   style="width:${Math.min(t.mem_pct, 100)}%"></div>
+            </div>
+          </div>
+        </div>`;
+    } catch (e) {
+      statusEl.innerHTML = `<span class="text-red-400 text-xs">Connection error</span>`;
+    }
+  }
+
+  proxmoxIds.forEach(id => loadProxmoxCard(id));
+  setInterval(() => proxmoxIds.forEach(id => loadProxmoxCard(id)), 60000);
+</script>
+{% endblock %}

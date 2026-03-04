@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Setup – Homelab Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>body { background-color: #0f1117; color: #e2e8f0; }</style>
+</head>
+<body class="min-h-screen flex items-center justify-center">
+  <div class="w-full max-w-md">
+    <div class="bg-[#1a1d27] border border-[#2a2d3a] rounded-xl p-8">
+      <h1 class="text-2xl font-semibold text-white mb-2">Welcome</h1>
+      <p class="text-slate-400 text-sm mb-8">Let's set up your Homelab Monitor.</p>
+
+      <form method="post" action="/setup/complete" class="space-y-5">
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1.5">Site name</label>
+          <input
+            type="text"
+            name="site_name"
+            value="Homelab Monitor"
+            class="w-full px-3 py-2 bg-[#0f1117] border border-[#2a2d3a] rounded-lg text-white text-sm
+                   focus:outline-none focus:border-blue-500 transition-colors"
+          >
+        </div>
+        <button type="submit"
+                class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+          Get started
+        </button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

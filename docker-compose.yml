@@ -1,0 +1,11 @@
+services:
+  monitor:
+    build: ./backend
+    container_name: homelab-monitor
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    cap_add:
+      - NET_RAW   # Required for ICMP ping

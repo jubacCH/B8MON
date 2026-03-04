@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}{{ host.name }} – {{ request.state.site_name }}{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+  <!-- Header -->
+  <div class="flex items-center gap-3 mb-6">
+    <a href="/ping" title="Back to hosts" class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-[#252836] transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+    </a>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2.5">
+        <h1 class="text-2xl font-bold text-white">{{ host.name }}</h1>
+        {% if latest and latest.success %}
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Online
+          </span>
+        {% elif latest %}
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20">
+            <span class="w-1.5 h-1.5 rounded-full bg-red-400"></span> Offline
+          </span>
+        {% else %}
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#252836] text-slate-400 text-xs font-medium">
+            No data
+          </span>
+        {% endif %}
+        {% if not host.enabled %}
+          <span class="px-2 py-0.5 rounded-full bg-[#252836] text-slate-500 text-xs font-medium">disabled</span>
+        {% endif %}
+      </div>
+      <p class="text-slate-500 text-sm mt-0.5">{{ host.hostname }}</p>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex gap-1 mb-6 border-b border-[#252836]">
+    <button type="button" id="tab-info"
+            onclick="switchTab('info')"
+            class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px">
+      Info
+    </button>
+    <button type="button" id="tab-monitoring"
+            onclick="switchTab('monitoring')"
+            class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px">
+      Monitoring
+    </button>
+  </div>
+
+  <!-- ── INFO TAB ──────────────────────────────────────────────────────────── -->
+  <div id="panel-info">
+
+    {% if saved %}
+    <div class="mb-5 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm">
+      Changes saved.
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-2 gap-6">
+
+      <!-- Edit form -->
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
+        <h2 class="text-sm font-semibold text-slate-300 mb-5">Host details</h2>
+        <form method="post" action="/ping/{{ host.id }}/edit" class="space-y-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Display name</label>
+            <input type="text" name="name" value="{{ host.name }}" aria-label="Display name"
+                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                          focus:outline-none focus:border-blue-500 transition-colors" required>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Hostname / IP address</label>
+            <input type="text" name="hostname" value="{{ host.hostname }}" aria-label="Hostname or IP address"
+                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                          focus:outline-none focus:border-blue-500 transition-colors" required>
+          </div>
+          <div class="flex gap-2 pt-1">
+            <button type="submit"
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+              Save changes
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Actions -->
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
+        <h2 class="text-sm font-semibold text-slate-300 mb-5">Actions</h2>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between py-3 border-b border-[#252836]">
+            <div>
+              <p class="text-sm text-white">Monitoring enabled</p>
+              <p class="text-xs text-slate-500 mt-0.5">Include this host in ping checks</p>
+            </div>
+            <form method="post" action="/ping/{{ host.id }}/toggle">
+              <button type="submit"
+                      title="{% if host.enabled %}Disable monitoring{% else %}Enable monitoring{% endif %}"
+                      class="relative w-10 h-5 rounded-full transition-colors focus:outline-none
+                             {% if host.enabled %}bg-blue-600{% else %}bg-[#252836]{% endif %}">
+                <span class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all
+                             {% if host.enabled %}left-5{% else %}left-0.5{% endif %}"></span>
+              </button>
+            </form>
+          </div>
+          <div class="flex items-center justify-between py-3">
+            <div>
+              <p class="text-sm text-white">Delete host</p>
+              <p class="text-xs text-slate-500 mt-0.5">Removes all monitoring data</p>
+            </div>
+            <form method="post" action="/ping/{{ host.id }}/delete"
+                  onsubmit="return confirm('Delete {{ host.name }} and all its data?')">
+              <button type="submit"
+                      class="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-medium rounded-lg transition-colors">
+                Delete
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Meta info -->
+        <div class="mt-4 pt-4 border-t border-[#252836] space-y-2">
+          <div class="flex justify-between text-xs">
+            <span class="text-slate-500">Added</span>
+            <span class="text-slate-300">{{ host.created_at.strftime("%d.%m.%Y %H:%M") if host.created_at else "—" }}</span>
+          </div>
+          <div class="flex justify-between text-xs">
+            <span class="text-slate-500">Last check</span>
+            <span class="text-slate-300">{% if latest %}{{ latest.timestamp.strftime("%H:%M:%S") }}{% else %}—{% endif %}</span>
+          </div>
+          <div class="flex justify-between text-xs">
+            <span class="text-slate-500">Last latency</span>
+            <span class="text-slate-300">{% if latest and latest.latency_ms %}{{ latest.latency_ms }} ms{% else %}—{% endif %}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MONITORING TAB ────────────────────────────────────────────────────── -->
+  <div id="panel-monitoring" class="hidden">
+
+    <!-- Stats -->
+    <div class="grid grid-cols-4 gap-4 mb-6">
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Uptime 24h</p>
+        <p class="text-2xl font-bold {% if uptime_pct >= 99 %}text-emerald-400{% elif uptime_pct >= 90 %}text-yellow-400{% else %}text-red-400{% endif %}">
+          {{ uptime_pct }}%
+        </p>
+      </div>
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Avg latency</p>
+        <p class="text-2xl font-bold text-white">{% if avg_latency is not none %}{{ avg_latency }} ms{% else %}<span class="text-slate-600">—</span>{% endif %}</p>
+      </div>
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Min latency</p>
+        <p class="text-2xl font-bold text-white">{% if min_latency is not none %}{{ min_latency }} ms{% else %}<span class="text-slate-600">—</span>{% endif %}</p>
+      </div>
+      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Max latency</p>
+        <p class="text-2xl font-bold text-white">{% if max_latency is not none %}{{ max_latency }} ms{% else %}<span class="text-slate-600">—</span>{% endif %}</p>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-sm font-semibold text-slate-300">Latency – last 24h</h2>
+        <span class="text-xs text-slate-600">{{ chart_labels | length }} data points</span>
+      </div>
+      {% if chart_labels %}
+      <canvas id="latencyChart" height="70"></canvas>
+      {% else %}
+      <div class="h-32 flex items-center justify-center text-slate-600 text-sm">
+        No data yet — checks will appear after the first ping cycle.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Tab switching
+  const activeTab = "{{ active_tab }}";
+
+  function switchTab(name) {
+    ['info', 'monitoring'].forEach(t => {
+      const btn = document.getElementById('tab-' + t);
+      const panel = document.getElementById('panel-' + t);
+      if (t === name) {
+        btn.classList.add('border-blue-500', 'text-white');
+        btn.classList.remove('border-transparent', 'text-slate-400');
+        panel.classList.remove('hidden');
+      } else {
+        btn.classList.remove('border-blue-500', 'text-white');
+        btn.classList.add('border-transparent', 'text-slate-400');
+        panel.classList.add('hidden');
+      }
+    });
+    // Update URL without reload
+    const url = new URL(window.location);
+    url.searchParams.set('tab', name);
+    url.searchParams.delete('saved');
+    history.replaceState(null, '', url);
+  }
+
+  // Init on load
+  switchTab(activeTab);
+
+  {% if chart_labels %}
+  // Chart
+  const ctx = document.getElementById('latencyChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: {{ chart_labels | tojson }},
+      datasets: [{
+        label: 'Latency (ms)',
+        data: {{ chart_latency | tojson }},
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59,130,246,0.06)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        fill: true,
+        tension: 0.3,
+        spanGaps: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1d2e',
+          borderColor: '#252836',
+          borderWidth: 1,
+          titleColor: '#94a3b8',
+          bodyColor: '#e2e8f0',
+          callbacks: {
+            label: ctx => ctx.parsed.y !== null ? `${ctx.parsed.y} ms` : 'Offline'
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#475569', maxTicksLimit: 12, font: { size: 11 } },
+          grid: { color: '#252836' }
+        },
+        y: {
+          ticks: { color: '#475569', callback: v => v + ' ms', font: { size: 11 } },
+          grid: { color: '#252836' },
+          beginAtZero: true,
+        }
+      }
+    }
+  });
+  {% endif %}
+</script>
+{% endblock %}
