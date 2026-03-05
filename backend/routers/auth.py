@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from passlib.context import CryptContext
+import bcrypt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +12,6 @@ from database import Session, User, get_db
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 SESSION_DAYS = 30
 
@@ -31,7 +30,7 @@ async def login(
 ):
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
-    if not user or not pwd_context.verify(password, user.password_hash):
+    if not user or not bcrypt.checkpw(password.encode(), user.password_hash.encode()):
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": "Ungültiger Benutzername oder Passwort"},

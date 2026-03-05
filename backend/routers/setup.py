@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from passlib.context import CryptContext
+import bcrypt
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +9,6 @@ from database import User, get_db, is_setup_complete, set_setting
 
 router = APIRouter(prefix="/setup")
 templates = Jinja2Templates(directory="templates")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @router.get("", response_class=HTMLResponse)
@@ -33,7 +32,8 @@ async def complete_setup(
     # Only create user if none exist
     count = (await db.execute(select(func.count()).select_from(User))).scalar()
     if count == 0 and password.strip():
-        db.add(User(username=username.strip() or "admin", password_hash=pwd_context.hash(password)))
+        pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        db.add(User(username=username.strip() or "admin", password_hash=pw_hash))
         await db.commit()
 
     return RedirectResponse(url="/", status_code=303)
