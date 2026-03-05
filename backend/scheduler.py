@@ -48,12 +48,28 @@ scheduler = AsyncIOScheduler()
 
 async def run_ping_checks():
     """Ping all enabled hosts and store results."""
+    import asyncio as _asyncio
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(PingHost).where(PingHost.enabled == True))
         hosts = result.scalars().all()
 
     if not hosts:
         return
+
+    # Load previous results for state-change detection
+    async with AsyncSessionLocal() as db:
+        from sqlalchemy import func as sa_func
+        # Subquery: latest timestamp per host_id
+        sub = (
+            select(PingResult.host_id, sa_func.max(PingResult.timestamp).label("max_ts"))
+            .group_by(PingResult.host_id)
+            .subquery()
+        )
+        prev_rows = await db.execute(
+            select(PingResult.host_id, PingResult.success)
+            .join(sub, (PingResult.host_id == sub.c.host_id) & (PingResult.timestamp == sub.c.max_ts))
+        )
+        prev_success: dict[int, bool] = {row.host_id: row.success for row in prev_rows}
 
     async with AsyncSessionLocal() as db:
         for host in hosts:
@@ -66,6 +82,24 @@ async def run_ping_checks():
                 success=success,
                 latency_ms=latency,
             ))
+
+            # Notify on state change
+            prev = prev_success.get(host.id)
+            if prev is True and not success:
+                from notifications import notify
+                _asyncio.create_task(notify(
+                    f"Host offline: {host.name}",
+                    f"Host {host.hostname} ist nicht mehr erreichbar.",
+                    "critical"
+                ))
+            elif prev is False and success:
+                from notifications import notify
+                _asyncio.create_task(notify(
+                    f"Host wieder online: {host.name}",
+                    f"Host {host.hostname} ist wieder erreichbar.",
+                    "info"
+                ))
+
         await db.commit()
 
     logger.debug("Ping check done for %d hosts", len(hosts))

@@ -13,7 +13,7 @@ from database import (
     PhpipamServer, SpeedtestConfig, NutInstance, RedfishServer,
 )
 from scheduler import start_scheduler, stop_scheduler
-from routers import dashboard, ping, proxmox, setup, settings, unifi, unas, pihole, adguard, portainer, truenas, synology, firewall, hass, gitea, phpipam, speedtest, nut, redfish, alerts
+from routers import auth, dashboard, ping, proxmox, setup, settings, unifi, unas, pihole, adguard, portainer, truenas, synology, firewall, hass, gitea, phpipam, speedtest, nut, redfish, alerts
 
 
 @asynccontextmanager
@@ -35,6 +35,20 @@ def _count(q):
 
 @app.middleware("http")
 async def inject_globals(request: Request, call_next):
+    # Auth check – skip for public paths
+    PUBLIC_PATHS = {"/login", "/logout"}
+    is_public = request.url.path in PUBLIC_PATHS or request.url.path.startswith("/setup")
+    if not is_public:
+        from database import get_current_user, AsyncSessionLocal as _ASL
+        async with _ASL() as auth_db:
+            user = await get_current_user(request, auth_db)
+        if user is None:
+            from fastapi.responses import RedirectResponse as _RR
+            return _RR(url="/login", status_code=302)
+        request.state.current_user = user
+    else:
+        request.state.current_user = None
+
     async with AsyncSessionLocal() as db:
         request.state.site_name = await get_setting(db, "site_name", "Vigil")
         # Count configured integrations so nav links are only shown when set up
@@ -61,6 +75,7 @@ async def inject_globals(request: Request, call_next):
     return await call_next(request)
 
 
+app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(setup.router)
 app.include_router(ping.router)

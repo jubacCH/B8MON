@@ -8,7 +8,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select
+from sqlalchemy import cast, func, select, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from collectors.ping import check_host
@@ -134,6 +134,27 @@ async def ping_list(request: Request, db: AsyncSession = Depends(get_db)):
     window_24h = now - timedelta(hours=24)
     window_30d = now - timedelta(days=30)
 
+    # Batch uptime queries – 3 queries total regardless of host count
+    uptime_map: dict[int, dict] = {}
+    for window, key in [
+        (timedelta(hours=24), "h24"),
+        (timedelta(days=7),   "d7"),
+        (timedelta(days=30),  "d30"),
+    ]:
+        rows = await db.execute(
+            select(
+                PingResult.host_id,
+                func.count().label("total"),
+                func.sum(cast(PingResult.success, Integer)).label("ok"),
+            )
+            .where(PingResult.timestamp >= now - window)
+            .group_by(PingResult.host_id)
+        )
+        for host_id, total, ok in rows:
+            if host_id not in uptime_map:
+                uptime_map[host_id] = {}
+            uptime_map[host_id][key] = round((ok or 0) / total * 100, 1) if total else None
+
     for host in hosts:
         latest_q = await db.execute(
             select(PingResult)
@@ -179,6 +200,7 @@ async def ping_list(request: Request, db: AsyncSession = Depends(get_db)):
     return templates.TemplateResponse("ping.html", {
         "request": request,
         "host_data": host_data,
+        "uptime_map": uptime_map,
         "active_page": "ping",
     })
 

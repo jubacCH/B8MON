@@ -247,11 +247,139 @@
     <div id="phpipam-result" class="hidden mt-3 px-4 py-3 rounded-lg text-sm border"></div>
   </div>
 
+  <!-- Notifications -->
+  <div class="mt-10">
+    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
+      <h2 class="text-white font-semibold mb-1">Benachrichtigungen</h2>
+      <p class="text-slate-500 text-sm mb-5">Alerts per Telegram, Discord oder Email erhalten</p>
+
+      <form method="post" action="/settings/notifications/save" class="space-y-6">
+        <!-- Enable toggle -->
+        <label class="flex items-center gap-3 cursor-pointer">
+          <input type="checkbox" name="notify_enabled" value="on" {% if notify_enabled == '1' %}checked{% endif %}
+                 class="w-4 h-4 rounded border-[#252836] bg-[#0b0d14] text-blue-600">
+          <span class="text-sm text-slate-300">Benachrichtigungen aktivieren</span>
+        </label>
+
+        <!-- Telegram -->
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Telegram</p>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Bot Token</label>
+              <input type="text" name="telegram_bot_token" value="{{ telegram_bot_token }}"
+                     placeholder="1234567890:ABCdef..."
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm focus:outline-none focus:border-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Chat ID</label>
+              <input type="text" name="telegram_chat_id" value="{{ telegram_chat_id }}"
+                     placeholder="-100123456789"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm focus:outline-none focus:border-blue-500">
+            </div>
+          </div>
+        </div>
+
+        <!-- Discord -->
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Discord</p>
+          <label class="block text-xs text-slate-400 mb-1">Webhook URL</label>
+          <input type="text" name="discord_webhook_url" value="{{ discord_webhook_url }}"
+                 placeholder="https://discord.com/api/webhooks/..."
+                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm focus:outline-none focus:border-blue-500">
+        </div>
+
+        <!-- Email -->
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Email (SMTP)</p>
+          <div class="grid grid-cols-3 gap-3 mb-3">
+            <div class="col-span-2">
+              <label class="block text-xs text-slate-400 mb-1">SMTP Host</label>
+              <input type="text" name="smtp_host" value="{{ smtp_host }}" placeholder="smtp.gmail.com"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm focus:outline-none focus:border-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Port</label>
+              <input type="number" name="smtp_port" value="{{ smtp_port }}" placeholder="587"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm focus:outline-none focus:border-blue-500">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Benutzername</label>
+              <input type="text" name="smtp_user" value="{{ smtp_user }}"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm focus:outline-none focus:border-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Passwort{% if smtp_has_pw %} (gespeichert){% endif %}</label>
+              <input type="password" name="smtp_password" placeholder="{% if smtp_has_pw %}••••••••{% endif %}"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm focus:outline-none focus:border-blue-500">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Absender</label>
+              <input type="email" name="smtp_from" value="{{ smtp_from }}" placeholder="vigil@example.com"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm focus:outline-none focus:border-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Empfänger</label>
+              <input type="email" name="smtp_to" value="{{ smtp_to }}" placeholder="admin@example.com"
+                     class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm focus:outline-none focus:border-blue-500">
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <button type="submit"
+                  class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+            Speichern
+          </button>
+          <!-- Test buttons -->
+          <button type="button" onclick="testNotification('telegram')"
+                  class="px-3 py-2 bg-[#252836] hover:bg-[#2f3243] text-slate-300 text-sm rounded-lg transition-colors">
+            Telegram testen
+          </button>
+          <button type="button" onclick="testNotification('discord')"
+                  class="px-3 py-2 bg-[#252836] hover:bg-[#2f3243] text-slate-300 text-sm rounded-lg transition-colors">
+            Discord testen
+          </button>
+          <button type="button" onclick="testNotification('email')"
+                  class="px-3 py-2 bg-[#252836] hover:bg-[#2f3243] text-slate-300 text-sm rounded-lg transition-colors">
+            Email testen
+          </button>
+          <span id="test-result" class="text-sm"></span>
+        </div>
+      </form>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+async function testNotification(channel) {
+  const btn = document.querySelector(`button[onclick="testNotification('${channel}')"]`);
+  const result = document.getElementById('test-result');
+  btn.disabled = true;
+  result.textContent = 'Sende...';
+  result.className = 'text-sm text-slate-400';
+  try {
+    const fd = new FormData();
+    fd.append('channel', channel);
+    const resp = await fetch('/settings/notifications/test', { method: 'POST', body: fd });
+    const data = await resp.json();
+    result.textContent = data.message;
+    result.className = data.ok ? 'text-sm text-emerald-400' : 'text-sm text-red-400';
+  } catch(e) {
+    result.textContent = 'Fehler: ' + e.message;
+    result.className = 'text-sm text-red-400';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function runPhpIpamSync() {
   const btn = document.getElementById('phpipam-sync-btn');
   const spin = document.getElementById('phpipam-spin');

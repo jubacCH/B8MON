@@ -92,7 +92,9 @@
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Host</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Status</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Latency</th>
-          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Uptime 24h</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">24h</th>
+          <th class="text-left px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">7d</th>
+          <th class="text-left px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">30d</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">30-day history</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Enabled</th>
         </tr>
@@ -161,16 +163,20 @@
           <td class="px-5 py-3.5 text-slate-300 text-sm">
             {% if d.latency is not none %}{{ d.latency }} ms{% else %}<span class="text-slate-600">—</span>{% endif %}
           </td>
-          <td class="px-5 py-3.5">
-            <div class="flex items-center gap-2">
-              <div class="w-16 h-1 bg-[#252836] rounded-full overflow-hidden">
-                <div class="h-full rounded-full
-                            {% if d.uptime_pct >= 99 %}bg-emerald-400{% elif d.uptime_pct >= 90 %}bg-yellow-400{% else %}bg-red-400{% endif %}"
-                     style="width: {{ d.uptime_pct }}%"></div>
-              </div>
-              <span class="text-slate-300 text-sm">{{ d.uptime_pct }}%</span>
-            </div>
+          {% for key in ['h24', 'd7', 'd30'] %}
+          {% set pct = uptime_map.get(d.host.id, {}).get(key) %}
+          <td class="px-4 py-3.5 whitespace-nowrap">
+            {% if pct is none %}
+              <span class="text-slate-600 text-xs">–</span>
+            {% elif pct >= 99 %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400">{{ pct }}%</span>
+            {% elif pct >= 95 %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-500/10 text-yellow-400">{{ pct }}%</span>
+            {% else %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/10 text-red-400">{{ pct }}%</span>
+            {% endif %}
           </td>
+          {% endfor %}
           <td class="px-5 py-3.5">
             <div class="flex gap-0.5">
               {% for sq in d.heatmap %}
@@ -197,7 +203,7 @@
         </tr>
         {% endfor %}
         <tr id="search-empty" style="display:none">
-          <td colspan="6" class="px-5 py-8 text-center text-slate-600 text-sm">No hosts match your search.</td>
+          <td colspan="8" class="px-5 py-8 text-center text-slate-600 text-sm">No hosts match your search.</td>
         </tr>
       </tbody>
     </table>

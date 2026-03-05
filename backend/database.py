@@ -2,7 +2,10 @@ import base64
 import hashlib
 import json
 from datetime import datetime
-from typing import AsyncGenerator
+from typing import TYPE_CHECKING, AsyncGenerator
+
+if TYPE_CHECKING:
+    from fastapi import Request
 
 from cryptography.fernet import Fernet
 from sqlalchemy import (
@@ -414,6 +417,36 @@ class GiteaSnapshot(Base):
     data_json   = Column(Text, nullable=True)
     error       = Column(Text, nullable=True)
     instance    = relationship("GiteaInstance", back_populates="snapshots")
+
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    username = Column(String(64), unique=True, nullable=False)
+    password_hash = Column(String(128), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Session(Base):
+    __tablename__ = "sessions"
+    token = Column(String(64), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+
+async def get_current_user(request: "Request", db: AsyncSession) -> "User | None":
+    token = request.cookies.get("vigil_session")
+    if not token:
+        return None
+    now = datetime.utcnow()
+    result = await db.execute(
+        select(Session).where(Session.token == token, Session.expires_at > now)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        return None
+    result = await db.execute(select(User).where(User.id == session.user_id))
+    return result.scalar_one_or_none()
 
 
 async def init_db():
