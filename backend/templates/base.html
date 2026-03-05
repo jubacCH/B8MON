@@ -207,7 +207,7 @@
             {% endif %}
             {% if nc.speedtest > 0 or active_page == 'speedtest' %}
             <a href="/speedtest" class="{% if active_page == 'speedtest' %}text-indigo-300 bg-indigo-500/[0.08]{% else %}text-slate-600 hover:text-white hover:bg-white/[0.05]{% endif %} flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all">
-              <img src="https://cdn.simpleicons.org/speedtest/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">Speedtest
+              <svg class="brand-icon w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 2a8 8 0 110 16A8 8 0 0112 4zm0 2a6 6 0 00-5.1 9.15l1.42-1.42A4 4 0 1116.92 12h2a6 6 0 00-6.92-5.99V6zm4.24 2.34l-5.66 5.66a1 1 0 101.42 1.42l5.66-5.66-1.42-1.42z"/></svg>Speedtest
             </a>
             {% endif %}
             {% if nc.ups > 0 or active_page == 'ups' %}
@@ -334,7 +334,7 @@
           ('/hass',      'Home Assistant', 'Smart Home',       'homeassistant'),
           ('/gitea',     'Gitea',          'Git Hosting',      'gitea'),
           ('/phpipam',   'phpIPAM',        'IP Management',    ''),
-          ('/speedtest', 'Speedtest',      'Internet Speed',   'speedtest'),
+          ('/speedtest', 'Speedtest',      'Internet Speed',   ''),
           ('/ups',       'UPS / NUT',      'Battery Backup',   ''),
           ('/redfish',   'Redfish',        'Server Hardware',  'dell'),
         ] %}
@@ -346,6 +346,8 @@
             <img src="https://cdn.simpleicons.org/{{ item[3] }}" class="w-6 h-6" alt="{{ item[1] }}">
             {% elif item[0] == '/phpipam' %}
             <svg class="w-5 h-5 text-slate-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM7 13.5v-3h2v3H7zm4 0v-3h2v3h-2zm4 0v-3h2v3h-2z"/></svg>
+            {% elif item[0] == '/speedtest' %}
+            <svg class="w-5 h-5 text-slate-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 2a8 8 0 110 16A8 8 0 0112 4zm0 2a6 6 0 00-5.1 9.15l1.42-1.42A4 4 0 1116.92 12h2a6 6 0 00-6.92-5.99V6zm4.24 2.34l-5.66 5.66a1 1 0 101.42 1.42l5.66-5.66-1.42-1.42z"/></svg>
             {% else %}
             <svg class="w-5 h-5 text-slate-400" fill="currentColor" viewBox="0 0 24 24"><path d="M17 5H7a5 5 0 000 10h10a5 5 0 000-10zm-8 8H7a3 3 0 010-6h2v6zm6 0h-4V7h4v6zm2 0V7a3 3 0 010 6z"/></svg>
             {% endif %}

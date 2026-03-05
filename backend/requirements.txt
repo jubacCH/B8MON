@@ -9,3 +9,4 @@ httpx==0.27.2
 aiosqlite==0.20.0
 bcrypt==4.2.1
 aiosmtplib==3.0.1
+speedtest-cli==2.1.3

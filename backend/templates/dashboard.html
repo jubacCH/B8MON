@@ -20,7 +20,7 @@
       {% else %}
       <div class="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/25 rounded-xl">
         <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-        <span class="text-emerald-300 font-semibold text-sm">Alle online</span>
+        <span class="text-emerald-300 font-semibold text-sm">All online</span>
       </div>
       {% endif %}
 
@@ -116,7 +116,7 @@
       <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Integrations</h2>
       {% set int_errors = integration_health | selectattr('ok', 'equalto', false) | list | length %}
       {% if int_errors > 0 %}
-      <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-red-500/20 text-red-400">{{ int_errors }} Fehler</span>
+      <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-red-500/20 text-red-400">{{ int_errors }} error{{ 's' if int_errors != 1 }}</span>
       {% endif %}
     </div>
     <div class="flex flex-wrap gap-2">
@@ -177,7 +177,7 @@
   <div class="mb-8">
     <div class="flex items-center gap-2 mb-3">
       <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest">
-        {% if offline_hosts %}Alle Hosts{% else %}Hosts{% endif %} ({{ host_stats|length }})
+        {% if offline_hosts %}All Hosts{% else %}Hosts{% endif %} ({{ host_stats|length }})
       </h2>
     </div>
     <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2" id="host-grid">
@@ -205,7 +205,7 @@
             {% elif s.online %}text-emerald-500
             {% elif s.online is false %}text-red-400
             {% else %}text-slate-600{% endif %}">
-            {% if s.host.maintenance %}Wart.{% elif s.online %}Online{% elif s.online is false %}Offline{% else %}—{% endif %}
+            {% if s.host.maintenance %}Maint.{% elif s.online %}Online{% elif s.online is false %}Offline{% else %}—{% endif %}
           </span>
           <span class="latency-val-{{ s.host.id }} text-[10px] tabular-nums
             {% if s.latency is not none %}text-slate-400{% else %}text-slate-700{% endif %}">
@@ -219,7 +219,7 @@
 
   {% else %}
   <div class="bg-[#13151f] border border-[#252836] rounded-xl p-12 text-center mb-8">
-    <p class="text-slate-400 font-medium">Keine Hosts konfiguriert</p>
+    <p class="text-slate-400 font-medium">No hosts configured</p>
     <a href="/ping" class="inline-block mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors">
       Ersten Host hinzufügen
     </a>
@@ -247,7 +247,7 @@
           </div>
         </div>
         <div class="border-t border-[#252836] pt-3">
-          <div class="px-status text-slate-500 text-xs">Laden…</div>
+          <div class="px-status text-slate-500 text-xs">Loading…</div>
         </div>
       </a>
       {% endfor %}
@@ -501,13 +501,13 @@
       const res = await fetch(`/proxmox/api/${id}/status`);
       const d = await res.json();
       if (!d.ok) {
-        statusEl.innerHTML = `<span class="text-red-400">⚠ ${d.error || 'Verbindungsfehler'}</span>`;
+        statusEl.innerHTML = `<span class="text-red-400">⚠ ${d.error || 'Connection error'}</span>`;
         return;
       }
       const t = d.totals;
       const quorum = d.quorum_ok
         ? `<span class="text-emerald-400">● Quorum OK</span>`
-        : `<span class="text-red-400">● Kein Quorum</span>`;
+        : `<span class="text-red-400">● No quorum</span>`;
       statusEl.innerHTML = `
         <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs mb-2">
           ${quorum}
@@ -531,7 +531,7 @@
           </div>
         </div>`;
     } catch(e) {
-      statusEl.innerHTML = `<span class="text-red-400 text-xs">Verbindungsfehler</span>`;
+      statusEl.innerHTML = `<span class="text-red-400 text-xs">Connection error</span>`;
     }
   }
 

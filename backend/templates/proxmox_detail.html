@@ -221,7 +221,7 @@
       <thead>
         <tr class="border-b border-[#252836]">
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Name</th>
-          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">MAC / Netzwerk</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">MAC / Network</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Node</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Status</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">CPU</th>
@@ -431,16 +431,16 @@
                                         'bg-red-500/10',     'border-red-500/20',     'text-red-400');
       if (d.error) {
         banner.classList.add('bg-red-500/10', 'border-red-500/20', 'text-red-400');
-        banner.textContent = 'Fehler: ' + d.error;
+        banner.textContent = 'Error: ' + d.error;
       } else {
         banner.classList.add('bg-emerald-500/10', 'border-emerald-500/20', 'text-emerald-400');
-        banner.textContent = `Import: ${d.added} hinzugefügt, ${d.merged} aktualisiert, ${d.skipped} übersprungen. ` +
-          `Jetzt unter Hosts → Ping sichtbar.`;
+        banner.textContent = `Import: ${d.added} added, ${d.merged} updated, ${d.skipped} skipped. ` +
+          `Now visible under Hosts → Ping.`;
       }
     } catch(e) {
       banner.classList.remove('hidden');
       banner.classList.add('bg-red-500/10', 'border-red-500/20', 'text-red-400');
-      banner.textContent = 'Verbindungsfehler';
+      banner.textContent = 'Connection error';
     } finally {
       btn.disabled = false;
       spin.classList.add('hidden');
