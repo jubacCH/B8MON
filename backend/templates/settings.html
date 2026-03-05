@@ -54,10 +54,33 @@
           </div>
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-1.5">Timezone</label>
-            <input type="text" name="timezone" value="{{ timezone }}" placeholder="Europe/Zurich"
-                   class="w-full px-3 py-2.5 bg-[#07090f] border border-[#1c2033] rounded-lg text-white text-sm
-                          focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 transition-all">
-            <p class="text-slate-700 text-xs mt-1">e.g. UTC, Europe/Zurich, America/New_York</p>
+            <select name="timezone"
+                    class="w-full px-3 py-2.5 bg-[#07090f] border border-[#1c2033] rounded-lg text-white text-sm
+                           focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 transition-all">
+              {% set tz_list = [
+                'UTC',
+                'Europe/London','Europe/Dublin','Europe/Lisbon',
+                'Europe/Paris','Europe/Brussels','Europe/Amsterdam','Europe/Luxembourg',
+                'Europe/Berlin','Europe/Vienna','Europe/Zurich','Europe/Rome','Europe/Madrid',
+                'Europe/Warsaw','Europe/Prague','Europe/Budapest','Europe/Zagreb',
+                'Europe/Stockholm','Europe/Oslo','Europe/Copenhagen','Europe/Helsinki',
+                'Europe/Athens','Europe/Bucharest','Europe/Sofia','Europe/Istanbul',
+                'Europe/Moscow','Europe/Kiev',
+                'America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
+                'America/Toronto','America/Vancouver','America/Phoenix','America/Anchorage',
+                'America/Honolulu','America/Sao_Paulo','America/Argentina/Buenos_Aires',
+                'America/Mexico_City','America/Bogota','America/Lima',
+                'Asia/Dubai','Asia/Karachi','Asia/Kolkata','Asia/Dhaka',
+                'Asia/Bangkok','Asia/Jakarta','Asia/Singapore','Asia/Shanghai',
+                'Asia/Tokyo','Asia/Seoul','Asia/Hong_Kong','Asia/Taipei',
+                'Australia/Sydney','Australia/Melbourne','Australia/Perth','Australia/Brisbane',
+                'Pacific/Auckland','Pacific/Fiji',
+                'Africa/Cairo','Africa/Johannesburg','Africa/Lagos','Africa/Nairobi',
+              ] %}
+              {% for tz in tz_list %}
+              <option value="{{ tz }}" {% if timezone == tz %}selected{% endif %}>{{ tz }}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
       </div>
@@ -448,26 +471,26 @@
 </div>
 
 <script>
-// Tab colours
-const ACTIVE   = 'bg-white/[0.06] text-white shadow-sm';
-const INACTIVE = 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.03]';
+(function() {
+  const ACTIVE   = 'bg-white/[0.06] text-white shadow-sm';
+  const INACTIVE = 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.03]';
 
-function switchTab(id) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
-  document.querySelectorAll('.tab-btn').forEach(b => {
-    b.className = b.className.replace(ACTIVE, '').replace(INACTIVE, '').trim();
-    b.classList.add(...INACTIVE.split(' '));
-  });
-  document.getElementById('tab-' + id).classList.remove('hidden');
-  const btn = document.getElementById('tab-btn-' + id);
-  btn.className = btn.className.replace(INACTIVE, '').trim();
-  btn.classList.add(...ACTIVE.split(' '));
-  location.hash = id;
-}
+  window.switchTab = function(id) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.className = b.className.replace(ACTIVE, '').replace(INACTIVE, '').trim();
+      b.classList.add(...INACTIVE.split(' '));
+    });
+    document.getElementById('tab-' + id).classList.remove('hidden');
+    const btn = document.getElementById('tab-btn-' + id);
+    btn.className = btn.className.replace(INACTIVE, '').trim();
+    btn.classList.add(...ACTIVE.split(' '));
+    history.replaceState(null, '', '#' + id);
+  };
 
-// Activate tab from hash or saved query param
-const tab = (location.hash.slice(1)) || '{{ request.query_params.get("tab", "system") }}';
-switchTab(['system','monitoring','import','notifications'].includes(tab) ? tab : 'system');
+  const tab = (location.hash.slice(1)) || '{{ request.query_params.get("tab", "system") }}';
+  window.switchTab(['system','monitoring','import','notifications'].includes(tab) ? tab : 'system');
+})();
 
 async function testNotification(channel) {
   const result = document.getElementById('test-result');
