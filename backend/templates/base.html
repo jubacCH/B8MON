@@ -386,8 +386,10 @@
           const newNav     = doc.querySelector('nav');
           const newMain    = doc.querySelector('main');
           const newScripts = doc.getElementById('page-scripts');
-          if (newNav)  document.querySelector('nav').replaceWith(newNav);
-          if (newMain) document.querySelector('main').replaceWith(newMain);
+          const newPicker  = doc.getElementById('integration-picker');
+          if (newNav)    document.querySelector('nav').replaceWith(newNav);
+          if (newMain)   document.querySelector('main').replaceWith(newMain);
+          if (newPicker) document.getElementById('integration-picker').replaceWith(newPicker);
 
           document.title = doc.title;
           history.pushState({url}, '', url);
