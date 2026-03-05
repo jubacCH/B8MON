@@ -424,6 +424,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(64), unique=True, nullable=False)
     password_hash = Column(String(128), nullable=False)
+    role = Column(String(16), default="admin")   # admin | editor | readonly
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -453,6 +454,11 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         # Safe migration: add new columns to existing ping_hosts table
+        # Add role column to existing users table
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'admin'"))
+        except Exception:
+            pass
         migrations = [
             ("check_type",           "TEXT DEFAULT 'icmp'"),
             ("port",                 "INTEGER"),

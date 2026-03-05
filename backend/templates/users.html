@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}Users – {{ request.state.site_name }}{% endblock %}
+
+{% block content %}
+<div class="p-6 max-w-4xl mx-auto space-y-6">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-xl font-semibold text-white">User Management</h1>
+      <p class="text-sm text-slate-500 mt-0.5">Manage accounts and roles</p>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  {% if saved %}
+  <div class="flex items-center gap-2 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm">
+    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+    </svg>
+    Changes saved.
+  </div>
+  {% endif %}
+  {% if error == 'exists' %}
+  <div class="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+    </svg>
+    Username already exists.
+  </div>
+  {% elif error == 'last_admin' %}
+  <div class="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+    </svg>
+    Cannot remove the last admin account.
+  </div>
+  {% elif error == 'self_delete' %}
+  <div class="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+    </svg>
+    You cannot delete your own account.
+  </div>
+  {% endif %}
+
+  <!-- Users table -->
+  <div class="bg-[#13151f] border border-[#252836] rounded-xl overflow-hidden">
+    <div class="px-5 py-3.5 border-b border-[#252836]">
+      <h2 class="text-sm font-medium text-white">Users</h2>
+    </div>
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-[#252836] text-slate-500 text-xs uppercase tracking-wide">
+          <th class="text-left px-5 py-3 font-medium">Username</th>
+          <th class="text-left px-5 py-3 font-medium">Role</th>
+          <th class="text-left px-5 py-3 font-medium">Created</th>
+          <th class="text-right px-5 py-3 font-medium">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-[#252836]">
+        {% for u in users %}
+        <tr class="hover:bg-[#1a1d2e]/50 transition-colors">
+          <td class="px-5 py-3.5 text-white font-medium">
+            {{ u.username }}
+            {% if request.state.current_user and request.state.current_user.id == u.id %}
+            <span class="ml-1.5 text-[10px] text-slate-500">(you)</span>
+            {% endif %}
+          </td>
+          <td class="px-5 py-3.5">
+            {% if u.role == 'admin' %}
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-500/15 text-blue-400 border border-blue-500/20">
+              <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
+              Admin
+            </span>
+            {% elif u.role == 'editor' %}
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+              <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>
+              Editor
+            </span>
+            {% else %}
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-slate-500/15 text-slate-400 border border-slate-500/20">
+              <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg>
+              Read only
+            </span>
+            {% endif %}
+          </td>
+          <td class="px-5 py-3.5 text-slate-500 text-xs">
+            {{ u.created_at.strftime('%Y-%m-%d') if u.created_at else '—' }}
+          </td>
+          <td class="px-5 py-3.5 text-right">
+            <div class="flex items-center justify-end gap-2">
+              <button onclick="openRoleModal({{ u.id }}, '{{ u.username }}', '{{ u.role }}')"
+                      class="px-2.5 py-1 text-xs text-slate-400 hover:text-white hover:bg-[#252836] rounded-lg transition-colors">
+                Edit role
+              </button>
+              <button onclick="openPasswordModal({{ u.id }}, '{{ u.username }}')"
+                      class="px-2.5 py-1 text-xs text-slate-400 hover:text-white hover:bg-[#252836] rounded-lg transition-colors">
+                Reset PW
+              </button>
+              {% if not (request.state.current_user and request.state.current_user.id == u.id) %}
+              <form method="post" action="/users/{{ u.id }}/delete"
+                    onsubmit="return confirm('Delete user {{ u.username }}?')">
+                <button type="submit"
+                        class="px-2.5 py-1 text-xs text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                  Delete
+                </button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Add User -->
+  <div class="bg-[#13151f] border border-[#252836] rounded-xl">
+    <div class="px-5 py-3.5 border-b border-[#252836]">
+      <h2 class="text-sm font-medium text-white">Add User</h2>
+    </div>
+    <form method="post" action="/users/add" class="px-5 py-4 flex flex-wrap gap-3 items-end">
+      <div class="flex-1 min-w-36">
+        <label class="block text-xs text-slate-500 mb-1.5">Username</label>
+        <input type="text" name="username" required autocomplete="off"
+               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                      focus:outline-none focus:border-blue-500 transition-colors">
+      </div>
+      <div class="flex-1 min-w-36">
+        <label class="block text-xs text-slate-500 mb-1.5">Password</label>
+        <input type="password" name="password" required minlength="6" autocomplete="new-password"
+               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                      focus:outline-none focus:border-blue-500 transition-colors">
+      </div>
+      <div class="w-40">
+        <label class="block text-xs text-slate-500 mb-1.5">Role</label>
+        <select name="role"
+                class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                       focus:outline-none focus:border-blue-500 transition-colors">
+          <option value="readonly">Read only</option>
+          <option value="editor">Editor</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <button type="submit"
+              class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+        Add User
+      </button>
+    </form>
+  </div>
+
+  <!-- Role info -->
+  <div class="bg-[#13151f] border border-[#252836] rounded-xl px-5 py-4 space-y-2">
+    <p class="text-xs font-medium text-slate-400 mb-3">Role permissions</p>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-500">
+      <div class="space-y-1">
+        <p class="text-blue-400 font-medium">Admin</p>
+        <p>Full access — settings, user management, all monitoring objects.</p>
+      </div>
+      <div class="space-y-1">
+        <p class="text-emerald-400 font-medium">Editor</p>
+        <p>Add, edit and delete monitoring objects (hosts &amp; integrations). No settings or user management.</p>
+      </div>
+      <div class="space-y-1">
+        <p class="text-slate-400 font-medium">Read only</p>
+        <p>View dashboards and status pages only. No changes allowed.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Edit Role Modal -->
+<div id="role-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+     onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 w-full max-w-sm shadow-2xl">
+    <h2 class="text-white font-semibold mb-4">Edit Role</h2>
+    <p class="text-sm text-slate-400 mb-4">User: <span id="role-modal-username" class="text-white font-medium"></span></p>
+    <form id="role-modal-form" method="post">
+      <div class="mb-4">
+        <label class="block text-xs text-slate-500 mb-1.5">Role</label>
+        <select name="role" id="role-modal-select"
+                class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                       focus:outline-none focus:border-blue-500 transition-colors">
+          <option value="readonly">Read only</option>
+          <option value="editor">Editor</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="flex gap-2 justify-end">
+        <button type="button" onclick="document.getElementById('role-modal').classList.add('hidden')"
+                class="px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-[#252836] rounded-lg transition-colors">
+          Cancel
+        </button>
+        <button type="submit"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+          Save
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div id="password-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+     onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 w-full max-w-sm shadow-2xl">
+    <h2 class="text-white font-semibold mb-4">Reset Password</h2>
+    <p class="text-sm text-slate-400 mb-4">User: <span id="pw-modal-username" class="text-white font-medium"></span></p>
+    <form id="pw-modal-form" method="post">
+      <div class="mb-4">
+        <label class="block text-xs text-slate-500 mb-1.5">New Password</label>
+        <input type="password" name="password" required minlength="6" autocomplete="new-password"
+               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
+                      focus:outline-none focus:border-blue-500 transition-colors">
+      </div>
+      <div class="flex gap-2 justify-end">
+        <button type="button" onclick="document.getElementById('password-modal').classList.add('hidden')"
+                class="px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-[#252836] rounded-lg transition-colors">
+          Cancel
+        </button>
+        <button type="submit"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+          Reset
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openRoleModal(id, username, currentRole) {
+  document.getElementById('role-modal-username').textContent = username;
+  document.getElementById('role-modal-form').action = `/users/${id}/role`;
+  document.getElementById('role-modal-select').value = currentRole;
+  document.getElementById('role-modal').classList.remove('hidden');
+}
+function openPasswordModal(id, username) {
+  document.getElementById('pw-modal-username').textContent = username;
+  document.getElementById('pw-modal-form').action = `/users/${id}/password`;
+  document.getElementById('password-modal').classList.remove('hidden');
+}
+</script>
+{% endblock %}

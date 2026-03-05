@@ -13,7 +13,7 @@ from database import (
     PhpipamServer, SpeedtestConfig, NutInstance, RedfishServer,
 )
 from scheduler import start_scheduler, stop_scheduler
-from routers import auth, dashboard, ping, proxmox, setup, settings, unifi, unas, pihole, adguard, portainer, truenas, synology, firewall, hass, gitea, phpipam, speedtest, nut, redfish, alerts
+from routers import auth, dashboard, ping, proxmox, setup, settings, unifi, unas, pihole, adguard, portainer, truenas, synology, firewall, hass, gitea, phpipam, speedtest, nut, redfish, alerts, users
 
 
 @asynccontextmanager
@@ -46,6 +46,30 @@ async def inject_globals(request: Request, call_next):
             from fastapi.responses import RedirectResponse as _RR
             return _RR(url="/login", status_code=302)
         request.state.current_user = user
+        role = getattr(user, "role", "admin") or "admin"
+        # Admin-only paths
+        if (request.url.path.startswith("/settings") or request.url.path.startswith("/users")) \
+                and role != "admin":
+            from fastapi.responses import HTMLResponse as _HTML
+            return _HTML(
+                "<html><body style='background:#0b0d14;color:#e2e8f0;font-family:sans-serif;"
+                "display:flex;align-items:center;justify-content:center;height:100vh;'>"
+                "<div style='text-align:center'><p style='font-size:3rem;margin:0'>403</p>"
+                "<p style='color:#94a3b8'>Admin access required.</p>"
+                "<a href='/' style='color:#3b82f6;font-size:.875rem'>← Back</a></div></body></html>",
+                status_code=403,
+            )
+        # Read-only users cannot mutate
+        if role == "readonly" and request.method in ("POST", "PUT", "DELETE", "PATCH"):
+            from fastapi.responses import HTMLResponse as _HTML
+            return _HTML(
+                "<html><body style='background:#0b0d14;color:#e2e8f0;font-family:sans-serif;"
+                "display:flex;align-items:center;justify-content:center;height:100vh;'>"
+                "<div style='text-align:center'><p style='font-size:3rem;margin:0'>403</p>"
+                "<p style='color:#94a3b8'>Read-only access — no changes allowed.</p>"
+                "<a href='/' style='color:#3b82f6;font-size:.875rem'>← Back</a></div></body></html>",
+                status_code=403,
+            )
     else:
         request.state.current_user = None
 
@@ -96,3 +120,4 @@ app.include_router(speedtest.router)
 app.include_router(nut.router)
 app.include_router(redfish.router)
 app.include_router(alerts.router)
+app.include_router(users.router)
