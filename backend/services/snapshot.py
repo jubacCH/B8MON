@@ -125,6 +125,27 @@ async def cleanup(
     return result.rowcount or 0
 
 
+async def get_latest_batch_all(db: AsyncSession) -> dict[str, dict[int, Snapshot]]:
+    """Get the latest snapshot for ALL entities across ALL types. Single query.
+    Returns {entity_type: {entity_id: Snapshot}}."""
+    sub = (
+        select(
+            Snapshot.entity_type,
+            Snapshot.entity_id,
+            func.max(Snapshot.id).label("max_id"),
+        )
+        .group_by(Snapshot.entity_type, Snapshot.entity_id)
+        .subquery()
+    )
+    result = await db.execute(
+        select(Snapshot).join(sub, Snapshot.id == sub.c.max_id)
+    )
+    out: dict[str, dict[int, Snapshot]] = {}
+    for snap in result.scalars().all():
+        out.setdefault(snap.entity_type, {})[snap.entity_id] = snap
+    return out
+
+
 async def cleanup_all(db: AsyncSession, retention_days: int) -> int:
     """Delete ALL snapshots older than retention_days."""
     cutoff = datetime.utcnow() - timedelta(days=retention_days)

@@ -1,9 +1,8 @@
 """PingHost and PingResult models – high-volume time-series, kept separate."""
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
-from sqlalchemy import ForeignKey
 
 from models.base import Base
 
@@ -34,3 +33,8 @@ class PingResult(Base):
     success = Column(Boolean, nullable=False)
     latency_ms = Column(Float, nullable=True)
     host = relationship("PingHost", back_populates="results")
+
+    __table_args__ = (
+        Index("ix_ping_results_host_ts", "host_id", timestamp.desc()),
+        Index("ix_ping_results_host_success_ts", "host_id", "success", "timestamp"),
+    )

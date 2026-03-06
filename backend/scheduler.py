@@ -95,15 +95,19 @@ async def run_integration_checks():
 
 
 async def run_ping_checks():
-    """Ping all enabled hosts and store results."""
+    """Ping all enabled hosts concurrently and store results."""
     import asyncio as _asyncio
-    from collectors.ping import check_host, get_ssl_expiry_days
+    from collectors.ping import check_host
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(PingHost).where(PingHost.enabled == True))
         hosts = result.scalars().all()
 
     if not hosts:
+        return
+
+    active_hosts = [h for h in hosts if not h.maintenance]
+    if not active_hosts:
         return
 
     # Load previous results for state-change detection
@@ -120,14 +124,23 @@ async def run_ping_checks():
         )
         prev_success: dict[int, bool] = {row.host_id: row.success for row in prev_rows}
 
-    async with AsyncSessionLocal() as db:
-        for host in hosts:
-            if host.maintenance:
-                continue
+    # Run all checks concurrently with semaphore to limit parallelism
+    sem = _asyncio.Semaphore(50)
+
+    async def _check_one(host):
+        async with sem:
             success, latency = await check_host(host)
+            return host, success, latency
+
+    results = await _asyncio.gather(*[_check_one(h) for h in active_hosts])
+
+    # Batch-write all results in one transaction
+    now = datetime.utcnow()
+    async with AsyncSessionLocal() as db:
+        for host, success, latency in results:
             db.add(PingResult(
                 host_id=host.id,
-                timestamp=datetime.utcnow(),
+                timestamp=now,
                 success=success,
                 latency_ms=latency,
             ))
@@ -151,7 +164,7 @@ async def run_ping_checks():
 
         await db.commit()
 
-    logger.debug("Ping check done for %d hosts", len(hosts))
+    logger.debug("Ping check done for %d hosts (concurrent)", len(active_hosts))
 
 
 # ── SSL expiry check ─────────────────────────────────────────────────────────
