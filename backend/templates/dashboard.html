@@ -135,14 +135,15 @@
   <!-- ── INTEGRATION HEALTH ──────────────────────────────────────────────── -->
   {% if integration_health %}
   <div class="mb-5">
-    <div class="flex items-center gap-2 mb-3">
+    <div class="flex items-center gap-2 mb-3 cursor-pointer section-header" data-section="integrations">
       <h2 class="metric-label !text-[10px]">Integrations</h2>
       {% set int_errors = integration_health | selectattr('ok', 'equalto', false) | list | length %}
       {% if int_errors > 0 %}
       <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-ng-critical/15 text-ng-critical">{{ int_errors }} error{{ 's' if int_errors != 1 }}</span>
       {% endif %}
+      <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
     </div>
-    <div class="flex flex-wrap gap-2">
+    <div class="flex flex-wrap gap-2 section-body">
       {% for i in integration_health %}
       <a href="{{ i.url }}"
          class="glass-card flex items-center gap-2 !px-3 !py-2 !rounded-lg
@@ -169,19 +170,51 @@
   <!-- ── NODE-BUBBLE MAP ─────────────────────────────────────────────────── -->
   {% if host_stats %}
   <div class="mb-5 glass-card-static !p-0 overflow-hidden">
-    <div class="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between">
+    <div class="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between cursor-pointer section-header" data-section="nodemap">
       <h2 class="metric-label !text-[10px]">Node Map</h2>
-      <span class="text-[--ng-text-muted] text-[10px] font-mono">{{ host_stats|length }} nodes</span>
+      <div class="flex items-center gap-3">
+        <span id="subnet-filter-badge" class="hidden items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-ng-primary/10 text-ng-primary border border-ng-primary/20">
+          <span id="subnet-filter-label"></span>
+          <button onclick="event.stopPropagation(); window.clearSubnetFilter()" class="hover:text-[--ng-text-primary] ml-1">&times;</button>
+        </span>
+        <span class="text-[--ng-text-muted] text-[10px] font-mono">{{ host_stats|length }} nodes</span>
+        <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      </div>
     </div>
-    <div class="p-4">
-      <svg id="node-map" viewBox="0 0 1000 600" class="w-full" style="max-height: 550px">
-        <defs>
-          <filter id="glow-sm"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          <filter id="glow-md"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          <filter id="glow-lg"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-        </defs>
-        <!-- Nodes rendered by JS below -->
-      </svg>
+    <div class="section-body" id="nodemap-body">
+      <!-- Desktop: SVG map -->
+      <div class="p-4 hidden md:block relative" id="node-map-wrap">
+        <svg id="node-map" viewBox="0 0 1000 600" class="w-full" style="max-height: 550px">
+          <defs>
+            <filter id="glow-sm"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="glow-md"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="glow-lg"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+        </svg>
+        <!-- Rich tooltip overlay -->
+        <div id="node-tooltip" class="hidden absolute pointer-events-none z-20 glass-elevated !rounded-lg !p-3 min-w-[180px] text-xs" style="backdrop-filter:blur(20px)">
+          <div class="flex items-center gap-2 mb-2">
+            <span id="tt-dot" class="w-2 h-2 rounded-full shrink-0"></span>
+            <span id="tt-name" class="text-[--ng-text-primary] font-semibold text-sm truncate"></span>
+          </div>
+          <div class="space-y-1 text-[--ng-text-secondary] font-mono text-[10px]">
+            <div class="flex justify-between gap-4"><span class="text-[--ng-text-muted]">Host</span><span id="tt-host"></span></div>
+            <div class="flex justify-between gap-4"><span class="text-[--ng-text-muted]">Type</span><span id="tt-type"></span></div>
+            <div class="flex justify-between gap-4"><span class="text-[--ng-text-muted]">Latency</span><span id="tt-latency"></span></div>
+            <div class="flex justify-between gap-4"><span class="text-[--ng-text-muted]">Uptime</span><span id="tt-uptime"></span></div>
+          </div>
+          <svg id="tt-sparkline" class="w-full h-6 mt-2" viewBox="0 0 60 20" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+      <!-- Mobile: compact list -->
+      <div class="md:hidden p-3 grid grid-cols-3 gap-1.5 max-h-64 overflow-y-auto">
+        {% for s in host_stats | sort(attribute='host.name') %}
+        <a href="/ping/{{ s.host.id }}" class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
+          <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if s.host.maintenance %}bg-ng-warning{% elif s.online %}bg-ng-success{% elif s.online is false %}bg-ng-critical{% else %}bg-[--ng-text-muted]{% endif %}"></span>
+          <span class="text-[--ng-text-primary] text-[10px] font-mono truncate">{{ s.host.name }}</span>
+        </a>
+        {% endfor %}
+      </div>
     </div>
   </div>
 
@@ -218,6 +251,10 @@
   <div class="mb-8">
     <div class="flex items-center gap-2 mb-3">
       <h2 class="metric-label !text-[10px]">{% if offline_hosts %}All Hosts{% else %}Hosts{% endif %} ({{ host_stats|length }})</h2>
+      <span id="grid-filter-badge" class="hidden items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-ng-primary/10 text-ng-primary border border-ng-primary/20">
+        <span id="grid-filter-label"></span>
+        <button onclick="window.clearSubnetFilter()" class="hover:text-[--ng-text-primary] ml-1">&times;</button>
+      </span>
     </div>
     <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2" id="host-grid">
       {% for s in host_stats | sort(attribute='uptime_pct') %}
@@ -251,6 +288,7 @@
             {% if s.latency is not none %}{{ s.latency }}ms{% else %}—{% endif %}
           </span>
         </div>
+        <div class="sparkline-box h-3 mt-1" data-host-spark="{{ s.host.id }}"></div>
       </a>
       {% endfor %}
     </div>
@@ -295,8 +333,12 @@
   <!-- ── TOP 10 ──────────────────────────────────────────────────────────── -->
   {% if top_latency or top_downtime or top_cpu or top_ram or top_disk %}
   <div>
-    <h2 class="metric-label !text-[10px] mb-3">Top 10</h2>
+    <div class="flex items-center gap-2 mb-3 cursor-pointer section-header" data-section="top10">
+      <h2 class="metric-label !text-[10px]">Top 10</h2>
+      <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </div>
 
+    <div class="section-body">
     {% if top_latency or top_downtime %}
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
 
@@ -463,6 +505,7 @@
     </div>
     {% endif %}
 
+    </div>{# section-body #}
   </div>
   {% endif %}
 
@@ -471,39 +514,45 @@
 
 {% block scripts %}
 <script>
-  // ── Node-Bubble Map (Network Hierarchy) ─────────────────────────────────
-  (function() {
-    const hosts = [
-      {% for s in host_stats %}
-      {
-        id: {{ s.host.id }},
-        name: "{{ s.host.name | replace('"', '\\"') }}",
-        hostname: "{{ s.host.hostname | replace('"', '\\"') }}",
-        checkType: "{{ s.host.check_type }}",
-        online: {{ 'true' if s.online else ('false' if s.online is false else 'null') }},
-        maintenance: {{ 'true' if s.host.maintenance else 'false' }},
-        latency: {{ s.latency if s.latency is not none else 'null' }},
-      },
-      {% endfor %}
-    ];
+  // ── Host Data ─────────────────────────────────────────────────────────────
+  const hosts = [
+    {% for s in host_stats %}
+    {
+      id: {{ s.host.id }},
+      name: "{{ s.host.name | replace('"', '\\"') }}",
+      hostname: "{{ s.host.hostname | replace('"', '\\"') }}",
+      checkType: "{{ s.host.check_type }}",
+      online: {{ 'true' if s.online else ('false' if s.online is false else 'null') }},
+      maintenance: {{ 'true' if s.host.maintenance else 'false' }},
+      latency: {{ s.latency if s.latency is not none else 'null' }},
+      uptimePct: {{ s.uptime_pct if s.uptime_pct is not none else 'null' }},
+      sparkline: [{% if s.sparkline %}{% for v in s.sparkline %}{{ 'null' if v is none else v }}{% if not loop.last %},{% endif %}{% endfor %}{% endif %}],
+    },
+    {% endfor %}
+  ];
 
+  // Host → subnet map (shared between map + filter)
+  const ipRe = /^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/;
+  function getSubnet(h) {
+    let addr = h.hostname.replace(/^https?:\/\//, '').replace(/[:/].*$/, '');
+    const m = addr.match(ipRe);
+    if (m) return m[1] + '.0/24';
+    if (h.checkType === 'http' || h.checkType === 'https') return 'External';
+    return 'Other';
+  }
+  const hostSubnetMap = new Map();
+  hosts.forEach(h => hostSubnetMap.set(h.id, getSubnet(h)));
+
+  // ── Node-Bubble Map (Network Hierarchy) ─────────────────────────────────
+  const nodePositions = new Map(); // id → {x, y, subnet}
+  (function() {
     const svg = document.getElementById('node-map');
     if (!svg || hosts.length === 0) return;
 
     const W = 1000, H = 600;
     const cx = W / 2, cy = H / 2;
 
-    // ── Extract subnet from hostname ────────────────────────────────────
-    const ipRe = /^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/;
-    function getSubnet(h) {
-      let addr = h.hostname.replace(/^https?:\/\//, '').replace(/[:/].*$/, '');
-      const m = addr.match(ipRe);
-      if (m) return m[1] + '.0/24';
-      if (h.checkType === 'http' || h.checkType === 'https') return 'External';
-      return 'Other';
-    }
-
-    // ── Group hosts by subnet ───────────────────────────────────────────
+    // Group hosts by subnet
     const subnets = new Map();
     hosts.forEach(h => {
       const sn = getSubnet(h);
@@ -518,7 +567,6 @@
       return subnets.get(b).length - subnets.get(a).length;
     });
 
-    // ── Color palette per subnet ────────────────────────────────────────
     const subnetColors = [
       '#38bdf8', '#a78bfa', '#34d399', '#fbbf24', '#fb923c',
       '#f472b6', '#22d3ee', '#818cf8', '#4ade80', '#facc15',
@@ -531,58 +579,45 @@
       return { fill: '#475569', glow: 'rgba(71,85,105,0.2)', opacity: 0.25 };
     }
 
-    // ── Layout parameters ───────────────────────────────────────────────
     const hubR     = Math.min(W, H) * 0.20;
     const hostRMin = Math.min(W, H) * 0.34;
     const hostRMax = Math.min(W, H) * 0.46;
     const nodeR    = Math.max(6, Math.min(14, 180 / Math.sqrt(hosts.length)));
     const hubNodeR = Math.max(9, Math.min(16, 55 / Math.sqrt(snKeys.length)));
-
-    // Minimum angular spacing per host (prevents cramming)
     const minAnglePerHost = (nodeR * 2.8) / hostRMin;
-    // Minimum arc per subnet (so 1-host subnets don't vanish)
     const minArcPerSubnet = Math.max(0.35, minAnglePerHost * 2);
 
-    // ── Compute arc sizes with minimum guarantees ───────────────────────
     const rawWeights = snKeys.map(k => subnets.get(k).length);
     const totalRaw = rawWeights.reduce((a, b) => a + b, 0);
-    // First pass: proportional
     let arcs = rawWeights.map(w => (w / totalRaw) * 2 * Math.PI);
-    // Second pass: enforce minimums
     let deficit = 0;
     arcs = arcs.map((a, i) => {
       const minArc = Math.max(minArcPerSubnet, rawWeights[i] * minAnglePerHost);
       if (a < minArc) { deficit += minArc - a; return minArc; }
       return a;
     });
-    // Redistribute deficit from larger arcs
     if (deficit > 0) {
-      const shrinkable = arcs.reduce((s, a, i) => s + (a > minArcPerSubnet ? a : 0), 0);
-      if (shrinkable > 0) {
-        arcs = arcs.map(a => a > minArcPerSubnet ? a * (1 - deficit / shrinkable) : a);
-      }
+      const shrinkable = arcs.reduce((s, a) => s + (a > minArcPerSubnet ? a : 0), 0);
+      if (shrinkable > 0) arcs = arcs.map(a => a > minArcPerSubnet ? a * (1 - deficit / shrinkable) : a);
     }
 
     let html = '';
     let angleOffset = -Math.PI / 2;
+    const hubPositions = new Map(); // subnet → {x, y}
 
     snKeys.forEach((snLabel, si) => {
       const snHosts = subnets.get(snLabel);
       const snColor = subnetColors[si % subnetColors.length];
       const arcSize = arcs[si];
       const hubAngle = angleOffset + arcSize / 2;
-
-      // Subnet hub position
       const hx = cx + Math.cos(hubAngle) * hubR;
       const hy = cy + Math.sin(hubAngle) * hubR;
+      hubPositions.set(snLabel, {x: hx, y: hy, color: snColor});
 
-      // Line: center → subnet hub
       html += `<line x1="${cx}" y1="${cy}" x2="${hx}" y2="${hy}" stroke="${snColor}" stroke-width="1.5" opacity="0.12"/>`;
 
-      // Subnet arc region (subtle bg)
       if (snHosts.length > 1) {
-        const a1 = angleOffset + 0.03;
-        const a2 = angleOffset + arcSize - 0.03;
+        const a1 = angleOffset + 0.03, a2 = angleOffset + arcSize - 0.03;
         const r1 = hubR * 0.6, r2 = hostRMax + nodeR + 20;
         const x1 = cx + Math.cos(a1) * r1, y1 = cy + Math.sin(a1) * r1;
         const x2 = cx + Math.cos(a1) * r2, y2 = cy + Math.sin(a1) * r2;
@@ -592,17 +627,14 @@
         html += `<path d="M${x1},${y1} L${x2},${y2} A${r2},${r2} 0 ${lg},1 ${x3},${y3} L${x4},${y4} A${r1},${r1} 0 ${lg},0 ${x1},${y1}" fill="${snColor}" opacity="0.018"/>`;
       }
 
-      // Subnet hub
+      // Subnet hub (clickable for filtering)
       html += `<circle cx="${hx}" cy="${hy}" r="${hubNodeR * 2}" fill="${snColor}" opacity="0.04"/>`;
-      html += `<circle cx="${hx}" cy="${hy}" r="${hubNodeR}" fill="${snColor}" opacity="0.25" filter="url(#glow-sm)"/>`;
-      html += `<circle cx="${hx - hubNodeR * 0.2}" cy="${hy - hubNodeR * 0.2}" r="${hubNodeR * 0.3}" fill="white" opacity="0.2"/>`;
+      html += `<circle cx="${hx}" cy="${hy}" r="${hubNodeR}" fill="${snColor}" opacity="0.25" filter="url(#glow-sm)" class="subnet-hub" data-subnet="${snLabel}" style="cursor:pointer"/>`;
+      html += `<circle cx="${hx - hubNodeR * 0.2}" cy="${hy - hubNodeR * 0.2}" r="${hubNodeR * 0.3}" fill="white" opacity="0.2" style="pointer-events:none"/>`;
 
-      // Subnet label
       const labelY = hy > cy ? hy + hubNodeR + 14 : hy - hubNodeR - 6;
-      html += `<text x="${hx}" y="${labelY}" text-anchor="middle" fill="${snColor}" font-family="'JetBrains Mono', monospace" font-size="8" opacity="0.55" font-weight="600">${snLabel}</text>`;
+      html += `<text x="${hx}" y="${labelY}" text-anchor="middle" fill="${snColor}" font-family="'JetBrains Mono', monospace" font-size="8" opacity="0.55" font-weight="600" class="subnet-hub" data-subnet="${snLabel}" style="cursor:pointer">${snLabel}</text>`;
 
-      // ── Hosts within this subnet (multi-ring if many) ─────────────────
-      // How many hosts fit on one ring within this arc?
       const arcLen = arcSize * hostRMin;
       const hostsPerRing = Math.max(1, Math.floor(arcLen / (nodeR * 3)));
       const rings = Math.ceil(snHosts.length / hostsPerRing);
@@ -612,64 +644,179 @@
         const ring = Math.floor(hi / hostsPerRing);
         const posInRing = hi % hostsPerRing;
         const hostsThisRing = Math.min(hostsPerRing, snHosts.length - ring * hostsPerRing);
-
-        // Angle: spread evenly within arc for this ring
-        const hostAngle = hostsThisRing === 1
-          ? hubAngle
-          : angleOffset + arcSize * (posInRing + 0.5) / hostsThisRing;
-
-        // Radius: stagger across rings with jitter
+        const hostAngle = hostsThisRing === 1 ? hubAngle : angleOffset + arcSize * (posInRing + 0.5) / hostsThisRing;
         const baseR = hostRMin + ring * ringStep;
         const jitter = 0.95 + Math.random() * 0.10;
         const r = baseR * jitter;
-
         const x = cx + Math.cos(hostAngle) * r;
         const y = cy + Math.sin(hostAngle) * r;
         const c = getNodeColor(h);
 
-        // Line: hub → host (curved for outer rings)
+        nodePositions.set(h.id, {x, y, subnet: snLabel});
+
         if (rings > 1 && ring > 0) {
-          const midR = (hubR + r) * 0.55;
-          const midAngle = (hubAngle + hostAngle) / 2;
-          const mx = cx + Math.cos(midAngle) * midR;
-          const my = cy + Math.sin(midAngle) * midR;
+          const midR = (hubR + r) * 0.55, midAngle = (hubAngle + hostAngle) / 2;
+          const mx = cx + Math.cos(midAngle) * midR, my = cy + Math.sin(midAngle) * midR;
           html += `<path d="M${hx},${hy} Q${mx},${my} ${x},${y}" fill="none" stroke="${c.fill}" stroke-width="0.5" opacity="0.12"/>`;
         } else {
           html += `<line x1="${hx}" y1="${hy}" x2="${x}" y2="${y}" stroke="${c.fill}" stroke-width="0.5" opacity="0.12"/>`;
         }
 
-        // Ambient glow
         html += `<circle cx="${x}" cy="${y}" r="${nodeR * 2}" fill="${c.fill}" opacity="0.04"/>`;
-
-        // Node body
         const filter = h.online === false ? 'url(#glow-lg)' : (h.online ? 'url(#glow-sm)' : '');
         const anim = h.online === false ? ' class="node-critical"' : (h.maintenance ? ' class="node-warning"' : '');
-        html += `<circle cx="${x}" cy="${y}" r="${nodeR}" fill="${c.fill}" opacity="${c.opacity}" ${filter ? `filter="${filter}"` : ''}${anim}/>`;
+        html += `<circle cx="${x}" cy="${y}" r="${nodeR}" fill="${c.fill}" opacity="${c.opacity}" ${filter ? `filter="${filter}"` : ''}${anim} data-host-id="${h.id}"/>`;
+        html += `<circle cx="${x - nodeR * 0.2}" cy="${y - nodeR * 0.2}" r="${nodeR * 0.3}" fill="white" opacity="0.2" style="pointer-events:none"/>`;
 
-        // Glass highlight
-        html += `<circle cx="${x - nodeR * 0.2}" cy="${y - nodeR * 0.2}" r="${nodeR * 0.3}" fill="white" opacity="0.2"/>`;
-
-        // Label
         const lbl = h.name.length > 10 ? h.name.slice(0, 9) + '..' : h.name;
-        html += `<text x="${x}" y="${y + nodeR + 11}" text-anchor="middle" fill="var(--ng-text-secondary)" font-family="'JetBrains Mono', monospace" font-size="8" opacity="0.55">${lbl}</text>`;
+        html += `<text x="${x}" y="${y + nodeR + 11}" text-anchor="middle" fill="var(--ng-text-secondary)" font-family="'JetBrains Mono', monospace" font-size="8" opacity="0.55" style="pointer-events:none">${lbl}</text>`;
 
-        // Clickable area with tooltip
-        html += `<a href="/ping/${h.id}"><circle cx="${x}" cy="${y}" r="${nodeR + 5}" fill="transparent" class="cursor-pointer"><title>${h.name} (${h.hostname})${h.latency !== null ? ' – ' + h.latency + 'ms' : ''}</title></circle></a>`;
+        // Invisible hit area for tooltip + navigation
+        html += `<circle cx="${x}" cy="${y}" r="${nodeR + 5}" fill="transparent" class="node-hit cursor-pointer" data-host-id="${h.id}" data-subnet="${snLabel}"/>`;
       });
 
       angleOffset += arcSize;
     });
 
-    // ── Center hub (gateway) ────────────────────────────────────────────
+    // Center hub
     html += `<circle cx="${cx}" cy="${cy}" r="24" fill="var(--ng-primary)" opacity="0.04"/>`;
     html += `<circle cx="${cx}" cy="${cy}" r="14" fill="var(--ng-primary)" opacity="0.5" filter="url(#glow-md)"/>`;
     html += `<circle cx="${cx - 3.5}" cy="${cy - 3.5}" r="4" fill="white" opacity="0.25"/>`;
     html += `<text x="${cx}" y="${cy + 30}" text-anchor="middle" fill="var(--ng-primary)" font-family="'JetBrains Mono', monospace" font-size="9" opacity="0.45" font-weight="600">CORE</text>`;
 
     svg.innerHTML = svg.innerHTML + html;
+
+    // ── Rich Tooltip ──────────────────────────────────────────────────────
+    const tooltip = document.getElementById('node-tooltip');
+    const wrap = document.getElementById('node-map-wrap');
+    const hostMap = new Map(hosts.map(h => [h.id, h]));
+
+    function showTooltip(e, hostId) {
+      const h = hostMap.get(hostId);
+      if (!h) return;
+      document.getElementById('tt-name').textContent = h.name;
+      document.getElementById('tt-host').textContent = h.hostname.length > 24 ? h.hostname.slice(0, 22) + '..' : h.hostname;
+      document.getElementById('tt-type').textContent = h.checkType.toUpperCase();
+      document.getElementById('tt-latency').textContent = h.latency !== null ? h.latency + ' ms' : '—';
+      document.getElementById('tt-uptime').textContent = h.uptimePct !== null ? h.uptimePct + '%' : '—';
+      const dot = document.getElementById('tt-dot');
+      dot.className = 'w-2 h-2 rounded-full shrink-0 ' + (h.maintenance ? 'bg-ng-warning' : h.online ? 'bg-ng-success' : h.online === false ? 'bg-ng-critical' : 'bg-[--ng-text-muted]');
+
+      // Sparkline
+      const ttSpark = document.getElementById('tt-sparkline');
+      const valid = (h.sparkline || []).filter(v => v !== null);
+      if (valid.length >= 2) {
+        const max = Math.max(...valid), min = Math.min(...valid), range = max - min || 1;
+        const pts = h.sparkline.map((v, i) => v !== null ? `${(i / (h.sparkline.length - 1)) * 60},${20 - ((v - min) / range) * 17 - 1}` : null).filter(Boolean).join(' ');
+        ttSpark.innerHTML = `<polyline fill="none" stroke="var(--ng-primary)" stroke-width="1.5" opacity="0.6" points="${pts}"/>`;
+        ttSpark.classList.remove('hidden');
+      } else {
+        ttSpark.classList.add('hidden');
+      }
+
+      // Position tooltip
+      const rect = wrap.getBoundingClientRect();
+      const svgRect = svg.getBoundingClientRect();
+      const scaleX = svgRect.width / 1000, scaleY = svgRect.height / 600;
+      const pos = nodePositions.get(hostId);
+      if (pos) {
+        let tx = pos.x * scaleX + (svgRect.left - rect.left) + 20;
+        let ty = pos.y * scaleY + (svgRect.top - rect.top) - 30;
+        if (tx + 200 > rect.width) tx = pos.x * scaleX + (svgRect.left - rect.left) - 200;
+        tooltip.style.left = tx + 'px';
+        tooltip.style.top = Math.max(0, ty) + 'px';
+      }
+      tooltip.classList.remove('hidden');
+    }
+
+    svg.addEventListener('mouseover', e => {
+      const hit = e.target.closest('.node-hit');
+      if (hit) showTooltip(e, parseInt(hit.dataset.hostId));
+    });
+    svg.addEventListener('mouseout', e => {
+      const hit = e.target.closest('.node-hit');
+      if (hit) tooltip.classList.add('hidden');
+    });
+    svg.addEventListener('click', e => {
+      const hit = e.target.closest('.node-hit');
+      if (hit) { window.location.href = '/ping/' + hit.dataset.hostId; return; }
+      const hub = e.target.closest('.subnet-hub');
+      if (hub) { filterBySubnet(hub.dataset.subnet); return; }
+    });
   })();
 
-  // ── Live clock ───────────────────────────────────────────────────────────
+  // ── Subnet Filter ───────────────────────────────────────────────────────
+  let activeSubnetFilter = null;
+  function filterBySubnet(subnet) {
+    activeSubnetFilter = subnet;
+    const grid = document.getElementById('host-grid');
+    const cards = grid.querySelectorAll('[data-host-id]');
+    let shown = 0;
+    cards.forEach(c => {
+      const hid = parseInt(c.dataset.hostId);
+      const match = hostSubnetMap.get(hid) === subnet;
+      c.style.display = match ? '' : 'none';
+      if (match) shown++;
+    });
+    // Show filter badges
+    ['subnet-filter-badge', 'grid-filter-badge'].forEach(id => {
+      const el = document.getElementById(id);
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+    });
+    document.getElementById('subnet-filter-label').textContent = subnet;
+    document.getElementById('grid-filter-label').textContent = `${subnet} (${shown})`;
+    // Scroll to host grid
+    grid.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }
+  window.clearSubnetFilter = function() {
+    activeSubnetFilter = null;
+    const grid = document.getElementById('host-grid');
+    grid.querySelectorAll('[data-host-id]').forEach(c => c.style.display = '');
+    ['subnet-filter-badge', 'grid-filter-badge'].forEach(id => {
+      const el = document.getElementById(id);
+      el.classList.add('hidden');
+      el.classList.remove('flex');
+    });
+  };
+
+  // ── Sparklines in Host Cards ────────────────────────────────────────────
+  (function() {
+    hosts.forEach(h => {
+      const box = document.querySelector(`[data-host-spark="${h.id}"]`);
+      if (!box || !h.sparkline || h.sparkline.length < 2) return;
+      const valid = h.sparkline.filter(v => v !== null);
+      if (valid.length < 2) return;
+      const max = Math.max(...valid), min = Math.min(...valid), range = max - min || 1;
+      const w = 60, ht = 12;
+      const pts = h.sparkline.map((v, i) => v !== null ? `${(i / (h.sparkline.length - 1)) * w},${ht - ((v - min) / range) * (ht - 2) - 1}` : null).filter(Boolean).join(' ');
+      const color = h.online === false ? 'var(--ng-critical)' : h.maintenance ? 'var(--ng-warning)' : 'var(--ng-primary)';
+      box.innerHTML = `<svg class="w-full h-full" viewBox="0 0 ${w} ${ht}" preserveAspectRatio="none"><polyline fill="none" stroke="${color}" stroke-width="1" opacity="0.4" points="${pts}"/></svg>`;
+    });
+  })();
+
+  // ── Collapsible Sections ────────────────────────────────────────────────
+  (function() {
+    document.querySelectorAll('.section-header').forEach(header => {
+      const section = header.dataset.section;
+      const body = header.nextElementSibling;
+      if (!body) return;
+      const chevron = header.querySelector('.section-chevron');
+      const stored = localStorage.getItem('section-' + section);
+      if (stored === 'collapsed') {
+        body.style.display = 'none';
+        if (chevron) chevron.style.transform = 'rotate(-90deg)';
+      }
+      header.addEventListener('click', () => {
+        const isVisible = body.style.display !== 'none';
+        body.style.display = isVisible ? 'none' : '';
+        if (chevron) chevron.style.transform = isVisible ? 'rotate(-90deg)' : '';
+        localStorage.setItem('section-' + section, isVisible ? 'collapsed' : 'expanded');
+      });
+    });
+  })();
+
+  // ── Live Clock ──────────────────────────────────────────────────────────
   function updateClock() {
     const now = new Date();
     document.getElementById('live-clock').textContent =
@@ -680,49 +827,82 @@
   updateClock();
   setInterval(updateClock, 1000);
 
-  // ── Refresh countdown ─────────────────────────────────────────────────
+  // ── Refresh + Toast Notifications ───────────────────────────────────────
   const REFRESH_INTERVAL = 30;
   let secondsLeft = REFRESH_INTERVAL;
+  const prevStatus = new Map(hosts.map(h => [h.id, h.online]));
 
   function tickRefresh() {
     secondsLeft--;
     const pct = ((REFRESH_INTERVAL - secondsLeft) / REFRESH_INTERVAL) * 100;
     document.getElementById('refresh-bar').style.width = pct + '%';
     document.getElementById('refresh-countdown').textContent = secondsLeft + 's';
-    if (secondsLeft <= 0) {
-      secondsLeft = REFRESH_INTERVAL;
-      refreshStatus();
-    }
+    if (secondsLeft <= 0) { secondsLeft = REFRESH_INTERVAL; refreshStatus(); }
   }
   setInterval(tickRefresh, 1000);
 
   async function refreshStatus() {
     try {
       const res = await fetch('/ping/api/status');
-      const hosts = await res.json();
-      hosts.forEach(h => {
+      const data = await res.json();
+      data.forEach(h => {
         const latEl = document.querySelector(`.latency-val-${h.id}`);
         if (latEl) latEl.textContent = h.latency_ms !== null ? `${h.latency_ms}ms` : '—';
 
         const dot = document.querySelector(`.status-dot-${h.id}`);
         if (dot) {
-          dot.className = dot.className
-            .replace(/bg-(ng-success|ng-critical|ng-warning)/g, '')
-            .replace(/glow-\w+/g, '')
-            .trim();
-          if (h.online === true) {
-            dot.classList.add('bg-ng-success', 'glow-success');
-          } else if (h.online === false) {
-            dot.classList.add('bg-ng-critical');
-          } else {
-            dot.classList.add('bg-[--ng-text-muted]');
+          dot.className = dot.className.replace(/bg-(ng-success|ng-critical|ng-warning)/g, '').replace(/glow-\w+/g, '').trim();
+          if (h.online === true) dot.classList.add('bg-ng-success', 'glow-success');
+          else if (h.online === false) dot.classList.add('bg-ng-critical');
+          else dot.classList.add('bg-[--ng-text-muted]');
+        }
+
+        // Toast on status change
+        const prev = prevStatus.get(h.id);
+        if (prev !== undefined && prev !== h.online) {
+          const hData = hosts.find(x => x.id === h.id);
+          const name = hData ? hData.name : 'Host #' + h.id;
+          if (h.online === true && prev === false) {
+            window.showToast && window.showToast(`${name} is back online`, 'success');
+          } else if (h.online === false && prev === true) {
+            window.showToast && window.showToast(`${name} went offline`, 'critical');
           }
         }
+        prevStatus.set(h.id, h.online);
       });
     } catch(e) {}
   }
 
-  // ── Proxmox cards ────────────────────────────────────────────────────
+  // ── Keyboard Navigation ─────────────────────────────────────────────────
+  (function() {
+    const grid = document.getElementById('host-grid');
+    if (!grid) return;
+    let focusIdx = -1;
+    function getVisibleCards() {
+      return [...grid.querySelectorAll('[data-host-id]')].filter(c => c.style.display !== 'none');
+    }
+    document.addEventListener('keydown', e => {
+      // Skip if user is typing in an input/textarea or Cmd+K modal is open
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+      if (document.getElementById('cmdk-modal') && !document.getElementById('cmdk-modal').classList.contains('hidden')) return;
+      const cards = getVisibleCards();
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        focusIdx = Math.min(focusIdx + 1, cards.length - 1);
+        cards[focusIdx]?.focus();
+        cards[focusIdx]?.scrollIntoView({block: 'nearest'});
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        focusIdx = Math.max(focusIdx - 1, 0);
+        cards[focusIdx]?.focus();
+        cards[focusIdx]?.scrollIntoView({block: 'nearest'});
+      } else if (e.key === 'Escape' && activeSubnetFilter) {
+        window.clearSubnetFilter();
+      }
+    });
+  })();
+
+  // ── Proxmox Cards ──────────────────────────────────────────────────────
   const proxmoxIds = [{% for c in proxmox_clusters %}{{ c.id }}{% if not loop.last %},{% endif %}{% endfor %}];
 
   async function loadProxmoxCard(id) {
@@ -732,34 +912,23 @@
     try {
       const res = await fetch(`/proxmox/api/${id}/status`);
       const d = await res.json();
-      if (!d.ok) {
-        statusEl.innerHTML = `<span class="text-ng-critical">! ${d.error || 'Connection error'}</span>`;
-        return;
-      }
+      if (!d.ok) { statusEl.innerHTML = `<span class="text-ng-critical">! ${d.error || 'Connection error'}</span>`; return; }
       const t = d.totals;
-      const quorum = d.quorum_ok
-        ? `<span class="text-ng-success">● Quorum OK</span>`
-        : `<span class="text-ng-critical">● No quorum</span>`;
+      const quorum = d.quorum_ok ? `<span class="text-ng-success">&#9679; Quorum OK</span>` : `<span class="text-ng-critical">&#9679; No quorum</span>`;
       statusEl.innerHTML = `
         <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs mb-2">
           ${quorum}
           <span class="text-[--ng-text-secondary]">${t.nodes_online}/${t.nodes_total} Nodes</span>
-          <span class="text-[--ng-text-secondary]">${t.vms_running} VMs · ${t.lxc_running} LXC</span>
+          <span class="text-[--ng-text-secondary]">${t.vms_running} VMs &middot; ${t.lxc_running} LXC</span>
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div>
             <div class="flex justify-between text-[10px] text-[--ng-text-muted] font-mono mb-0.5"><span>CPU</span><span>${t.cpu_avg_pct}%</span></div>
-            <div class="metric-bar">
-              <div class="metric-bar-fill ${t.cpu_avg_pct > 80 ? '!bg-ng-critical' : t.cpu_avg_pct > 60 ? '!bg-ng-warning' : ''}"
-                   style="width:${Math.min(t.cpu_avg_pct, 100)}%"></div>
-            </div>
+            <div class="metric-bar"><div class="metric-bar-fill ${t.cpu_avg_pct > 80 ? '!bg-ng-critical' : t.cpu_avg_pct > 60 ? '!bg-ng-warning' : ''}" style="width:${Math.min(t.cpu_avg_pct, 100)}%"></div></div>
           </div>
           <div>
             <div class="flex justify-between text-[10px] text-[--ng-text-muted] font-mono mb-0.5"><span>RAM</span><span>${t.mem_pct}%</span></div>
-            <div class="metric-bar">
-              <div class="metric-bar-fill !bg-ng-accent ${t.mem_pct > 85 ? '!bg-ng-critical' : t.mem_pct > 65 ? '!bg-ng-warning' : ''}"
-                   style="width:${Math.min(t.mem_pct, 100)}%"></div>
-            </div>
+            <div class="metric-bar"><div class="metric-bar-fill !bg-ng-accent ${t.mem_pct > 85 ? '!bg-ng-critical' : t.mem_pct > 65 ? '!bg-ng-warning' : ''}" style="width:${Math.min(t.mem_pct, 100)}%"></div></div>
           </div>
         </div>`;
     } catch(e) {
@@ -769,7 +938,6 @@
 
   proxmoxIds.forEach(id => loadProxmoxCard(id));
   setInterval(() => proxmoxIds.forEach(id => loadProxmoxCard(id)), 60000);
-
   setTimeout(() => location.reload(), 5 * 60 * 1000);
 </script>
 {% endblock %}

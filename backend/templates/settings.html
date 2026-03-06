@@ -26,6 +26,7 @@
       ('monitoring',    'Monitoring',      'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'),
       ('import',        'Import',          'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12'),
       ('notifications', 'Notifications',  'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9'),
+      ('appearance',    'Appearance',     'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01'),
     ] %}
     <button onclick="switchTab('{{ id }}')" id="tab-btn-{{ id }}"
             class="tab-btn flex items-center gap-2 flex-1 justify-center px-3 py-2 rounded-lg text-sm font-medium transition-all">
@@ -300,6 +301,71 @@
     <div id="phpipam-result" class="hidden px-4 py-3 rounded-lg text-sm border"></div>
   </div>
 
+  <!-- ── Tab: Appearance ─────────────────────────────────────────────── -->
+  <div id="tab-appearance" class="tab-panel hidden space-y-5">
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl">
+      <div class="px-5 py-4 border-b border-white/[0.08]">
+        <h2 class="ng-heading text-sm text-[--ng-text-primary]">Accent Color</h2>
+        <p class="text-xs text-slate-600 mt-0.5">Customize the primary accent color used across the UI</p>
+      </div>
+      <div class="px-5 py-4">
+        <div class="flex flex-wrap gap-3" id="accent-picker">
+          {% for name, hex in [
+            ('Sky',    '#38BDF8'),
+            ('Violet', '#A78BFA'),
+            ('Mint',   '#34D399'),
+            ('Rose',   '#FB7185'),
+            ('Amber',  '#FBBF24'),
+            ('Orange', '#FB923C'),
+            ('Cyan',   '#22D3EE'),
+            ('Pink',   '#F472B6'),
+            ('Indigo', '#818CF8'),
+            ('Lime',   '#A3E635'),
+          ] %}
+          <button type="button" onclick="setAccentColor('{{ hex }}')"
+                  class="accent-swatch group flex flex-col items-center gap-1.5" data-color="{{ hex }}">
+            <div class="w-10 h-10 rounded-xl border-2 border-transparent group-hover:border-white/30 transition-all flex items-center justify-center"
+                 style="background: {{ hex }}20; border-color: var(--swatch-border, transparent)">
+              <div class="w-5 h-5 rounded-lg" style="background: {{ hex }}"></div>
+            </div>
+            <span class="text-[10px] font-mono text-[--ng-text-muted]">{{ name }}</span>
+          </button>
+          {% endfor %}
+        </div>
+        <div class="mt-4 flex items-center gap-3">
+          <label class="text-xs text-[--ng-text-muted] font-mono">Custom:</label>
+          <input type="color" id="custom-accent" value="#38BDF8"
+                 onchange="setAccentColor(this.value)"
+                 class="w-8 h-8 rounded-lg border border-white/[0.08] bg-transparent cursor-pointer">
+          <button type="button" onclick="setAccentColor('#38BDF8')"
+                  class="text-xs text-[--ng-text-muted] hover:text-[--ng-text-secondary] transition-colors font-mono">
+            Reset to default
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl">
+      <div class="px-5 py-4 border-b border-white/[0.08]">
+        <h2 class="ng-heading text-sm text-[--ng-text-primary]">Preview</h2>
+      </div>
+      <div class="px-5 py-4 space-y-3">
+        <div class="flex items-center gap-3">
+          <span class="w-3 h-3 rounded-full" style="background: var(--ng-primary)"></span>
+          <span class="text-sm text-[--ng-text-primary]">Primary color</span>
+          <span class="text-xs font-mono text-[--ng-text-muted]" id="accent-hex-display">#38BDF8</span>
+        </div>
+        <div class="flex gap-2">
+          <button class="ng-btn ng-btn-primary">Button</button>
+          <button class="ng-btn ng-btn-ghost">Ghost</button>
+        </div>
+        <div class="metric-bar w-48">
+          <div class="metric-bar-fill" style="width: 65%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Tab: Notifications ──────────────────────────────────────────── -->
   <div id="tab-notifications" class="tab-panel hidden">
     <form method="post" action="/settings/notifications/save" class="space-y-5">
@@ -463,7 +529,32 @@
   };
 
   const tab = (location.hash.slice(1)) || '{{ request.query_params.get("tab", "system") }}';
-  window.switchTab(['system','monitoring','import','notifications'].includes(tab) ? tab : 'system');
+  window.switchTab(['system','monitoring','import','notifications','appearance'].includes(tab) ? tab : 'system');
+})();
+
+// ── Accent Color Picker ───────────────────────────────────────────────
+window.setAccentColor = function(hex) {
+  document.documentElement.style.setProperty('--ng-primary', hex);
+  document.documentElement.style.setProperty('--ng-primary-glow', hex);
+  // Generate lighter version for primary-light
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  const light = `rgb(${Math.min(255, r + 80)}, ${Math.min(255, g + 80)}, ${Math.min(255, b + 80)})`;
+  document.documentElement.style.setProperty('--ng-primary-light', light);
+  localStorage.setItem('ng-accent-color', hex);
+  const display = document.getElementById('accent-hex-display');
+  if (display) display.textContent = hex;
+  const customInput = document.getElementById('custom-accent');
+  if (customInput) customInput.value = hex;
+  // Highlight active swatch
+  document.querySelectorAll('.accent-swatch').forEach(s => {
+    const border = s.querySelector('div');
+    if (border) border.style.setProperty('--swatch-border', s.dataset.color === hex ? 'rgba(255,255,255,0.5)' : 'transparent');
+  });
+};
+// Apply saved accent on load
+(function() {
+  const saved = localStorage.getItem('ng-accent-color');
+  if (saved) window.setAccentColor(saved);
 })();
 
 async function testNotification(channel) {
