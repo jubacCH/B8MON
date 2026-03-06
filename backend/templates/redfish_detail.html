@@ -23,7 +23,7 @@
       {% endif %}
       <form method="post" action="/redfish/{{ server.id }}/refresh">
         <button type="submit"
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-[#1a1d2e] hover:bg-[#252836] border border-[#252836] text-slate-300 text-xs rounded-lg transition-colors">
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] border border-[--ng-glass-border] text-slate-300 text-xs rounded-lg transition-colors">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -41,7 +41,7 @@
   {% endif %}
 
   <!-- Tabs -->
-  <div class="flex gap-1 mb-5 bg-[#0b0d14] p-1 rounded-lg border border-[#252836] w-fit">
+  <div class="flex gap-1 mb-5 bg-white/[0.02] p-1 rounded-lg border border-[--ng-glass-border] w-fit">
     <button onclick="showTab('overview')" id="tab-overview"
             class="px-4 py-1.5 rounded-md text-sm font-medium transition-colors tab-btn active-tab">
       Overview
@@ -70,7 +70,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
 
       <!-- System Info -->
-      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-5">
         <p class="text-slate-500 text-xs uppercase tracking-wider mb-4">System Information</p>
         <div class="space-y-3 text-sm">
           {% if data.hostname %}
@@ -111,7 +111,7 @@
       </div>
 
       <!-- Health + Power -->
-      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-5">
         <p class="text-slate-500 text-xs uppercase tracking-wider mb-4">Health &amp; Power</p>
         <div class="space-y-4">
 
@@ -140,7 +140,7 @@
             {% endif %}
           </div>
 
-          <div class="border-t border-[#252836] pt-4 space-y-3 text-sm">
+          <div class="border-t border-[--ng-glass-border] pt-4 space-y-3 text-sm">
             <div class="flex justify-between">
               <span class="text-slate-500">Power State</span>
               {% if data.power_state == 'On' %}
@@ -180,11 +180,11 @@
 
     <!-- Fans summary (compact) -->
     {% if data.fans %}
-    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-5">
       <p class="text-slate-500 text-xs uppercase tracking-wider mb-3">Fans ({{ data.fans | length }})</p>
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
         {% for fan in data.fans %}
-        <div class="bg-[#0b0d14] border border-[#252836] rounded-lg p-3">
+        <div class="bg-white/[0.02] border border-[--ng-glass-border] rounded-lg p-3">
           <p class="text-slate-500 text-[10px] truncate mb-1">{{ fan.name }}</p>
           {% if fan.rpm is not none %}
           <p class="text-white text-sm font-medium tabular-nums">{{ fan.rpm }} <span class="text-slate-500 text-xs">RPM</span></p>
@@ -207,7 +207,7 @@
     {% endif %}
 
     {% elif not error %}
-    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-12 text-center">
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-12 text-center">
       <p class="text-slate-400">No data available. Click Refresh to poll this server.</p>
     </div>
     {% endif %}
@@ -216,15 +216,15 @@
   <!-- ── Temperatures Tab ───────────────────────────────────────────────── -->
   <div id="pane-temps" class="hidden">
     {% if data and data.temperatures %}
-    <div class="bg-[#13151f] border border-[#252836] rounded-xl overflow-hidden">
-      <div class="px-5 py-3 border-b border-[#252836] flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-slate-300">Temperature Sensors</h2>
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl overflow-hidden">
+      <div class="px-5 py-3 border-b border-[--ng-glass-border] flex items-center justify-between">
+        <h2 class="ng-heading text-sm text-[--ng-text-secondary]">Temperature Sensors</h2>
         <span class="text-slate-600 text-xs">{{ data.temperatures | length }} sensors</span>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="border-b border-[#252836]">
+            <tr class="border-b border-[--ng-glass-border]">
               <th class="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Sensor</th>
               <th class="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Reading</th>
               <th class="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Threshold</th>
@@ -233,7 +233,7 @@
           </thead>
           <tbody>
             {% for t in data.temperatures | sort(attribute='reading_c', reverse=true) %}
-            <tr class="border-t border-[#252836] hover:bg-[#1a1d2e] transition-colors
+            <tr class="border-t border-white/[0.08] hover:bg-white/[0.04] transition-colors
               {% if t.status == 'Critical' %}bg-red-500/5{% elif t.status == 'Warning' %}bg-amber-500/5{% endif %}">
               <td class="px-5 py-2.5 text-slate-300 text-xs">{{ t.name }}</td>
               <td class="px-5 py-2.5 text-right tabular-nums font-medium text-sm
@@ -271,7 +271,7 @@
       </div>
     </div>
     {% else %}
-    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-12 text-center">
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-12 text-center">
       <p class="text-slate-400">No temperature data available.</p>
     </div>
     {% endif %}
@@ -282,50 +282,46 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
       <!-- Edit form -->
-      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
-        <h2 class="text-sm font-semibold text-slate-300 mb-4">Edit Server</h2>
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-5">
+        <h2 class="ng-heading text-sm text-[--ng-text-secondary] mb-4">Edit Server</h2>
         <form method="post" action="/redfish/{{ server.id }}/edit" class="space-y-4">
           <div>
             <label class="block text-xs text-slate-500 mb-1.5">Display Name</label>
             <input type="text" name="name" value="{{ server.name }}" required
-                   class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                          focus:outline-none focus:border-blue-500 transition-colors">
+                   class="ng-input">
           </div>
           <div>
             <label class="block text-xs text-slate-500 mb-1.5">Host URL</label>
             <input type="text" name="host" value="{{ server.host }}" required
-                   class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                          focus:outline-none focus:border-blue-500 transition-colors">
+                   class="ng-input">
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-xs text-slate-500 mb-1.5">Username</label>
               <input type="text" name="username" value="{{ server.username }}" required
-                     class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                            focus:outline-none focus:border-blue-500 transition-colors">
+                     class="ng-input">
             </div>
             <div>
               <label class="block text-xs text-slate-500 mb-1.5">New Password</label>
               <input type="password" name="password" placeholder="(unchanged)"
-                     class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                            focus:outline-none focus:border-blue-500 transition-colors">
+                     class="ng-input">
             </div>
           </div>
           <div class="flex items-center gap-2">
             <input type="checkbox" name="verify_ssl" id="verify_ssl" value="on"
                    {% if server.verify_ssl %}checked{% endif %}
-                   class="rounded border-[#252836] bg-[#0b0d14]">
+                   class="rounded border-[--ng-glass-border] bg-white/[0.02]">
             <label for="verify_ssl" class="text-sm text-slate-400">Verify SSL certificate</label>
           </div>
           <button type="submit"
-                  class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+                  class="w-full py-2 ng-btn ng-btn-primary">
             Save Changes
           </button>
         </form>
       </div>
 
       <!-- Danger zone -->
-      <div class="bg-[#13151f] border border-red-500/20 rounded-xl p-5">
+      <div class="bg-[--ng-glass-bg] border border-red-500/20 rounded-xl p-5">
         <h2 class="text-sm font-semibold text-red-400 mb-4">Danger Zone</h2>
         <p class="text-slate-500 text-sm mb-4">
           Deleting this server will remove all associated snapshots.
@@ -347,7 +343,7 @@
 <style>
   .tab-btn { color: #64748b; }
   .tab-btn:hover { color: #e2e8f0; }
-  .active-tab { background: #1a1d2e; color: #e2e8f0; }
+  .active-tab { background: rgba(255,255,255,0.08); color: #e2e8f0; }
 </style>
 
 {% endblock %}

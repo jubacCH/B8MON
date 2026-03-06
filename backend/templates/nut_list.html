@@ -11,7 +11,7 @@
       <p class="text-slate-500 text-xs mt-0.5">Network UPS Tools instances</p>
     </div>
     <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
-            class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+            class="flex items-center gap-2 ng-btn ng-btn-primary">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
       </svg>
@@ -20,10 +20,10 @@
   </div>
 
   {% if summaries %}
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl overflow-hidden">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl overflow-hidden">
     <table class="w-full text-sm">
       <thead>
-        <tr class="border-b border-[#252836]">
+        <tr class="border-b border-[--ng-glass-border]">
           <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Name</th>
           <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Host</th>
           <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
@@ -39,7 +39,7 @@
         {% set inst = s.instance %}
         {% set snap = s.snap %}
         {% set data = s.data %}
-        <tr class="border-t border-[#252836] hover:bg-[#1a1d2e] transition-colors">
+        <tr class="border-t border-white/[0.08] hover:bg-white/[0.04] transition-colors">
           <td class="px-5 py-3">
             <a href="/ups/{{ inst.id }}" class="text-white font-medium hover:text-blue-400 transition-colors">
               {{ inst.name }}
@@ -106,7 +106,7 @@
           </td>
           <td class="px-5 py-3 text-right">
             <a href="/ups/{{ inst.id }}"
-               class="text-slate-500 hover:text-white transition-colors text-xs px-2 py-1 rounded hover:bg-[#252836]">
+               class="text-slate-500 hover:text-white transition-colors text-xs px-2 py-1 rounded hover:bg-white/[0.06]">
               View
             </a>
           </td>
@@ -117,7 +117,7 @@
   </div>
 
   {% else %}
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-12 text-center">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-12 text-center">
     <div class="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center mx-auto mb-4">
       <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
@@ -127,7 +127,7 @@
     <p class="text-slate-400 font-medium mb-1">No UPS instances configured</p>
     <p class="text-slate-600 text-sm">Add a NUT daemon to start monitoring your UPS</p>
     <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
-            class="inline-block mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors">
+            class="inline-block mt-4 px-4 py-2 ng-btn ng-btn-primary">
       Add UPS
     </button>
   </div>
@@ -138,7 +138,7 @@
 <!-- Add UPS Modal -->
 <div id="add-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
      onclick="if(event.target===this)this.classList.add('hidden')">
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 w-full max-w-md shadow-2xl">
+  <div class="glass-elevated p-6 w-full max-w-md shadow-2xl">
     <div class="flex items-center justify-between mb-5">
       <h2 class="text-white font-semibold">Add UPS Instance</h2>
       <button onclick="document.getElementById('add-modal').classList.add('hidden')"
@@ -152,50 +152,44 @@
       <div>
         <label class="block text-xs text-slate-500 mb-1.5">Display Name</label>
         <input type="text" name="name" required placeholder="Home UPS"
-               class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                      focus:outline-none focus:border-blue-500 transition-colors">
+               class="ng-input">
       </div>
       <div class="grid grid-cols-3 gap-3">
         <div class="col-span-2">
           <label class="block text-xs text-slate-500 mb-1.5">NUT Host</label>
           <input type="text" name="host" required placeholder="192.168.1.10"
-                 class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                        focus:outline-none focus:border-blue-500 transition-colors">
+                 class="ng-input">
         </div>
         <div>
           <label class="block text-xs text-slate-500 mb-1.5">Port</label>
           <input type="number" name="port" value="3493"
-                 class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                        focus:outline-none focus:border-blue-500 transition-colors">
+                 class="ng-input">
         </div>
       </div>
       <div>
         <label class="block text-xs text-slate-500 mb-1.5">UPS Name</label>
         <input type="text" name="ups_name" value="ups" placeholder="ups"
-               class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                      focus:outline-none focus:border-blue-500 transition-colors">
+               class="ng-input">
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-xs text-slate-500 mb-1.5">Username <span class="text-slate-600">(optional)</span></label>
           <input type="text" name="username" placeholder="monuser"
-                 class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                        focus:outline-none focus:border-blue-500 transition-colors">
+                 class="ng-input">
         </div>
         <div>
           <label class="block text-xs text-slate-500 mb-1.5">Password <span class="text-slate-600">(optional)</span></label>
           <input type="password" name="password"
-                 class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                        focus:outline-none focus:border-blue-500 transition-colors">
+                 class="ng-input">
         </div>
       </div>
       <div class="flex gap-3 pt-2">
         <button type="submit"
-                class="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+                class="flex-1 py-2 ng-btn ng-btn-primary">
           Add UPS
         </button>
         <button type="button" onclick="document.getElementById('add-modal').classList.add('hidden')"
-                class="px-4 py-2 bg-[#252836] hover:bg-[#2e3145] text-slate-300 text-sm rounded-lg transition-colors">
+                class="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 text-sm rounded-lg transition-colors">
           Cancel
         </button>
       </div>

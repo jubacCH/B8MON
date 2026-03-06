@@ -11,7 +11,7 @@
       <p class="text-slate-500 text-xs mt-0.5">Server hardware monitoring via Redfish API</p>
     </div>
     <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
-            class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+            class="flex items-center gap-2 ng-btn ng-btn-primary">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
       </svg>
@@ -20,10 +20,10 @@
   </div>
 
   {% if summaries %}
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl overflow-hidden">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl overflow-hidden">
     <table class="w-full text-sm">
       <thead>
-        <tr class="border-b border-[#252836]">
+        <tr class="border-b border-[--ng-glass-border]">
           <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Name</th>
           <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Model</th>
           <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
@@ -39,7 +39,7 @@
         {% set srv = s.server %}
         {% set snap = s.snap %}
         {% set data = s.data %}
-        <tr class="border-t border-[#252836] hover:bg-[#1a1d2e] transition-colors">
+        <tr class="border-t border-white/[0.08] hover:bg-white/[0.04] transition-colors">
           <td class="px-5 py-3">
             <a href="/redfish/{{ srv.id }}" class="text-white font-medium hover:text-blue-400 transition-colors">
               {{ srv.name }}
@@ -104,7 +104,7 @@
           </td>
           <td class="px-5 py-3 text-right">
             <a href="/redfish/{{ srv.id }}"
-               class="text-slate-500 hover:text-white transition-colors text-xs px-2 py-1 rounded hover:bg-[#252836]">
+               class="text-slate-500 hover:text-white transition-colors text-xs px-2 py-1 rounded hover:bg-white/[0.06]">
               View
             </a>
           </td>
@@ -115,7 +115,7 @@
   </div>
 
   {% else %}
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-12 text-center">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-12 text-center">
     <div class="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center mx-auto mb-4">
       <svg class="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
@@ -125,7 +125,7 @@
     <p class="text-slate-400 font-medium mb-1">No Redfish servers configured</p>
     <p class="text-slate-600 text-sm">Add a Dell iDRAC, HPE iLO, or Redfish-compatible BMC</p>
     <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
-            class="inline-block mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors">
+            class="inline-block mt-4 px-4 py-2 ng-btn ng-btn-primary">
       Add Server
     </button>
   </div>
@@ -136,7 +136,7 @@
 <!-- Add Server Modal -->
 <div id="add-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
      onclick="if(event.target===this)this.classList.add('hidden')">
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 w-full max-w-md shadow-2xl">
+  <div class="glass-elevated p-6 w-full max-w-md shadow-2xl">
     <div class="flex items-center justify-between mb-5">
       <h2 class="text-white font-semibold">Add Redfish Server</h2>
       <button onclick="document.getElementById('add-modal').classList.add('hidden')"
@@ -150,42 +150,38 @@
       <div>
         <label class="block text-xs text-slate-500 mb-1.5">Display Name</label>
         <input type="text" name="name" required placeholder="Dell R720"
-               class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                      focus:outline-none focus:border-blue-500 transition-colors">
+               class="ng-input">
       </div>
       <div>
         <label class="block text-xs text-slate-500 mb-1.5">Host URL</label>
         <input type="text" name="host" required placeholder="https://idrac.local"
-               class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                      focus:outline-none focus:border-blue-500 transition-colors">
+               class="ng-input">
         <p class="text-slate-600 text-xs mt-1">Include scheme, e.g. https://idrac.example.com</p>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-xs text-slate-500 mb-1.5">Username</label>
           <input type="text" name="username" required placeholder="root"
-                 class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                        focus:outline-none focus:border-blue-500 transition-colors">
+                 class="ng-input">
         </div>
         <div>
           <label class="block text-xs text-slate-500 mb-1.5">Password</label>
           <input type="password" name="password" required
-                 class="w-full bg-[#0b0d14] border border-[#252836] rounded-lg px-3 py-2 text-sm text-white
-                        focus:outline-none focus:border-blue-500 transition-colors">
+                 class="ng-input">
         </div>
       </div>
       <div class="flex items-center gap-2">
         <input type="checkbox" name="verify_ssl" id="verify_ssl" value="on"
-               class="rounded border-[#252836] bg-[#0b0d14]">
+               class="rounded border-[--ng-glass-border] bg-white/[0.02]">
         <label for="verify_ssl" class="text-sm text-slate-400">Verify SSL certificate</label>
       </div>
       <div class="flex gap-3 pt-2">
         <button type="submit"
-                class="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+                class="flex-1 py-2 ng-btn ng-btn-primary">
           Add Server
         </button>
         <button type="button" onclick="document.getElementById('add-modal').classList.add('hidden')"
-                class="px-4 py-2 bg-[#252836] hover:bg-[#2e3145] text-slate-300 text-sm rounded-lg transition-colors">
+                class="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 text-sm rounded-lg transition-colors">
           Cancel
         </button>
       </div>

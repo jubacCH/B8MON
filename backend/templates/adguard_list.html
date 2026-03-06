@@ -7,11 +7,11 @@
   <!-- Header -->
   <div class="flex items-center justify-between mb-6">
     <div>
-      <h1 class="text-2xl font-bold text-white">AdGuard Home</h1>
+      <h1 class="ng-heading text-2xl text-[--ng-text-primary]">AdGuard Home</h1>
       <p class="text-slate-500 text-sm mt-0.5">{{ instance_data | length }} instance{{ 's' if instance_data | length != 1 }}</p>
     </div>
     <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
-            class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+            class="flex items-center gap-2 ng-btn ng-btn-primary">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
       </svg>
@@ -20,8 +20,8 @@
   </div>
 
   {% if not instance_data %}
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-12 text-center">
-    <div class="w-12 h-12 rounded-xl bg-[#252836] flex items-center justify-center mx-auto mb-4">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-12 text-center">
+    <div class="w-12 h-12 rounded-xl bg-white/[0.06] flex items-center justify-center mx-auto mb-4">
       <svg class="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
               d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
@@ -30,18 +30,18 @@
     <h3 class="text-white font-medium mb-2">No AdGuard Home instances configured</h3>
     <p class="text-slate-500 text-sm mb-5">Add your AdGuard Home URL, username and password.</p>
     <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+            class="ng-btn ng-btn-primary">
       Add AdGuard
     </button>
   </div>
   {% else %}
 
   <!-- Table -->
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl overflow-hidden">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead>
-          <tr class="text-left text-xs text-slate-500 border-b border-[#252836] bg-[#0b0d14]">
+          <tr class="text-left text-xs text-slate-500 border-b border-[--ng-glass-border] bg-white/[0.02]">
             <th class="px-5 py-3 font-medium">Name</th>
             <th class="px-4 py-3 font-medium">Status</th>
             <th class="px-4 py-3 font-medium text-right">Queries Today</th>
@@ -52,12 +52,12 @@
             <th class="px-5 py-3 font-medium text-right">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-[#252836]">
+        <tbody class="divide-y divide-white/[0.08]">
           {% for id in instance_data %}
           {% set inst = id.instance %}
           {% set data = id.data %}
           {% set snap = id.snap %}
-          <tr class="hover:bg-[#0b0d14] transition-colors">
+          <tr class="hover:bg-white/[0.02] transition-colors">
             <td class="px-5 py-3">
               <a href="/adguard/{{ inst.id }}" class="text-white font-medium hover:text-blue-400 transition-colors">{{ inst.name }}</a>
               <p class="text-slate-500 text-xs font-mono mt-0.5">{{ inst.host }}</p>
@@ -72,7 +72,7 @@
               {% elif snap and not snap.ok %}
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20">Error</span>
               {% else %}
-                <span class="px-2 py-0.5 rounded-full text-[10px] bg-[#252836] text-slate-500">Unknown</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] bg-white/[0.06] text-slate-500">Unknown</span>
               {% endif %}
             </td>
             <td class="px-4 py-3 text-right font-mono text-slate-300 text-xs">
@@ -97,7 +97,7 @@
             <td class="px-5 py-3 text-right">
               <div class="flex items-center justify-end gap-2">
                 <a href="/adguard/{{ inst.id }}"
-                   class="px-2.5 py-1 text-xs bg-[#252836] hover:bg-[#2e3347] text-slate-300 rounded-lg transition-colors">
+                   class="px-2.5 py-1 text-xs bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 rounded-lg transition-colors">
                   Detail
                 </a>
                 <form method="post" action="/adguard/{{ inst.id }}/delete"
@@ -122,7 +122,7 @@
 <!-- Add AdGuard modal -->
 <div id="add-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
      onclick="if(event.target===this)this.classList.add('hidden')">
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 w-full max-w-md shadow-2xl">
+  <div class="glass-elevated p-6 w-full max-w-md shadow-2xl">
     <div class="flex items-center justify-between mb-5">
       <h2 class="text-white font-semibold">Add AdGuard Home</h2>
       <button onclick="document.getElementById('add-modal').classList.add('hidden')"
@@ -136,41 +136,37 @@
       <div>
         <label class="block text-xs font-medium text-slate-400 mb-1.5">Display name</label>
         <input type="text" name="name" placeholder="Home AdGuard" required
-               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                      focus:outline-none focus:border-blue-500 transition-colors">
+               class="ng-input">
       </div>
       <div>
         <label class="block text-xs font-medium text-slate-400 mb-1.5">URL</label>
         <input type="text" name="host" placeholder="http://adguard.local:3000" required
-               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                      focus:outline-none focus:border-blue-500 transition-colors">
+               class="ng-input">
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5">Username <span class="text-slate-600">(optional)</span></label>
           <input type="text" name="username" placeholder="admin"
-                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                        focus:outline-none focus:border-blue-500 transition-colors">
+                 class="ng-input">
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5">Password <span class="text-slate-600">(optional)</span></label>
           <input type="password" name="password" placeholder="••••••••"
-                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                        focus:outline-none focus:border-blue-500 transition-colors">
+                 class="ng-input">
         </div>
       </div>
       <label class="flex items-center gap-2 cursor-pointer select-none">
         <input type="checkbox" name="verify_ssl" value="on"
-               class="w-3.5 h-3.5 rounded border-[#3a3d4e] bg-[#0b0d14] accent-blue-500">
+               class="w-3.5 h-3.5 rounded border-[--ng-glass-border] bg-white/[0.03] accent-[--ng-primary]">
         <span class="text-sm text-slate-300">Verify SSL certificate</span>
       </label>
       <div class="flex gap-2 pt-1">
         <button type="submit"
-                class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+                class="flex-1 ng-btn ng-btn-primary">
           Add AdGuard
         </button>
         <button type="button" onclick="document.getElementById('add-modal').classList.add('hidden')"
-                class="px-4 py-2 bg-[#252836] hover:bg-[#2e3347] text-slate-300 text-sm font-medium rounded-lg transition-colors">
+                class="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 text-sm font-medium rounded-lg transition-colors">
           Cancel
         </button>
       </div>

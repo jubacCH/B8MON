@@ -7,7 +7,7 @@
   <!-- Header -->
   <div class="flex items-center justify-between mb-6">
     <div>
-      <h1 class="text-2xl font-bold text-white">Syslog</h1>
+      <h1 class="ng-heading text-2xl text-[--ng-text-primary]">Syslog</h1>
       <p class="text-slate-500 text-sm mt-0.5">{{ total }} messages in the last {{ f_hours }}h</p>
     </div>
 
@@ -45,11 +45,11 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
       </svg>
       <input type="text" name="q" value="{{ f_q }}" placeholder="Full-text search..."
-             class="w-full pl-9 pr-3 py-2 rounded-lg bg-card border border-border text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500/50">
+             class="w-full pl-9 pr-3 py-2 ng-input">
     </div>
 
     <!-- Host filter -->
-    <select name="host" class="px-3 py-2 rounded-lg bg-card border border-border text-sm text-white focus:outline-none focus:border-indigo-500/50 max-w-[180px]">
+    <select name="host" class="ng-input max-w-[180px]">
       <option value="">All hosts</option>
       {% for ip, hostname in known_hosts %}
       <option value="{{ ip }}" {% if f_host == ip %}selected{% endif %}>{{ hostname or ip }}</option>
@@ -58,10 +58,10 @@
 
     <!-- App filter -->
     <input type="text" name="app" value="{{ f_app }}" placeholder="App name..."
-           class="px-3 py-2 rounded-lg bg-card border border-border text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 w-32">
+           class="ng-input w-32">
 
     <!-- Time range -->
-    <select name="hours" class="px-3 py-2 rounded-lg bg-card border border-border text-sm text-white focus:outline-none focus:border-indigo-500/50">
+    <select name="hours" class="ng-input">
       {% for h in [1, 6, 12, 24, 48, 168] %}
       <option value="{{ h }}" {% if f_hours == h %}selected{% endif %}>
         {% if h < 24 %}{{ h }}h{% elif h == 24 %}24h{% elif h == 48 %}2d{% else %}7d{% endif %}
@@ -74,14 +74,14 @@
     {% endif %}
 
     <button type="submit"
-            class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors">
+            class="ng-btn ng-btn-primary">
       Filter
     </button>
   </form>
 
   {% if not messages %}
   <!-- Empty state -->
-  <div class="bg-card border border-border rounded-xl p-12 text-center">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-12 text-center">
     <div class="w-12 h-12 rounded-full bg-slate-500/10 flex items-center justify-center mx-auto mb-4">
       <svg class="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -94,11 +94,11 @@
   {% else %}
 
   <!-- Log table -->
-  <div class="bg-card border border-border rounded-xl overflow-hidden">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead>
-          <tr class="border-b border-border text-left">
+          <tr class="border-b border-white/[0.08] text-left">
             <th class="px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider w-[140px]">Time</th>
             <th class="px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider w-[60px]">Sev</th>
             <th class="px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider w-[140px]">Host</th>
@@ -106,7 +106,7 @@
             <th class="px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Message</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-border">
+        <tbody class="divide-y divide-white/[0.08]">
           {% for msg in messages %}
           <tr class="hover:bg-white/[0.02] transition-colors
             {% if msg.severity is not none and msg.severity <= 2 %}bg-red-500/[0.03]
@@ -148,13 +148,13 @@
     <div class="flex items-center gap-1">
       {% if page > 1 %}
       <a href="?page={{ page - 1 }}&severity={{ f_severity if f_severity is not none else '' }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&hours={{ f_hours }}"
-         class="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white bg-card border border-border hover:border-slate-600 transition-colors">
+         class="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white bg-[--ng-glass-bg] border border-[--ng-glass-border] hover:border-slate-600 transition-colors">
         Prev
       </a>
       {% endif %}
       {% if page < total_pages %}
       <a href="?page={{ page + 1 }}&severity={{ f_severity if f_severity is not none else '' }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&hours={{ f_hours }}"
-         class="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white bg-card border border-border hover:border-slate-600 transition-colors">
+         class="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white bg-[--ng-glass-bg] border border-[--ng-glass-border] hover:border-slate-600 transition-colors">
         Next
       </a>
       {% endif %}

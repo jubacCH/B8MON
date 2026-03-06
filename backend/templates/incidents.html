@@ -8,7 +8,7 @@
   <!-- Header -->
   <div class="flex items-center justify-between mb-6">
     <div>
-      <h1 class="text-2xl font-bold text-white">Incidents</h1>
+      <h1 class="ng-heading text-2xl text-[--ng-text-primary]">Incidents</h1>
       <p class="text-slate-500 text-sm mt-0.5">Correlated issues detected by the correlation engine</p>
     </div>
 
@@ -16,7 +16,7 @@
     <div class="flex items-center gap-2">
       <a href="/incidents"
          class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
-           {% if not f_status %}bg-indigo-600 text-white{% else %}bg-card border border-border text-slate-400 hover:text-white{% endif %}">
+           {% if not f_status %}bg-indigo-600 text-white{% else %}bg-[--ng-glass-bg] border border-[--ng-glass-border] text-slate-400 hover:text-white{% endif %}">
         All <span class="ml-1 opacity-60">{{ counts.open + counts.acknowledged + counts.resolved }}</span>
       </a>
       {% if counts.open > 0 %}
@@ -44,7 +44,7 @@
   </div>
 
   {% if not incidents %}
-  <div class="bg-card border border-border rounded-xl p-12 text-center">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-12 text-center">
     <div class="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
       <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
@@ -63,7 +63,7 @@
          {% if inc.status == 'open' and inc.severity == 'critical' %}bg-red-500/[0.06] border-red-500/25 hover:border-red-500/50
          {% elif inc.status == 'open' %}bg-yellow-500/[0.05] border-yellow-500/20 hover:border-yellow-500/40
          {% elif inc.status == 'acknowledged' %}bg-yellow-500/[0.03] border-yellow-500/15 hover:border-yellow-500/30
-         {% else %}bg-card border-border hover:border-slate-600{% endif %}">
+         {% else %}bg-[--ng-glass-bg] border-white/[0.08] hover:border-slate-600{% endif %}">
 
       <!-- Status indicator -->
       <div class="mt-0.5 shrink-0">

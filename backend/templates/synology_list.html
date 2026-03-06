@@ -7,11 +7,11 @@
   <!-- Header -->
   <div class="flex items-center justify-between mb-6">
     <div>
-      <h1 class="text-2xl font-bold text-white">Synology NAS</h1>
+      <h1 class="ng-heading text-2xl text-[--ng-text-primary]">Synology NAS</h1>
       <p class="text-slate-500 text-sm mt-0.5">DSM storage and system monitoring</p>
     </div>
     <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
-            class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+            class="flex items-center gap-2 ng-btn ng-btn-primary">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
       </svg>
@@ -26,8 +26,8 @@
     {% set srv = item.server %}
     {% set d = item.data %}
     <a href="/synology/{{ srv.id }}"
-       class="block bg-[#13151f] border rounded-xl p-5 hover:border-[#3a3d4e] transition-colors
-              {% if item.error %}border-red-500/30{% elif d %}border-[#252836]{% else %}border-[#252836]{% endif %}">
+       class="block bg-[--ng-glass-bg] border rounded-xl p-5 hover:border-[--ng-glass-highlight] transition-colors
+              {% if item.error %}border-red-500/30{% elif d %}border-[--ng-glass-border]{% else %}border-[--ng-glass-border]{% endif %}">
       <!-- Card header -->
       <div class="flex items-start justify-between mb-4">
         <div class="flex-1 min-w-0">
@@ -101,7 +101,7 @@
             {{ d.totals.storage_used_gb }} / {{ d.totals.storage_total_gb }} GB
           </span>
         </div>
-        <div class="w-full h-1.5 bg-[#252836] rounded-full overflow-hidden">
+        <div class="w-full h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
           <div class="h-full rounded-full
                       {% if d.totals.storage_pct > 90 %}bg-red-400{% elif d.totals.storage_pct > 75 %}bg-amber-400{% else %}bg-blue-400{% endif %}"
                style="width: {{ [d.totals.storage_pct, 100]|min }}%"></div>
@@ -143,7 +143,7 @@
   {% else %}
   <!-- Empty state -->
   <div class="flex flex-col items-center justify-center py-24 text-center">
-    <div class="w-14 h-14 rounded-2xl bg-[#13151f] border border-[#252836] flex items-center justify-center mb-4">
+    <div class="w-14 h-14 rounded-2xl bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl flex items-center justify-center mb-4">
       <svg class="w-7 h-7 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
               d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
@@ -152,7 +152,7 @@
     <p class="text-white font-semibold mb-1">No Synology NAS configured</p>
     <p class="text-slate-500 text-sm mb-6">Add your first Synology DSM server to start monitoring.</p>
     <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+            class="ng-btn ng-btn-primary">
       Add NAS
     </button>
   </div>
@@ -163,7 +163,7 @@
 <!-- Add NAS Modal -->
 <div id="add-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
      onclick="if(event.target===this)this.classList.add('hidden')">
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 w-full max-w-md shadow-2xl">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-6 w-full max-w-md shadow-2xl">
     <div class="flex items-center justify-between mb-5">
       <h2 class="text-white font-semibold">Add Synology NAS</h2>
       <button onclick="document.getElementById('add-modal').classList.add('hidden')"
@@ -177,47 +177,42 @@
       <div>
         <label class="block text-xs font-medium text-slate-400 mb-1.5">Display Name</label>
         <input type="text" name="name" placeholder="My NAS" required
-               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                      placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+               class="w-full ng-input">
       </div>
       <div class="grid grid-cols-3 gap-3">
         <div class="col-span-2">
           <label class="block text-xs font-medium text-slate-400 mb-1.5">Host / IP</label>
           <input type="text" name="host" placeholder="192.168.1.100" required
-                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                        placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+                 class="w-full ng-input">
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5">Port</label>
           <input type="number" name="port" value="5001" required
-                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                        focus:outline-none focus:border-blue-500 transition-colors">
+                 class="ng-input">
         </div>
       </div>
       <div>
         <label class="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
         <input type="text" name="username" placeholder="admin" required
-               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                      placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+               class="w-full ng-input">
       </div>
       <div>
         <label class="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
         <input type="password" name="password" required
-               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                      focus:outline-none focus:border-blue-500 transition-colors">
+               class="ng-input">
       </div>
       <div class="flex items-center gap-2">
         <input type="checkbox" name="verify_ssl" id="add_verify_ssl" value="on"
-               class="w-4 h-4 rounded border-[#252836] bg-[#0b0d14] accent-blue-600">
+               class="w-4 h-4 rounded border-[--ng-glass-border] bg-white/[0.02] accent-[--ng-primary]">
         <label for="add_verify_ssl" class="text-sm text-slate-400">Verify SSL certificate</label>
       </div>
       <div class="flex gap-3 pt-1">
         <button type="submit"
-                class="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+                class="flex-1 py-2 ng-btn ng-btn-primary">
           Add NAS
         </button>
         <button type="button" onclick="document.getElementById('add-modal').classList.add('hidden')"
-                class="px-4 py-2 bg-[#252836] hover:bg-[#2a2d3e] text-slate-300 text-sm rounded-lg transition-colors">
+                class="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 text-sm rounded-lg transition-colors">
           Cancel
         </button>
       </div>

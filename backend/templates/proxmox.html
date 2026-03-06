@@ -7,11 +7,11 @@
   <!-- Header -->
   <div class="flex items-center justify-between mb-8">
     <div>
-      <h1 class="text-2xl font-bold text-white">Proxmox</h1>
-      <p class="text-slate-500 text-sm mt-0.5">Manage Proxmox VE clusters</p>
+      <h1 class="ng-heading text-2xl text-[--ng-text-primary]">Proxmox</h1>
+      <p class="text-[--ng-text-muted] text-sm mt-0.5">Manage Proxmox VE clusters</p>
     </div>
     <button type="button" onclick="document.getElementById('add-form').classList.toggle('hidden')"
-            class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+            class="ng-btn ng-btn-primary flex items-center gap-2">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
       </svg>
@@ -20,50 +20,46 @@
   </div>
 
   <!-- Add cluster form -->
-  <div id="add-form" class="hidden bg-[#13151f] border border-[#252836] rounded-xl p-6 mb-6">
-    <h2 class="text-sm font-semibold text-slate-300 mb-5">New Proxmox cluster</h2>
+  <div id="add-form" class="hidden bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-6 mb-6">
+    <h2 class="ng-heading text-sm text-[--ng-text-secondary] mb-5">New Proxmox cluster</h2>
     <form method="post" action="/proxmox/add" class="space-y-4">
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5">Display name</label>
+          <label class="block text-xs font-medium text-[--ng-text-secondary] mb-1.5">Display name</label>
           <input type="text" name="name" placeholder="e.g. Home Cluster"
-                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                        placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors" required>
+                 class="ng-input" required>
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5">Host URL</label>
+          <label class="block text-xs font-medium text-[--ng-text-secondary] mb-1.5">Host URL</label>
           <input type="text" name="host" placeholder="https://192.168.1.100:8006"
-                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                        placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors" required>
+                 class="ng-input" required>
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5">API Token ID</label>
+          <label class="block text-xs font-medium text-[--ng-text-secondary] mb-1.5">API Token ID</label>
           <input type="text" name="token_id" placeholder="user@realm!tokenid"
-                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                        placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors" required>
+                 class="ng-input" required>
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-400 mb-1.5">API Token Secret</label>
+          <label class="block text-xs font-medium text-[--ng-text-secondary] mb-1.5">API Token Secret</label>
           <input type="password" name="token_secret" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                        placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors" required>
+                 class="ng-input" required>
         </div>
       </div>
       <div class="flex items-center gap-3">
         <label class="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" name="verify_ssl"
-                 class="w-4 h-4 rounded border-[#252836] bg-[#0b0d14] accent-blue-600">
-          <span class="text-sm text-slate-400">Verify SSL certificate</span>
+                 class="w-4 h-4 rounded border-[--ng-glass-border] bg-white/[0.03] accent-[--ng-primary]">
+          <span class="text-sm text-[--ng-text-secondary]">Verify SSL certificate</span>
         </label>
-        <span class="text-xs text-slate-600">(disable for self-signed certs)</span>
+        <span class="text-xs text-[--ng-text-muted]">(disable for self-signed certs)</span>
       </div>
       <div class="flex gap-2 pt-1">
         <button type="submit"
-                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+                class="ng-btn ng-btn-primary">
           Add cluster
         </button>
         <button type="button" onclick="document.getElementById('add-form').classList.add('hidden')"
-                class="px-4 py-2 text-slate-400 hover:text-white text-sm rounded-lg transition-colors">
+                class="ng-btn ng-btn-ghost">
           Cancel
         </button>
       </div>
@@ -75,12 +71,12 @@
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
     {% for cluster in clusters %}
     <a href="/proxmox/{{ cluster.id }}"
-       class="block bg-[#13151f] border border-[#252836] rounded-xl p-5
-              hover:border-[#3a3d4e] hover:translate-y-[-1px] hover:shadow-lg hover:shadow-black/30 transition-all">
+       class="block bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-5
+              hover:border-[--ng-glass-highlight] hover:translate-y-[-1px] hover:shadow-lg hover:shadow-black/30 transition-all">
       <div class="flex items-start justify-between mb-3">
         <div>
           <p class="text-white font-semibold">{{ cluster.name }}</p>
-          <p class="text-slate-500 text-xs mt-0.5">{{ cluster.host }}</p>
+          <p class="text-[--ng-text-muted] text-xs mt-0.5">{{ cluster.host }}</p>
         </div>
         <div class="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
           <svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -89,8 +85,8 @@
           </svg>
         </div>
       </div>
-      <div class="border-t border-[#252836] pt-3 flex items-center justify-between">
-        <span class="text-xs text-slate-500">{{ cluster.token_id }}</span>
+      <div class="border-t border-white/[0.08] pt-3 flex items-center justify-between">
+        <span class="text-xs text-[--ng-text-muted]">{{ cluster.token_id }}</span>
         <span class="text-xs px-2 py-0.5 rounded-full {% if cluster.verify_ssl %}bg-emerald-500/10 text-emerald-400{% else %}bg-yellow-500/10 text-yellow-400{% endif %}">
           {% if cluster.verify_ssl %}SSL on{% else %}SSL off{% endif %}
         </span>
@@ -100,15 +96,15 @@
   </div>
 
   {% else %}
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-16 text-center">
-    <div class="w-12 h-12 rounded-full bg-[#252836] flex items-center justify-center mx-auto mb-4">
-      <svg class="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-16 text-center">
+    <div class="w-12 h-12 rounded-full bg-white/[0.06] flex items-center justify-center mx-auto mb-4">
+      <svg class="w-6 h-6 text-[--ng-text-muted]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M5 12h14M12 5l7 7-7 7"/>
       </svg>
     </div>
-    <p class="text-slate-400 font-medium">No clusters configured</p>
-    <p class="text-slate-600 text-sm mt-1">Click "Add cluster" to connect your Proxmox VE</p>
+    <p class="text-[--ng-text-secondary] font-medium">No clusters configured</p>
+    <p class="text-[--ng-text-muted] text-sm mt-1">Click "Add cluster" to connect your Proxmox VE</p>
   </div>
   {% endif %}
 

@@ -7,14 +7,14 @@
 
   <!-- Header -->
   <div class="flex items-center gap-3 mb-6">
-    <a href="/incidents" title="Back to incidents" class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-[#252836] transition-colors">
+    <a href="/incidents" title="Back to incidents" class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/[0.06] transition-colors">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
       </svg>
     </a>
     <div class="flex-1 min-w-0">
       <div class="flex items-center gap-2.5 flex-wrap">
-        <h1 class="text-2xl font-bold text-white">Incident #{{ incident.id }}</h1>
+        <h1 class="ng-heading text-2xl text-[--ng-text-primary]">Incident #{{ incident.id }}</h1>
         {{ severity_pill(incident.severity) }}
         {{ status_pill(incident.status) }}
       </div>
@@ -28,14 +28,14 @@
       {% if incident.status == 'open' %}
       <form method="post" action="/incidents/{{ incident.id }}/acknowledge">
         <button type="submit"
-                class="px-4 py-2 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium transition-colors">
+                class="ng-btn px-4 py-2 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium">
           Acknowledge
         </button>
       </form>
       {% endif %}
       <form method="post" action="/incidents/{{ incident.id }}/resolve">
         <button type="submit"
-                class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors">
+                class="ng-btn px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">
           Resolve
         </button>
       </form>
@@ -45,15 +45,15 @@
 
   <!-- Info cards -->
   <div class="grid grid-cols-4 gap-4 mb-6">
-    <div class="bg-card border border-border rounded-xl p-4">
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-4">
       <p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Created</p>
       <p class="text-white text-sm font-medium">{{ incident.created_at.strftime("%d.%m.%Y %H:%M:%S") }}</p>
     </div>
-    <div class="bg-card border border-border rounded-xl p-4">
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-4">
       <p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Last updated</p>
       <p class="text-white text-sm font-medium">{{ incident.updated_at.strftime("%d.%m.%Y %H:%M:%S") }}</p>
     </div>
-    <div class="bg-card border border-border rounded-xl p-4">
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-4">
       <p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Duration</p>
       {% set end_time = incident.resolved_at or None %}
       {% if end_time %}
@@ -72,19 +72,19 @@
         {% endif %}
       </p>
     </div>
-    <div class="bg-card border border-border rounded-xl p-4">
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-4">
       <p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Acknowledged by</p>
       <p class="text-white text-sm font-medium">{{ incident.acknowledged_by or '—' }}</p>
     </div>
   </div>
 
   <!-- Event timeline -->
-  <div class="bg-card border border-border rounded-xl p-6">
-    <h2 class="text-sm font-semibold text-slate-300 mb-5">Event Timeline</h2>
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-6">
+    <h2 class="ng-heading text-sm text-[--ng-text-secondary] mb-5">Event Timeline</h2>
 
     <div class="relative">
       <!-- Vertical line -->
-      <div class="absolute left-3 top-2 bottom-2 w-px bg-border"></div>
+      <div class="absolute left-3 top-2 bottom-2 w-px bg-white/[0.08]"></div>
 
       <div class="space-y-4">
         {% for event in incident.events | reverse %}

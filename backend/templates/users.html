@@ -7,7 +7,7 @@
   <!-- Header -->
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-xl font-semibold text-white">User Management</h1>
+      <h1 class="ng-heading text-xl text-[--ng-text-primary]">User Management</h1>
       <p class="text-sm text-slate-500 mt-0.5">Manage accounts and roles</p>
     </div>
   </div>
@@ -45,22 +45,22 @@
   {% endif %}
 
   <!-- Users table -->
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl overflow-hidden">
-    <div class="px-5 py-3.5 border-b border-[#252836]">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl overflow-hidden">
+    <div class="px-5 py-3.5 border-b border-white/[0.08]">
       <h2 class="text-sm font-medium text-white">Users</h2>
     </div>
     <table class="w-full text-sm">
       <thead>
-        <tr class="border-b border-[#252836] text-slate-500 text-xs uppercase tracking-wide">
+        <tr class="border-b border-white/[0.08] text-slate-500 text-xs uppercase tracking-wide">
           <th class="text-left px-5 py-3 font-medium">Username</th>
           <th class="text-left px-5 py-3 font-medium">Role</th>
           <th class="text-left px-5 py-3 font-medium">Created</th>
           <th class="text-right px-5 py-3 font-medium">Actions</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-[#252836]">
+      <tbody class="divide-y divide-white/[0.08]">
         {% for u in users %}
-        <tr class="hover:bg-[#1a1d2e]/50 transition-colors">
+        <tr class="hover:bg-white/[0.04] transition-colors">
           <td class="px-5 py-3.5 text-white font-medium">
             {{ u.username }}
             {% if request.state.current_user and request.state.current_user.id == u.id %}
@@ -91,11 +91,11 @@
           <td class="px-5 py-3.5 text-right">
             <div class="flex items-center justify-end gap-2">
               <button onclick="openRoleModal({{ u.id }}, '{{ u.username }}', '{{ u.role }}')"
-                      class="px-2.5 py-1 text-xs text-slate-400 hover:text-white hover:bg-[#252836] rounded-lg transition-colors">
+                      class="px-2.5 py-1 text-xs text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors">
                 Edit role
               </button>
               <button onclick="openPasswordModal({{ u.id }}, '{{ u.username }}')"
-                      class="px-2.5 py-1 text-xs text-slate-400 hover:text-white hover:bg-[#252836] rounded-lg transition-colors">
+                      class="px-2.5 py-1 text-xs text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors">
                 Reset PW
               </button>
               {% if not (request.state.current_user and request.state.current_user.id == u.id) %}
@@ -116,42 +116,39 @@
   </div>
 
   <!-- Add User -->
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl">
-    <div class="px-5 py-3.5 border-b border-[#252836]">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl">
+    <div class="px-5 py-3.5 border-b border-white/[0.08]">
       <h2 class="text-sm font-medium text-white">Add User</h2>
     </div>
     <form method="post" action="/users/add" class="px-5 py-4 flex flex-wrap gap-3 items-end">
       <div class="flex-1 min-w-36">
         <label class="block text-xs text-slate-500 mb-1.5">Username</label>
         <input type="text" name="username" required autocomplete="off"
-               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                      focus:outline-none focus:border-blue-500 transition-colors">
+               class="ng-input">
       </div>
       <div class="flex-1 min-w-36">
         <label class="block text-xs text-slate-500 mb-1.5">Password</label>
         <input type="password" name="password" required minlength="6" autocomplete="new-password"
-               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                      focus:outline-none focus:border-blue-500 transition-colors">
+               class="ng-input">
       </div>
       <div class="w-40">
         <label class="block text-xs text-slate-500 mb-1.5">Role</label>
         <select name="role"
-                class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                       focus:outline-none focus:border-blue-500 transition-colors">
+                class="ng-input">
           <option value="readonly">Read only</option>
           <option value="editor">Editor</option>
           <option value="admin">Admin</option>
         </select>
       </div>
       <button type="submit"
-              class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+              class="ng-btn ng-btn-primary">
         Add User
       </button>
     </form>
   </div>
 
   <!-- Role info -->
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl px-5 py-4 space-y-2">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl px-5 py-4 space-y-2">
     <p class="text-xs font-medium text-slate-400 mb-3">Role permissions</p>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-500">
       <div class="space-y-1">
@@ -174,15 +171,14 @@
 <!-- Edit Role Modal -->
 <div id="role-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
      onclick="if(event.target===this)this.classList.add('hidden')">
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 w-full max-w-sm shadow-2xl">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-6 w-full max-w-sm shadow-2xl">
     <h2 class="text-white font-semibold mb-4">Edit Role</h2>
     <p class="text-sm text-slate-400 mb-4">User: <span id="role-modal-username" class="text-white font-medium"></span></p>
     <form id="role-modal-form" method="post">
       <div class="mb-4">
         <label class="block text-xs text-slate-500 mb-1.5">Role</label>
         <select name="role" id="role-modal-select"
-                class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                       focus:outline-none focus:border-blue-500 transition-colors">
+                class="ng-input">
           <option value="readonly">Read only</option>
           <option value="editor">Editor</option>
           <option value="admin">Admin</option>
@@ -190,11 +186,11 @@
       </div>
       <div class="flex gap-2 justify-end">
         <button type="button" onclick="document.getElementById('role-modal').classList.add('hidden')"
-                class="px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-[#252836] rounded-lg transition-colors">
+                class="px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors">
           Cancel
         </button>
         <button type="submit"
-                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+                class="ng-btn ng-btn-primary">
           Save
         </button>
       </div>
@@ -205,23 +201,22 @@
 <!-- Reset Password Modal -->
 <div id="password-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
      onclick="if(event.target===this)this.classList.add('hidden')">
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 w-full max-w-sm shadow-2xl">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-6 w-full max-w-sm shadow-2xl">
     <h2 class="text-white font-semibold mb-4">Reset Password</h2>
     <p class="text-sm text-slate-400 mb-4">User: <span id="pw-modal-username" class="text-white font-medium"></span></p>
     <form id="pw-modal-form" method="post">
       <div class="mb-4">
         <label class="block text-xs text-slate-500 mb-1.5">New Password</label>
         <input type="password" name="password" required minlength="6" autocomplete="new-password"
-               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                      focus:outline-none focus:border-blue-500 transition-colors">
+               class="ng-input">
       </div>
       <div class="flex gap-2 justify-end">
         <button type="button" onclick="document.getElementById('password-modal').classList.add('hidden')"
-                class="px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-[#252836] rounded-lg transition-colors">
+                class="px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors">
           Cancel
         </button>
         <button type="submit"
-                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+                class="ng-btn ng-btn-primary">
           Reset
         </button>
       </div>

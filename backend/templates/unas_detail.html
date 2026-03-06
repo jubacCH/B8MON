@@ -6,23 +6,23 @@
 
   <!-- Header -->
   <div class="flex items-center gap-3 mb-6">
-    <a href="/unas" class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-[#252836] transition-colors">
+    <a href="/unas" class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/[0.06] transition-colors">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
       </svg>
     </a>
     <div class="flex-1 min-w-0">
       <div class="flex items-center gap-2.5 flex-wrap">
-        <h1 class="text-2xl font-bold text-white">{{ server.name }}</h1>
+        <h1 class="ng-heading text-2xl text-[--ng-text-primary]">{{ server.name }}</h1>
         {% if data %}
           <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">Online</span>
         {% elif error %}
           <span class="px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20">Error</span>
         {% else %}
-          <span class="px-2 py-0.5 rounded-full bg-[#252836] text-slate-400 text-xs font-medium">No data</span>
+          <span class="px-2 py-0.5 rounded-full bg-white/[0.06] text-slate-400 text-xs font-medium">No data</span>
         {% endif %}
         {% if data and data.system.version %}
-        <span class="px-2 py-0.5 rounded-full bg-[#252836] text-slate-400 text-xs">UniFi OS {{ data.system.version }}</span>
+        <span class="px-2 py-0.5 rounded-full bg-white/[0.06] text-slate-400 text-xs">UniFi OS {{ data.system.version }}</span>
         {% endif %}
       </div>
       <p class="text-slate-500 text-sm mt-0.5">{{ server.host }}{% if snap %} · Last update: {{ snap.timestamp.strftime("%H:%M:%S") }}{% endif %}</p>
@@ -38,7 +38,7 @@
   {% endif %}
 
   <!-- Tabs -->
-  <div class="flex gap-1 mb-6 border-b border-[#252836]">
+  <div class="flex gap-1 mb-6 border-b border-[--ng-glass-border]">
     {% for tab_id, tab_label in [("overview","Overview"),("disks","Disks"),("raids","RAID"),("settings","Settings")] %}
     <button type="button" id="tab-{{ tab_id }}"
             onclick="switchTab('{{ tab_id }}')"
@@ -68,33 +68,33 @@
     <!-- Stats row -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
       <!-- RAM -->
-      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-5">
         <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">RAM</p>
         <p class="text-2xl font-bold {% if sys.mem_pct >= 90 %}text-red-400{% elif sys.mem_pct >= 75 %}text-yellow-400{% else %}text-white{% endif %}">
           {{ sys.mem_pct }}%
         </p>
         <p class="text-slate-500 text-xs mt-1">{{ sys.mem_used_gb }} / {{ sys.mem_total_gb }} GB</p>
-        <div class="mt-2 h-1 bg-[#252836] rounded-full overflow-hidden">
+        <div class="mt-2 h-1 bg-white/[0.06] rounded-full overflow-hidden">
           <div class="h-full rounded-full {% if sys.mem_pct >= 90 %}bg-red-400{% elif sys.mem_pct >= 75 %}bg-yellow-400{% else %}bg-purple-500{% endif %}"
                style="width: {{ [sys.mem_pct, 100]|min }}%"></div>
         </div>
       </div>
 
       <!-- Storage -->
-      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-5">
         <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Storage</p>
         <p class="text-2xl font-bold {% if tot.storage_pct >= 90 %}text-red-400{% elif tot.storage_pct >= 75 %}text-yellow-400{% else %}text-white{% endif %}">
           {{ tot.storage_pct }}%
         </p>
         <p class="text-slate-500 text-xs mt-1">{{ tot.storage_used_gb }} / {{ tot.storage_total_gb }} GB</p>
-        <div class="mt-2 h-1 bg-[#252836] rounded-full overflow-hidden">
+        <div class="mt-2 h-1 bg-white/[0.06] rounded-full overflow-hidden">
           <div class="h-full rounded-full {% if tot.storage_pct >= 90 %}bg-red-400{% elif tot.storage_pct >= 75 %}bg-yellow-400{% else %}bg-blue-500{% endif %}"
                style="width: {{ [tot.storage_pct, 100]|min }}%"></div>
         </div>
       </div>
 
       <!-- Disks -->
-      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-5">
         <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Disks</p>
         {% if tot.disks_error > 0 %}
         <p class="text-2xl font-bold text-red-400">{{ tot.disks_error }} error{{ 's' if tot.disks_error != 1 }}</p>
@@ -108,9 +108,9 @@
       </div>
 
       <!-- Uptime / CPU temp -->
-      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-5">
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-5">
         <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Uptime</p>
-        <p class="text-2xl font-bold text-white">{{ fmt_uptime_unas(sys.uptime_s) }}</p>
+        <p class="ng-heading text-2xl text-[--ng-text-primary]">{{ fmt_uptime_unas(sys.uptime_s) }}</p>
         {% if sys.hostname %}<p class="text-slate-500 text-xs mt-1 font-mono">{{ sys.hostname }}</p>{% endif %}
         {% if sys.cpu_temp is not none %}
         <p class="text-xs mt-1.5 {% if sys.cpu_temp >= 80 %}text-red-400{% elif sys.cpu_temp >= 70 %}text-amber-400{% else %}text-slate-500{% endif %}">
@@ -122,18 +122,18 @@
 
     <!-- Pools overview -->
     {% if data.pools %}
-    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 mb-6">
-      <h2 class="text-sm font-semibold text-slate-300 mb-4">Storage pools</h2>
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-6 mb-6">
+      <h2 class="ng-heading text-sm text-[--ng-text-secondary] mb-4">Storage pools</h2>
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {% for p in data.pools %}
-        <div class="bg-[#0b0d14] rounded-lg p-4">
+        <div class="bg-white/[0.02] rounded-lg p-4">
           <div class="flex items-center justify-between mb-2">
             <p class="text-white font-medium text-sm">{{ p.name or 'Pool' }}</p>
             <span class="text-[10px] px-1.5 py-0.5 rounded {% if p.healthy %}bg-emerald-500/10 text-emerald-400{% else %}bg-red-500/10 text-red-400{% endif %}">
               {{ 'Healthy' if p.healthy else 'Degraded' }}
             </span>
           </div>
-          <div class="h-2 bg-[#252836] rounded-full overflow-hidden mb-2">
+          <div class="h-2 bg-white/[0.06] rounded-full overflow-hidden mb-2">
             <div class="h-full rounded-full {% if p.pct >= 90 %}bg-red-400{% elif p.pct >= 75 %}bg-yellow-400{% else %}bg-blue-500{% endif %}"
                  style="width: {{ [p.pct, 100]|min }}%"></div>
           </div>
@@ -149,11 +149,11 @@
 
     <!-- RAID overview -->
     {% if data.raids %}
-    <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 mb-6">
-      <h2 class="text-sm font-semibold text-slate-300 mb-4">RAID arrays</h2>
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-6 mb-6">
+      <h2 class="ng-heading text-sm text-[--ng-text-secondary] mb-4">RAID arrays</h2>
       <div class="space-y-2">
         {% for r in data.raids %}
-        <div class="flex items-center gap-4 py-2.5 border-b border-[#252836] last:border-0">
+        <div class="flex items-center gap-4 py-2.5 border-b border-[--ng-glass-border] last:border-0">
           <span class="text-[10px] px-2 py-0.5 rounded font-mono bg-blue-500/10 text-blue-400 shrink-0">{{ r.type_label }}</span>
           <span class="text-white text-sm flex-1">{{ r.name or 'Array' }}</span>
           <span class="text-xs text-slate-500">{{ r.used_gb }} / {{ r.size_gb }} GB</span>
@@ -174,11 +174,11 @@
   <!-- ── DISKS ──────────────────────────────────────────────────────────────── -->
   <div id="panel-disks" class="hidden">
   {% if data and data.disks %}
-    <div class="bg-[#13151f] border border-[#252836] rounded-xl overflow-hidden">
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="text-left text-xs text-slate-500 border-b border-[#252836] bg-[#0b0d14]">
+            <tr class="text-left text-xs text-slate-500 border-b border-[--ng-glass-border] bg-white/[0.02]">
               <th class="px-5 py-3 font-medium">Drive</th>
               <th class="px-4 py-3 font-medium">Model</th>
               <th class="px-4 py-3 font-medium">Type</th>
@@ -189,9 +189,9 @@
               <th class="px-5 py-3 font-medium">Status</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-[#252836]">
+          <tbody class="divide-y divide-white/[0.08]">
             {% for d in data.disks %}
-            <tr class="hover:bg-[#0b0d14] transition-colors">
+            <tr class="hover:bg-white/[0.02] transition-colors">
               <td class="px-5 py-3">
                 <p class="text-white font-medium">{{ d.name }}</p>
                 {% if d.serial %}<p class="text-slate-600 text-[10px] font-mono mt-0.5">{{ d.serial }}</p>{% endif %}
@@ -257,7 +257,7 @@
   {% if data and data.raids %}
     <div class="space-y-4">
       {% for r in data.raids %}
-      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-6">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
             <h2 class="text-white font-semibold">{{ r.name or 'Array' }}</h2>
@@ -282,7 +282,7 @@
           </div>
         </div>
         {% if r.pct > 0 %}
-        <div class="mt-4 h-2 bg-[#252836] rounded-full overflow-hidden">
+        <div class="mt-4 h-2 bg-white/[0.06] rounded-full overflow-hidden">
           <div class="h-full rounded-full {% if r.pct >= 90 %}bg-red-400{% elif r.pct >= 75 %}bg-yellow-400{% else %}bg-blue-500{% endif %}"
                style="width: {{ [r.pct, 100]|min }}%"></div>
         </div>
@@ -299,47 +299,43 @@
   <!-- ── SETTINGS ───────────────────────────────────────────────────────────── -->
   <div id="panel-settings" class="hidden">
     <div class="grid grid-cols-2 gap-6">
-      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
-        <h2 class="text-sm font-semibold text-slate-300 mb-5">Edit server</h2>
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-6">
+        <h2 class="ng-heading text-sm text-[--ng-text-secondary] mb-5">Edit server</h2>
         <form method="post" action="/unas/{{ server.id }}/edit" class="space-y-4">
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-1.5">Display name</label>
             <input type="text" name="name" value="{{ server.name }}" required
-                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                          focus:outline-none focus:border-blue-500 transition-colors">
+                   class="ng-input">
           </div>
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-1.5">Host URL</label>
             <input type="text" name="host" value="{{ server.host }}" required
-                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                          focus:outline-none focus:border-blue-500 transition-colors">
+                   class="ng-input">
           </div>
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
             <input type="text" name="username" value="{{ server.username }}" required
-                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                          focus:outline-none focus:border-blue-500 transition-colors">
+                   class="ng-input">
           </div>
           <div>
             <label class="block text-xs font-medium text-slate-400 mb-1.5">New password <span class="text-slate-600">(leave empty to keep)</span></label>
             <input type="password" name="password" placeholder="••••••••"
-                   class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                          focus:outline-none focus:border-blue-500 transition-colors">
+                   class="ng-input">
           </div>
           <label class="flex items-center gap-2 cursor-pointer select-none">
             <input type="checkbox" name="verify_ssl" value="on" {% if server.verify_ssl %}checked{% endif %}
-                   class="w-3.5 h-3.5 rounded border-[#3a3d4e] bg-[#0b0d14] accent-blue-500">
+                   class="w-3.5 h-3.5 rounded border-[--ng-glass-highlight] bg-white/[0.02] accent-[--ng-primary]">
             <span class="text-sm text-slate-300">Verify SSL certificate</span>
           </label>
           <button type="submit"
-                  class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+                  class="ng-btn ng-btn-primary">
             Save changes
           </button>
         </form>
       </div>
 
-      <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6">
-        <h2 class="text-sm font-semibold text-slate-300 mb-5">Danger zone</h2>
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-6">
+        <h2 class="ng-heading text-sm text-[--ng-text-secondary] mb-5">Danger zone</h2>
         <form method="post" action="/unas/{{ server.id }}/delete"
               onsubmit="return confirm('Delete {{ server.name }} and all its data?')">
           <button type="submit"

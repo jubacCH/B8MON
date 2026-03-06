@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
 
 
-app = FastAPI(title="Vigil", lifespan=lifespan)
+app = FastAPI(title="NODEGLOW", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -141,7 +141,7 @@ async def inject_globals(request: Request, call_next):
         request.state.current_user = None
 
     async with AsyncSessionLocal() as db:
-        request.state.site_name = await get_setting(db, "site_name", "Vigil")
+        request.state.site_name = await get_setting(db, "site_name", "NODEGLOW")
         request.state.nav_counts = await _get_nav_counts(db)
     return await call_next(request)
 

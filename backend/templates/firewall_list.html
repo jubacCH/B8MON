@@ -7,11 +7,11 @@
   <!-- Header -->
   <div class="flex items-center justify-between mb-6">
     <div>
-      <h1 class="text-2xl font-bold text-white">Firewall</h1>
+      <h1 class="ng-heading text-2xl text-[--ng-text-primary]">Firewall</h1>
       <p class="text-slate-500 text-sm mt-0.5">OPNsense and pfSense monitoring</p>
     </div>
     <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
-            class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+            class="flex items-center gap-2 ng-btn ng-btn-primary">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
       </svg>
@@ -21,10 +21,10 @@
 
   {% if instance_data %}
   <!-- Instance table -->
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl overflow-hidden mb-8">
+  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl overflow-hidden mb-8">
     <table class="w-full text-sm">
       <thead>
-        <tr class="border-b border-[#252836]">
+        <tr class="border-b border-[--ng-glass-border]">
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Name</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Type</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Host</th>
@@ -37,11 +37,11 @@
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Checked</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-[#252836]">
+      <tbody class="divide-y divide-white/[0.08]">
         {% for item in instance_data %}
         {% set inst = item.instance %}
         {% set d = item.data %}
-        <tr class="hover:bg-[#1a1d2e] transition-colors cursor-pointer"
+        <tr class="hover:bg-white/[0.04] transition-colors cursor-pointer"
             onclick="window.location='/firewall/{{ inst.id }}'">
           <!-- Name -->
           <td class="px-5 py-3">
@@ -85,7 +85,7 @@
           <td class="px-5 py-3">
             {% if d %}
               <div class="flex items-center gap-2">
-                <div class="w-10 h-1 bg-[#252836] rounded-full overflow-hidden">
+                <div class="w-10 h-1 bg-white/[0.06] rounded-full overflow-hidden">
                   <div class="h-full rounded-full {% if d.cpu_pct > 80 %}bg-red-400{% elif d.cpu_pct > 60 %}bg-amber-400{% else %}bg-blue-400{% endif %}"
                        style="width: {{ [d.cpu_pct, 100]|min }}%"></div>
                 </div>
@@ -99,7 +99,7 @@
           <td class="px-5 py-3">
             {% if d %}
               <div class="flex items-center gap-2">
-                <div class="w-10 h-1 bg-[#252836] rounded-full overflow-hidden">
+                <div class="w-10 h-1 bg-white/[0.06] rounded-full overflow-hidden">
                   <div class="h-full rounded-full {% if d.mem_pct > 85 %}bg-red-400{% elif d.mem_pct > 65 %}bg-amber-400{% else %}bg-purple-400{% endif %}"
                        style="width: {{ [d.mem_pct, 100]|min }}%"></div>
                 </div>
@@ -129,7 +129,7 @@
   {% else %}
   <!-- Empty state -->
   <div class="flex flex-col items-center justify-center py-24 text-center">
-    <div class="w-14 h-14 rounded-2xl bg-[#13151f] border border-[#252836] flex items-center justify-center mb-4">
+    <div class="w-14 h-14 rounded-2xl bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl flex items-center justify-center mb-4">
       <svg class="w-7 h-7 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
               d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
@@ -138,7 +138,7 @@
     <p class="text-white font-semibold mb-1">No firewalls configured</p>
     <p class="text-slate-500 text-sm mb-6">Add an OPNsense or pfSense instance to start monitoring.</p>
     <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+            class="ng-btn ng-btn-primary">
       Add Firewall
     </button>
   </div>
@@ -149,7 +149,7 @@
 <!-- Add Firewall Modal -->
 <div id="add-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
      onclick="if(event.target===this)this.classList.add('hidden')">
-  <div class="bg-[#13151f] border border-[#252836] rounded-xl p-6 w-full max-w-md shadow-2xl">
+  <div class="glass-elevated p-6 w-full max-w-md shadow-2xl">
     <div class="flex items-center justify-between mb-5">
       <h2 class="text-white font-semibold">Add Firewall</h2>
       <button onclick="document.getElementById('add-modal').classList.add('hidden')"
@@ -163,20 +163,17 @@
       <div>
         <label class="block text-xs font-medium text-slate-400 mb-1.5">Display Name</label>
         <input type="text" name="name" placeholder="My Firewall" required
-               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                      placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+               class="w-full ng-input">
       </div>
       <div>
         <label class="block text-xs font-medium text-slate-400 mb-1.5">Host URL</label>
         <input type="text" name="host" placeholder="https://192.168.1.1" required
-               class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                      placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+               class="w-full ng-input">
       </div>
       <div>
         <label class="block text-xs font-medium text-slate-400 mb-1.5">Type</label>
         <select name="fw_type" id="add_fw_type" onchange="toggleAddFields()"
-                class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                       focus:outline-none focus:border-blue-500 transition-colors">
+                class="ng-input">
           <option value="opnsense">OPNsense</option>
           <option value="pfsense">pfSense</option>
         </select>
@@ -186,14 +183,12 @@
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5">API Key</label>
           <input type="text" name="api_key" placeholder="OPNsense API key"
-                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                        placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+                 class="w-full ng-input">
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5">API Secret</label>
           <input type="password" name="api_secret" placeholder="OPNsense API secret"
-                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                        placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+                 class="w-full ng-input">
         </div>
       </div>
       <!-- pfSense fields -->
@@ -201,28 +196,26 @@
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
           <input type="text" name="username" placeholder="admin"
-                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                        placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+                 class="w-full ng-input">
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
           <input type="password" name="password" placeholder="pfSense password"
-                 class="w-full px-3 py-2 bg-[#0b0d14] border border-[#252836] rounded-lg text-white text-sm
-                        placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors">
+                 class="w-full ng-input">
         </div>
       </div>
       <div class="flex items-center gap-2">
         <input type="checkbox" name="verify_ssl" id="add_verify_ssl" value="on"
-               class="w-4 h-4 rounded border-[#252836] bg-[#0b0d14] accent-blue-600">
+               class="w-4 h-4 rounded border-[--ng-glass-border] bg-white/[0.02] accent-[--ng-primary]">
         <label for="add_verify_ssl" class="text-sm text-slate-400">Verify SSL certificate</label>
       </div>
       <div class="flex gap-3 pt-1">
         <button type="submit"
-                class="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
+                class="flex-1 py-2 ng-btn ng-btn-primary">
           Add Firewall
         </button>
         <button type="button" onclick="document.getElementById('add-modal').classList.add('hidden')"
-                class="px-4 py-2 bg-[#252836] hover:bg-[#2a2d3e] text-slate-300 text-sm rounded-lg transition-colors">
+                class="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 text-sm rounded-lg transition-colors">
           Cancel
         </button>
       </div>
