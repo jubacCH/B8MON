@@ -17,6 +17,8 @@ from models.base import Base
 from models.integration import IntegrationConfig, Snapshot  # noqa: F401
 from models.settings import Setting, User, Session  # noqa: F401
 from models.ping import PingHost, PingResult  # noqa: F401
+from models.syslog import SyslogMessage  # noqa: F401
+from models.incident import Incident, IncidentEvent  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/status.html" import severity_pill, status_pill, status_dot %}
 {% block title %}Incidents – {{ request.state.site_name }}{% endblock %}
 
 {% block content %}
@@ -66,31 +67,14 @@
 
       <!-- Status indicator -->
       <div class="mt-0.5 shrink-0">
-        {% if inc.status == 'open' %}
-        <span class="w-2.5 h-2.5 rounded-full inline-block
-          {% if inc.severity == 'critical' %}bg-red-400 animate-pulse{% else %}bg-yellow-400{% endif %}"></span>
-        {% elif inc.status == 'acknowledged' %}
-        <span class="w-2.5 h-2.5 rounded-full inline-block bg-yellow-400/50"></span>
-        {% else %}
-        <span class="w-2.5 h-2.5 rounded-full inline-block bg-emerald-400/50"></span>
-        {% endif %}
+        {{ status_dot(inc.status, inc.severity) }}
       </div>
 
       <!-- Content -->
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
-          <span class="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide
-            {% if inc.severity == 'critical' %}bg-red-500/15 text-red-400
-            {% elif inc.severity == 'warning' %}bg-yellow-500/15 text-yellow-400
-            {% else %}bg-blue-500/15 text-blue-400{% endif %}">
-            {{ inc.severity }}
-          </span>
-          <span class="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide
-            {% if inc.status == 'open' %}bg-red-500/10 text-red-400
-            {% elif inc.status == 'acknowledged' %}bg-yellow-500/10 text-yellow-400
-            {% else %}bg-emerald-500/10 text-emerald-400{% endif %}">
-            {{ inc.status }}
-          </span>
+          {{ severity_pill(inc.severity) }}
+          {{ status_pill(inc.status) }}
           <span class="text-slate-600 text-[10px] font-mono">{{ inc.rule }}</span>
         </div>
         <p class="text-white font-semibold text-sm mt-1">{{ inc.title }}</p>

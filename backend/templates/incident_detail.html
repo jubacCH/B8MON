@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/status.html" import severity_pill, status_pill, event_type_pill %}
 {% block title %}Incident #{{ incident.id }} – {{ request.state.site_name }}{% endblock %}
 
 {% block content %}
@@ -14,18 +15,8 @@
     <div class="flex-1 min-w-0">
       <div class="flex items-center gap-2.5 flex-wrap">
         <h1 class="text-2xl font-bold text-white">Incident #{{ incident.id }}</h1>
-        <span class="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide
-          {% if incident.severity == 'critical' %}bg-red-500/15 text-red-400
-          {% elif incident.severity == 'warning' %}bg-yellow-500/15 text-yellow-400
-          {% else %}bg-blue-500/15 text-blue-400{% endif %}">
-          {{ incident.severity }}
-        </span>
-        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium
-          {% if incident.status == 'open' %}bg-red-500/10 text-red-400 border border-red-500/20
-          {% elif incident.status == 'acknowledged' %}bg-yellow-500/10 text-yellow-400 border border-yellow-500/20
-          {% else %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{% endif %}">
-          {{ incident.status }}
-        </span>
+        {{ severity_pill(incident.severity) }}
+        {{ status_pill(incident.status) }}
       </div>
       <p class="text-white text-sm mt-1">{{ incident.title }}</p>
       <p class="text-slate-600 text-xs mt-0.5 font-mono">rule: {{ incident.rule }}</p>
@@ -119,13 +110,7 @@
           <!-- Content -->
           <div class="flex-1 min-w-0 pb-1">
             <div class="flex items-center gap-2">
-              <span class="px-1.5 py-0.5 rounded text-[10px] font-medium uppercase
-                {% if event.event_type == 'created' %}bg-red-500/15 text-red-400
-                {% elif event.event_type == 'resolved' %}bg-emerald-500/15 text-emerald-400
-                {% elif event.event_type == 'acknowledged' %}bg-yellow-500/15 text-yellow-400
-                {% else %}bg-slate-500/10 text-slate-400{% endif %}">
-                {{ event.event_type }}
-              </span>
+              {{ event_type_pill(event.event_type) }}
               <span class="text-slate-600 text-xs tabular-nums">{{ event.timestamp.strftime("%d.%m. %H:%M:%S") }}</span>
             </div>
             <p class="text-slate-300 text-sm mt-1">{{ event.summary }}</p>
