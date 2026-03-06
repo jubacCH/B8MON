@@ -3,11 +3,13 @@
 One-time migration: copy data from old per-integration tables to the new
 generic IntegrationConfig + Snapshot tables.
 
-Run inside the backend/ directory:
-    python migrate_to_generic.py
+Works with both SQLite and PostgreSQL.
 
-Safe to run multiple times – skips integration types that already have rows
-in the new table.
+Run inside the container:
+    docker exec vigil python migrate_to_generic.py
+
+Safe to run multiple times -- skips if integration_configs already has rows.
+Use --force to re-run even if rows exist (deletes existing data first).
 """
 import asyncio
 import json
@@ -16,14 +18,24 @@ from datetime import datetime
 
 from sqlalchemy import text
 
-from config import DATABASE_URL, SECRET_KEY
+from config import DATABASE_URL
 from database import AsyncSessionLocal, decrypt_value
 from models.base import encrypt_value as new_encrypt
 from models.integration import IntegrationConfig, Snapshot
 from services.integration import encrypt_config
 
 
-# ── Mapping: old table → new integration type + field extraction ─────────────
+# ── Mapping: old table -> new integration type + field extraction ─────────────
+
+def _decrypt_safe(val) -> str:
+    """Decrypt a value, returning empty string if blank or invalid."""
+    if not val:
+        return ""
+    try:
+        return decrypt_value(str(val))
+    except Exception:
+        return str(val)
+
 
 MIGRATIONS = [
     {
@@ -46,8 +58,8 @@ MIGRATIONS = [
         "extract_config": lambda row: {
             "host": row["host"],
             "username": row["username"],
-            "password": _decrypt_safe(row["password_enc"]),
-            "site": row["site"] or "default",
+            "password": _decrypt_safe(row.get("password_enc", "")),
+            "site": row.get("site") or "default",
             "is_udm": bool(row.get("is_udm", False)),
             "verify_ssl": bool(row["verify_ssl"]),
         },
@@ -60,7 +72,7 @@ MIGRATIONS = [
         "extract_config": lambda row: {
             "host": row["host"],
             "username": row["username"],
-            "password": _decrypt_safe(row["password_enc"]),
+            "password": _decrypt_safe(row.get("password_enc", "")),
             "verify_ssl": bool(row["verify_ssl"]),
         },
     },
@@ -118,7 +130,7 @@ MIGRATIONS = [
             "host": row["host"],
             "port": row.get("port", 5001),
             "username": row["username"],
-            "password": _decrypt_safe(row["password_enc"]),
+            "password": _decrypt_safe(row.get("password_enc", "")),
             "verify_ssl": bool(row["verify_ssl"]),
         },
     },
@@ -176,9 +188,8 @@ MIGRATIONS = [
         "snapshot_table": "speedtest_results",
         "snapshot_fk": "config_id",
         "extract_config": lambda row: {
-            "server_id": row.get("server_id", ""),
+            "server_id": row.get("server_id") or "",
         },
-        # Speedtest results have different columns — convert to data_json
         "convert_snapshot": lambda row: {
             "download_mbps": row.get("download_mbps"),
             "upload_mbps": row.get("upload_mbps"),
@@ -208,47 +219,65 @@ MIGRATIONS = [
         "extract_config": lambda row: {
             "host": row["host"],
             "username": row["username"],
-            "password": _decrypt_safe(row["password_enc"]),
+            "password": _decrypt_safe(row.get("password_enc", "")),
             "verify_ssl": bool(row["verify_ssl"]),
         },
     },
 ]
 
 
-def _decrypt_safe(val: str) -> str:
-    """Decrypt a value, returning empty string if blank or invalid."""
-    if not val:
-        return ""
-    try:
-        return decrypt_value(val)
-    except Exception:
-        return val  # already plaintext or corrupted — keep as-is
+def _is_pg() -> bool:
+    return "postgresql" in (DATABASE_URL or "")
 
 
-def _table_exists(conn, table_name: str) -> bool:
-    """Check if a table exists (SQLite)."""
-    result = conn.execute(
-        text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t"),
-        {"t": table_name},
-    )
-    return result.fetchone() is not None
+def _table_exists_sql(table_name: str) -> str:
+    if _is_pg():
+        return f"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = '{table_name}')"
+    return f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'"
 
 
-async def migrate():
+async def _check_table(db, table_name: str) -> bool:
+    r = await db.execute(text(_table_exists_sql(table_name)))
+    val = r.scalar()
+    return bool(val)
+
+
+def _fix_val(val, col_name: str):
+    """Fix type mismatches between SQLite and PostgreSQL values."""
+    if val is None:
+        return val
+    # Boolean columns stored as int in SQLite
+    if col_name in ("ok", "verify_ssl", "enabled", "is_udm"):
+        return bool(val)
+    # Datetime columns stored as string in SQLite
+    if col_name in ("timestamp", "created_at"):
+        if isinstance(val, str):
+            for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+                try:
+                    return datetime.strptime(val, fmt)
+                except ValueError:
+                    continue
+        return val
+    return val
+
+
+async def migrate(force: bool = False):
     # Ensure new tables exist
     from models import init_db
     await init_db()
 
     async with AsyncSessionLocal() as db:
-        # Check if already migrated
-        result = await db.execute(
-            text("SELECT COUNT(*) FROM integration_configs")
-        )
+        result = await db.execute(text("SELECT COUNT(*) FROM integration_configs"))
         existing = result.scalar()
         if existing > 0:
-            print(f"integration_configs already has {existing} rows. Skipping.")
-            print("To re-run, delete all rows first: DELETE FROM integration_configs;")
-            return
+            if force:
+                print(f"--force: deleting {existing} existing integration_configs + snapshots...")
+                await db.execute(text("DELETE FROM snapshots"))
+                await db.execute(text("DELETE FROM integration_configs"))
+                await db.commit()
+            else:
+                print(f"integration_configs already has {existing} rows. Use --force to re-run.")
+                return
 
     total_configs = 0
     total_snaps = 0
@@ -260,25 +289,18 @@ async def migrate():
         snap_fk = m["snapshot_fk"]
 
         async with AsyncSessionLocal() as db:
-            # Check if old table exists
-            exists = await db.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t"),
-                {"t": config_table},
-            )
-            if not exists.fetchone():
-                print(f"  [{int_type}] table '{config_table}' not found — skipping")
+            if not await _check_table(db, config_table):
+                print(f"  [{int_type}] table '{config_table}' not found -- skipping")
                 continue
 
-            # Read old configs
             rows = await db.execute(text(f"SELECT * FROM {config_table}"))
             old_configs = [dict(row._mapping) for row in rows]
 
             if not old_configs:
-                print(f"  [{int_type}] no configs — skipping")
+                print(f"  [{int_type}] no configs -- skipping")
                 continue
 
-            # Map old_id → new IntegrationConfig
-            id_map: dict[int, int] = {}  # old_id → new_id
+            id_map: dict[int, int] = {}
 
             for old in old_configs:
                 try:
@@ -287,24 +309,23 @@ async def migrate():
                     print(f"  [{int_type}] error extracting config id={old['id']}: {e}")
                     continue
 
+                created_at = _fix_val(old.get("created_at"), "created_at")
+                if not isinstance(created_at, datetime):
+                    created_at = datetime.utcnow()
+
                 new_cfg = IntegrationConfig(
                     type=int_type,
                     name=old.get("name", int_type),
                     config_json=encrypt_config(config_dict),
                     enabled=True,
-                    created_at=old.get("created_at", datetime.utcnow()),
+                    created_at=created_at,
                 )
                 db.add(new_cfg)
-                await db.flush()  # get new_cfg.id
+                await db.flush()
                 id_map[old["id"]] = new_cfg.id
                 total_configs += 1
 
-            # Migrate snapshots
-            snap_exists = await db.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t"),
-                {"t": snap_table},
-            )
-            if snap_exists.fetchone():
+            if await _check_table(db, snap_table):
                 snap_rows = await db.execute(text(f"SELECT * FROM {snap_table}"))
                 for snap in snap_rows:
                     snap_dict = dict(snap._mapping)
@@ -313,17 +334,24 @@ async def migrate():
                     if not new_parent_id:
                         continue
 
-                    # Get data_json — either from column or via converter
                     if "convert_snapshot" in m:
                         data_json = json.dumps(m["convert_snapshot"](snap_dict))
                     else:
                         data_json = snap_dict.get("data_json")
 
+                    ts = _fix_val(snap_dict.get("timestamp"), "timestamp")
+                    if not isinstance(ts, datetime):
+                        ts = datetime.utcnow()
+
+                    ok_val = snap_dict.get("ok", True)
+                    if not isinstance(ok_val, bool):
+                        ok_val = bool(ok_val)
+
                     new_snap = Snapshot(
                         entity_type=int_type,
                         entity_id=new_parent_id,
-                        timestamp=snap_dict.get("timestamp", datetime.utcnow()),
-                        ok=bool(snap_dict.get("ok", True)),
+                        timestamp=ts,
+                        ok=ok_val,
                         data_json=data_json,
                         error=snap_dict.get("error"),
                     )
@@ -331,10 +359,22 @@ async def migrate():
                     total_snaps += 1
 
             await db.commit()
-            print(f"  [{int_type}] migrated {len(id_map)} configs, snapshots from {snap_table}")
+            print(f"  [{int_type}] migrated {len(id_map)} configs + snapshots")
+
+    # Reset PG sequences so new IDs don't collide
+    if _is_pg():
+        async with AsyncSessionLocal() as db:
+            for table in ("integration_configs", "snapshots"):
+                await db.execute(text(
+                    f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
+                    f"COALESCE((SELECT MAX(id) FROM {table}), 0) + 1, false)"
+                ))
+            await db.commit()
+        print("  PostgreSQL sequences reset.")
 
     print(f"\nDone! Migrated {total_configs} configs and {total_snaps} snapshots.")
 
 
 if __name__ == "__main__":
-    asyncio.run(migrate())
+    force = "--force" in sys.argv
+    asyncio.run(migrate(force=force))
