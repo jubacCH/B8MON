@@ -228,11 +228,19 @@ async def cleanup_old_results():
 # ── Scheduler lifecycle ──────────────────────────────────────────────────────
 
 
+async def run_correlation():
+    """Run the correlation engine."""
+    from services.correlation import run_correlation as _run
+    await _run()
+
+
 def start_scheduler():
     scheduler.add_job(run_ping_checks, "interval", seconds=60,
                       id="ping_checks", replace_existing=True)
     scheduler.add_job(run_integration_checks, "interval", seconds=60,
                       id="integration_checks", replace_existing=True)
+    scheduler.add_job(run_correlation, "interval", seconds=60,
+                      id="correlation", replace_existing=True)
     scheduler.add_job(update_ssl_expiry, "interval", hours=6,
                       id="ssl_expiry", replace_existing=True)
     scheduler.add_job(cleanup_old_results, "cron", hour=3, minute=0,

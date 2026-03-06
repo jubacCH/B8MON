@@ -416,6 +416,15 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
                 "cached_at": snap.timestamp if snap else None,
             })
 
+    # Active incidents
+    from models.incident import Incident
+    active_incidents = (await db.execute(
+        select(Incident)
+        .where(Incident.status.in_(["open", "acknowledged"]))
+        .order_by(Incident.created_at.desc())
+        .limit(5)
+    )).scalars().all()
+
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "host_stats": host_stats,
@@ -431,5 +440,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         "ping_host_map": ping_host_map,
         "anomalies": anomalies,
         "integration_health": integration_health,
+        "active_incidents": active_incidents,
         "active_page": "dashboard",
     })

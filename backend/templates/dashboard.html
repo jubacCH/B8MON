@@ -76,6 +76,31 @@
     </div>
   </div>
 
+  <!-- ── ACTIVE INCIDENTS ───────────────────────────────────────────────── -->
+  {% if active_incidents %}
+  <div class="mb-5 bg-red-500/[0.07] border border-red-500/25 rounded-xl px-5 py-4">
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-red-400 animate-pulse"></span>
+        <span class="text-red-300 font-semibold text-sm">{{ active_incidents | length }} Active Incident{{ 's' if active_incidents | length != 1 }}</span>
+      </div>
+      <a href="/incidents?status=open" class="text-xs text-red-400/60 hover:text-red-300 transition-colors">View all</a>
+    </div>
+    <div class="space-y-1.5">
+      {% for inc in active_incidents %}
+      <a href="/incidents/{{ inc.id }}" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-red-500/[0.06] transition-colors group">
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase
+          {% if inc.severity == 'critical' %}bg-red-500/20 text-red-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+          {{ inc.severity[:4] }}
+        </span>
+        <span class="text-white text-sm flex-1 truncate group-hover:text-red-200 transition-colors">{{ inc.title }}</span>
+        <span class="text-slate-600 text-xs tabular-nums shrink-0">{{ inc.created_at.strftime("%H:%M") }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   <!-- ── ANOMALY BANNER ─────────────────────────────────────────────────── -->
   {% if anomalies %}
   <div class="mb-5 bg-orange-500/10 border border-orange-500/30 rounded-xl px-5 py-4">

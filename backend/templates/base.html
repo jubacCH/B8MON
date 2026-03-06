@@ -138,6 +138,15 @@
           Syslog
         </a>
 
+        <a href="/incidents"
+           class="{% if active_page == 'incidents' %}nav-active bg-indigo-500/[0.08] text-indigo-300{% else %}text-slate-500 hover:text-white hover:bg-white/[0.05]{% endif %} flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+          Incidents
+        </a>
+
         <!-- Integrations group -->
         {% set _nc = request.state.nav_counts %}
         {% set _any = _nc.proxmox > 0 or _nc.unifi > 0 or _nc.unas > 0 or _nc.portainer > 0 or _nc.truenas > 0 or _nc.synology > 0 or _nc.pihole > 0 or _nc.adguard > 0 or _nc.firewall > 0 or _nc.hass > 0 or _nc.gitea > 0 or _nc.phpipam > 0 or _nc.speedtest > 0 or _nc.ups > 0 or _nc.redfish > 0 %}

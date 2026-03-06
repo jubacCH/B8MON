@@ -12,7 +12,7 @@ from database import (
     PhpipamServer, SpeedtestConfig, NutInstance, RedfishServer,
 )
 from scheduler import start_scheduler, stop_scheduler
-from routers import auth, dashboard, ping, proxmox, setup, settings, unifi, unas, pihole, adguard, portainer, truenas, synology, firewall, hass, gitea, phpipam, speedtest, nut, redfish, alerts, users, syslog as syslog_router
+from routers import auth, dashboard, ping, proxmox, setup, settings, unifi, unas, pihole, adguard, portainer, truenas, synology, firewall, hass, gitea, phpipam, speedtest, nut, redfish, alerts, users, syslog as syslog_router, incidents as incidents_router
 from routers import integrations as integrations_router
 
 
@@ -169,6 +169,7 @@ app.include_router(nut.router)
 app.include_router(redfish.router)
 app.include_router(alerts.router)
 app.include_router(syslog_router.router)
+app.include_router(incidents_router.router)
 app.include_router(users.router)
 
 # ── New generic integration router ───────────────────────────────────────────
