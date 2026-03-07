@@ -313,7 +313,7 @@
     {# ── GRAVITY WELL ─────────────────────────────────────────────────── #}
     {% if w.id == 'gravity' %}
     <div class="grid-stack-item" gs-id="gravity" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="4" gs-min-w="6">
-      <div class="grid-stack-item-content relative overflow-hidden glass-card-static !p-0 flex flex-col">
+      <div class="grid-stack-item-content relative glass-card-static !p-0 flex flex-col" style="overflow:hidden!important">
         {{ widget_remove_btn() }}
         {% if host_stats %}
         <div class="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between cursor-pointer section-header shrink-0" data-section="nodemap">
@@ -669,13 +669,13 @@
     let W, H, CX, CY, maxR;
 
     function resize() {
-      // Get available space from the gridstack item content
+      const gsItem = wrap.closest('.grid-stack-item');
       const gsContent = wrap.closest('.grid-stack-item-content');
       const header = gsContent ? gsContent.querySelector('.section-header') : null;
+      const headerH = header ? header.offsetHeight : 0;
       const availW = wrap.clientWidth || wrap.getBoundingClientRect().width;
-      const availH = gsContent
-        ? gsContent.clientHeight - (header ? header.offsetHeight : 0) - 2
-        : wrap.getBoundingClientRect().height;
+      // gsItem has explicit height from gridstack inline styles
+      const availH = (gsItem ? gsItem.clientHeight : 0) - headerH - 4;
       const side = Math.min(availW, availH > 50 ? availH : availW);
       const dpr = window.devicePixelRatio || 1;
       W = side;
@@ -691,8 +691,9 @@
     }
     resize();
 
+    const gsItemEl = wrap.closest('.grid-stack-item');
     _gravityObserver = new ResizeObserver(() => resize());
-    _gravityObserver.observe(wrap);
+    _gravityObserver.observe(gsItemEl || wrap);
 
     // Build particles — scale sizes based on host count so space is used well
     if (!_gravityParticles || _gravityParticles.length !== hosts.length) {
