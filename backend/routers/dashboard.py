@@ -346,6 +346,12 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         ping_host_map[h.hostname] = h.id
         ping_host_map.setdefault(h.name, h.id)
 
+    # Pre-fetch all integration configs (used by topology + integration health)
+    all_configs_result = await db.execute(
+        select(IntegrationConfig).order_by(IntegrationConfig.type, IntegrationConfig.name)
+    )
+    all_configs = all_configs_result.scalars().all()
+
     # ── Build topology tree ──────────────────────────────────────────────────
     # Map host id -> parent_id using: 1) DB parent_id, 2) Proxmox VM/LXC → node
     topology: dict[int, int | None] = {}  # child_id → parent_id
@@ -383,14 +389,57 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
                 if topology.get(guest_ph_id) is None:
                     topology[guest_ph_id] = node_ph_id
 
+    # Third pass: auto-detect UniFi device hierarchy (Gateway → Switch → AP)
+    # Build IP → PingHost.id map for UniFi matching
+    ip_to_ph: dict[str, int] = {}
+    for h in all_ph:
+        raw = h.hostname
+        for pfx in ("https://", "http://"):
+            if raw.startswith(pfx):
+                raw = raw[len(pfx):]
+                break
+        raw = raw.split("/")[0].split(":")[0]
+        ip_to_ph[raw] = h.id
+        ip_to_ph[h.name] = h.id
+
+    unifi_configs = [c for c in all_configs if c.type == "unifi"]
+    if unifi_configs:
+        unifi_snaps = await snap_svc.get_latest_batch(db, "unifi")
+        for ucfg in unifi_configs:
+            usnap = unifi_snaps.get(ucfg.id)
+            if not usnap or not usnap.ok or not usnap.data_json:
+                continue
+            ud = json.loads(usnap.data_json)
+            devices = ud.get("devices", [])
+            # Find gateway/router PingHost id
+            gw_ph_id = None
+            sw_ph_ids: list[int] = []
+            ap_ph_ids: list[int] = []
+            for dev in devices:
+                dev_ip = (dev.get("ip") or "").strip()
+                dev_name = (dev.get("name") or "").strip()
+                dtype = dev.get("type", "")
+                ph_id = ip_to_ph.get(dev_ip) or ip_to_ph.get(dev_name) or ping_host_map.get(dev_name)
+                if not ph_id:
+                    continue
+                if dtype in ("ugw", "usg", "udm", "udmpro", "uxg"):
+                    gw_ph_id = ph_id
+                elif dtype == "usw":
+                    sw_ph_ids.append(ph_id)
+                elif dtype == "uap":
+                    ap_ph_ids.append(ph_id)
+            # Link: switches → gateway, APs → first switch (or gateway)
+            if gw_ph_id:
+                for sw_id in sw_ph_ids:
+                    if topology.get(sw_id) is None:
+                        topology[sw_id] = gw_ph_id
+                parent_for_ap = sw_ph_ids[0] if sw_ph_ids else gw_ph_id
+                for ap_id in ap_ph_ids:
+                    if topology.get(ap_id) is None:
+                        topology[ap_id] = parent_for_ap
+
     # ── Integration health ──────────────────────────────────────────────────
     integration_health = []
-
-    # Try new generic tables first
-    all_configs_result = await db.execute(
-        select(IntegrationConfig).order_by(IntegrationConfig.type, IntegrationConfig.name)
-    )
-    all_configs = all_configs_result.scalars().all()
     # Filter out proxmox (shown separately)
     non_px_configs = [c for c in all_configs if c.type != "proxmox"]
 

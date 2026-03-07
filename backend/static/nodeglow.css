@@ -4,6 +4,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@200;400;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
+  color-scheme: dark;
   /* Primary — Sky Blue */
   --ng-primary: #38BDF8;
   --ng-primary-light: #BAE6FD;
@@ -267,6 +268,20 @@ body {
   outline: none;
   border-color: var(--ng-primary);
   box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+}
+
+select.ng-input {
+  color-scheme: dark;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 24 24'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+select.ng-input option {
+  background: #1e293b;
+  color: var(--ng-text-primary);
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
