@@ -12,7 +12,11 @@
     </div>
     <div class="section-body flex-1 min-h-0" id="nodemap-body">
       <div class="hidden md:flex items-center justify-center relative overflow-hidden h-full" id="node-map-wrap"
-           style="background: radial-gradient(circle at 50% 50%, rgba(99,102,241,0.06) 0%, rgba(6,10,23,0.5) 70%, #0a0c1a 100%);">
+           style="background:
+             radial-gradient(ellipse 60% 50% at 30% 40%, rgba(60,40,140,0.18) 0%, transparent 70%),
+             radial-gradient(ellipse 50% 60% at 75% 55%, rgba(30,60,160,0.12) 0%, transparent 65%),
+             radial-gradient(ellipse 80% 40% at 50% 80%, rgba(80,30,120,0.08) 0%, transparent 60%),
+             radial-gradient(circle at 50% 50%, rgba(20,15,40,0.95) 0%, #06080f 100%);">
         <canvas id="gravity-canvas" style="display:block;"></canvas>
         <div id="node-tooltip" class="hidden absolute pointer-events-none z-20 !rounded-lg min-w-[190px] text-xs"
              style="backdrop-filter:blur(24px);background:rgba(10,12,28,0.9);border:1px solid rgba(255,255,255,0.08);padding:12px">
