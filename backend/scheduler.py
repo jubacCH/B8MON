@@ -1,7 +1,6 @@
 """
 Background scheduler – generic integration collection + ping checks + cleanup.
 """
-import json
 import logging
 from datetime import datetime, timedelta
 
@@ -204,25 +203,62 @@ async def update_ssl_expiry():
 
 
 async def cleanup_old_results():
-    """Delete old ping results and snapshots."""
-    async with AsyncSessionLocal() as db:
-        from models.settings import get_setting
-        retention_str = await get_setting(db, "data_retention_days", "30")
-        retention = int(retention_str)
+    """Delete old ping results, snapshots, and syslog messages."""
+    from database import get_setting
 
-    cutoff = datetime.utcnow() - timedelta(days=retention)
+    async with AsyncSessionLocal() as db:
+        ping_ret = int(await get_setting(db, "ping_retention_days", "30"))
+        int_ret = int(await get_setting(db, "integration_retention_days", "7"))
 
     async with AsyncSessionLocal() as db:
         # Ping results
-        await db.execute(delete(PingResult).where(PingResult.timestamp < cutoff))
-        # Snapshots
-        await snap_svc.cleanup_all(db, retention)
-        # Syslog messages
+        ping_cutoff = datetime.utcnow() - timedelta(days=ping_ret)
+        await db.execute(delete(PingResult).where(PingResult.timestamp < ping_cutoff))
+        # Integration snapshots
+        await snap_svc.cleanup_all(db, int_ret)
+        # Syslog messages (use integration retention)
         from models.syslog import SyslogMessage
-        await db.execute(delete(SyslogMessage).where(SyslogMessage.timestamp < cutoff))
+        syslog_cutoff = datetime.utcnow() - timedelta(days=int_ret)
+        await db.execute(delete(SyslogMessage).where(SyslogMessage.timestamp < syslog_cutoff))
         await db.commit()
 
-    logger.info("Cleanup done (retention: %d days)", retention)
+    logger.info("Cleanup done (ping: %dd, integrations: %dd)", ping_ret, int_ret)
+
+
+# ── Speedtest (old-style, not yet migrated to generic) ───────────────────────
+
+
+async def run_speedtest_check():
+    """Run a scheduled speedtest if configured."""
+    from database import SpeedtestConfig, SpeedtestResult
+    from collectors.speedtest import run_speedtest
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(SpeedtestConfig).limit(1))
+        cfg = result.scalar_one_or_none()
+
+    if not cfg or not cfg.schedule_minutes:
+        return
+
+    try:
+        data = await run_speedtest(cfg.server_id)
+        async with AsyncSessionLocal() as db:
+            db.add(SpeedtestResult(
+                config_id=cfg.id, timestamp=datetime.utcnow(), ok=True,
+                download_mbps=data["download_mbps"], upload_mbps=data["upload_mbps"],
+                ping_ms=data["ping_ms"], server_name=data["server_name"],
+            ))
+            await db.commit()
+        logger.info("Speedtest: %.1f/%.1f Mbps, %.0fms",
+                    data["download_mbps"], data["upload_mbps"], data["ping_ms"])
+    except Exception as exc:
+        logger.warning("Speedtest failed: %s", exc)
+        async with AsyncSessionLocal() as db:
+            db.add(SpeedtestResult(
+                config_id=cfg.id, timestamp=datetime.utcnow(),
+                ok=False, error=str(exc),
+            ))
+            await db.commit()
 
 
 # ── Scheduler lifecycle ──────────────────────────────────────────────────────
@@ -234,11 +270,25 @@ async def run_correlation():
     await _run()
 
 
-def start_scheduler():
-    scheduler.add_job(run_ping_checks, "interval", seconds=60,
+async def start_scheduler():
+    """Read intervals from DB, then register and start all jobs."""
+    from database import get_setting, SpeedtestConfig
+
+    async with AsyncSessionLocal() as db:
+        ping_interval = int(await get_setting(db, "ping_interval", "60"))
+        proxmox_interval = int(await get_setting(db, "proxmox_interval", "60"))
+
+        # Speedtest schedule
+        result = await db.execute(select(SpeedtestConfig).limit(1))
+        st_cfg = result.scalar_one_or_none()
+        st_minutes = st_cfg.schedule_minutes if st_cfg else 60
+
+    scheduler.add_job(run_ping_checks, "interval", seconds=ping_interval,
                       id="ping_checks", replace_existing=True)
-    scheduler.add_job(run_integration_checks, "interval", seconds=60,
+    scheduler.add_job(run_integration_checks, "interval", seconds=proxmox_interval,
                       id="integration_checks", replace_existing=True)
+    scheduler.add_job(run_speedtest_check, "interval", minutes=st_minutes,
+                      id="speedtest_checks", replace_existing=True)
     scheduler.add_job(run_correlation, "interval", seconds=60,
                       id="correlation", replace_existing=True)
     scheduler.add_job(update_ssl_expiry, "interval", hours=6,
@@ -246,7 +296,8 @@ def start_scheduler():
     scheduler.add_job(cleanup_old_results, "cron", hour=3, minute=0,
                       id="cleanup", replace_existing=True)
     scheduler.start()
-    logger.info("Scheduler started")
+    logger.info("Scheduler started (ping=%ds, integrations=%ds, speedtest=%dm)",
+                ping_interval, proxmox_interval, st_minutes)
 
 
 def stop_scheduler():

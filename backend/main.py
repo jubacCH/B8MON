@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     # Create new generic tables (IntegrationConfig, Snapshot, SyslogMessage)
     from models import init_db as init_new_db
     await init_new_db()
-    start_scheduler()
+    await start_scheduler()
     # Start syslog receiver (port from DB setting, fallback to env/1514)
     from services.syslog import start_syslog_server, stop_syslog_server
     from database import AsyncSessionLocal, get_setting as _get_setting

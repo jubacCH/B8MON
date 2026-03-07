@@ -820,9 +820,9 @@
   function updateClock() {
     const now = new Date();
     document.getElementById('live-clock').textContent =
-      now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     document.getElementById('live-date').textContent =
-      now.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+      now.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
   }
   updateClock();
   setInterval(updateClock, 1000);

@@ -286,10 +286,10 @@ async def test_notification(channel: str = Form(""), db: AsyncSession = Depends(
         if channel == "telegram":
             token = await get_setting(db, "telegram_bot_token", "")
             chat  = await get_setting(db, "telegram_chat_id", "")
-            await _send_telegram(token, chat, "<b>Vigil Test</b>\nBenachrichtigungen funktionieren ✓")
+            await _send_telegram(token, chat, "<b>Vigil Test</b>\nNotifications are working ✓")
         elif channel == "discord":
             url = await get_setting(db, "discord_webhook_url", "")
-            await _send_discord(url, "Vigil Test", "Benachrichtigungen funktionieren ✓", 0x3498db)
+            await _send_discord(url, "Vigil Test", "Notifications are working ✓", 0x3498db)
         elif channel == "email":
             host  = await get_setting(db, "smtp_host", "")
             port  = int(await get_setting(db, "smtp_port", "587"))
@@ -297,7 +297,7 @@ async def test_notification(channel: str = Form(""), db: AsyncSession = Depends(
             pw    = decrypt_value(await get_setting(db, "smtp_password", ""))
             frm   = await get_setting(db, "smtp_from", "") or user
             to    = await get_setting(db, "smtp_to", "")
-            await _send_email(host, port, user, pw, frm, to, "Vigil Test", "Benachrichtigungen funktionieren ✓")
-        return JSONResponse({"ok": True, "message": "Testnachricht gesendet"})
+            await _send_email(host, port, user, pw, frm, to, "Vigil Test", "Notifications are working ✓")
+        return JSONResponse({"ok": True, "message": "Test notification sent"})
     except Exception as e:
         return JSONResponse({"ok": False, "message": str(e)}, status_code=500)
