@@ -1,3 +1,4 @@
+import os
 import time
 from contextlib import asynccontextmanager
 
@@ -24,8 +25,7 @@ async def lifespan(app: FastAPI):
     await init_new_db()
     await start_scheduler()
     # Set start time for uptime tracking
-    import time as _time
-    os.environ["VIGIL_START_TIME"] = str(_time.time())
+    os.environ["VIGIL_START_TIME"] = str(time.time())
     # Start syslog receiver (port from DB setting, fallback to env/1514)
     from services.syslog import start_syslog_server, stop_syslog_server
     from database import AsyncSessionLocal, get_setting as _get_setting
