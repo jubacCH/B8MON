@@ -545,9 +545,11 @@
 
   // ── Node-Bubble Map (Network Hierarchy) ─────────────────────────────────
   const nodePositions = new Map(); // id → {x, y, subnet}
-  (function() {
+  function initNodeMap() {
     const svg = document.getElementById('node-map');
     if (!svg || hosts.length === 0) return;
+    // Already rendered (e.g. double-call guard)
+    if (svg.querySelector('[data-host-id]')) return;
 
     const W = 1000, H = 600;
     const cx = W / 2, cy = H / 2;
@@ -684,7 +686,10 @@
     html += `<circle cx="${cx - 3.5}" cy="${cy - 3.5}" r="4" fill="white" opacity="0.25"/>`;
     html += `<text x="${cx}" y="${cy + 30}" text-anchor="middle" fill="var(--ng-primary)" font-family="'JetBrains Mono', monospace" font-size="9" opacity="0.45" font-weight="600">CORE</text>`;
 
-    svg.innerHTML = svg.innerHTML + html;
+    // Insert via a temporary container to preserve SVG namespace
+    const tmp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    tmp.innerHTML = html;
+    while (tmp.firstChild) svg.appendChild(tmp.firstChild);
 
     // ── Rich Tooltip ──────────────────────────────────────────────────────
     const tooltip = document.getElementById('node-tooltip');
@@ -743,7 +748,9 @@
       const hub = e.target.closest('.subnet-hub');
       if (hub) { filterBySubnet(hub.dataset.subnet); return; }
     });
-  })();
+  }
+  // Run after DOM settles (handles SPA navigation + initial load)
+  requestAnimationFrame(() => requestAnimationFrame(initNodeMap));
 
   // ── Subnet Filter ───────────────────────────────────────────────────────
   let activeSubnetFilter = null;
@@ -781,7 +788,7 @@
   };
 
   // ── Sparklines in Host Cards ────────────────────────────────────────────
-  (function() {
+  function initSparklines() {
     hosts.forEach(h => {
       const box = document.querySelector(`[data-host-spark="${h.id}"]`);
       if (!box || !h.sparkline || h.sparkline.length < 2) return;
@@ -793,11 +800,13 @@
       const color = h.online === false ? 'var(--ng-critical)' : h.maintenance ? 'var(--ng-warning)' : 'var(--ng-primary)';
       box.innerHTML = `<svg class="w-full h-full" viewBox="0 0 ${w} ${ht}" preserveAspectRatio="none"><polyline fill="none" stroke="${color}" stroke-width="1" opacity="0.4" points="${pts}"/></svg>`;
     });
-  })();
+  }
 
   // ── Collapsible Sections ────────────────────────────────────────────────
-  (function() {
+  function initCollapsible() {
     document.querySelectorAll('.section-header').forEach(header => {
+      if (header._collapseBound) return; // prevent duplicate listeners on SPA re-nav
+      header._collapseBound = true;
       const section = header.dataset.section;
       const body = header.nextElementSibling;
       if (!body) return;
@@ -814,7 +823,10 @@
         localStorage.setItem('section-' + section, isVisible ? 'collapsed' : 'expanded');
       });
     });
-  })();
+  }
+
+  // Run all DOM-dependent init after browser has settled (fixes SPA navigation)
+  requestAnimationFrame(() => { initSparklines(); initCollapsible(); });
 
   // ── Live Clock ──────────────────────────────────────────────────────────
   function updateClock() {
