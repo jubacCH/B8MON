@@ -68,6 +68,11 @@ class SyslogMessage(Base):
     message = Column(Text, nullable=False)
     host_id = Column(Integer, ForeignKey("ping_hosts.id"), nullable=True)  # auto-assigned
 
+    # Log intelligence enrichment
+    template_hash = Column(String(32), nullable=True, index=True)
+    tags = Column(String(256), nullable=True)          # comma-separated tags
+    noise_score = Column(SmallInteger, nullable=True)  # 0-100
+
     # PostgreSQL full-text search vector (auto-maintained via trigger)
     search_vector = Column(TSVECTOR)
 

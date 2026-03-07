@@ -326,10 +326,16 @@ async def _flush_buffer():
     batch = _buffer[:]
     _buffer = []
 
+    # Fields used for live-tail display only, not DB columns
+    _transient = {"is_new_template", "severity_label"}
     try:
         async with AsyncSessionLocal() as db:
             for msg in batch:
-                db.add(SyslogMessage(**msg))
+                clean = {k: v for k, v in msg.items() if k not in _transient}
+                # Convert tags list to comma-separated string for DB
+                if isinstance(clean.get("tags"), list):
+                    clean["tags"] = ",".join(clean["tags"]) if clean["tags"] else None
+                db.add(SyslogMessage(**clean))
             await db.commit()
     except Exception as e:
         log.error("Failed to flush syslog buffer (%d msgs): %s", len(batch), e)
