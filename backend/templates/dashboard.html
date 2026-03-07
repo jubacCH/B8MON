@@ -1,13 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Dashboard – NODEGLOW{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack.min.css"/>
+{% endblock %}
+
 {% block content %}
 {% set maint_count = host_stats | selectattr('host.maintenance') | list | length %}
 {% set offline_hosts = host_stats | selectattr('online', 'equalto', false) | rejectattr('host.maintenance') | list %}
 {% set unknown_hosts = host_stats | selectattr('online', 'none') | rejectattr('host.maintenance') | list %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack.min.css"/>
 <style>
   .grid-stack { min-height: 100px; }
+  /* Hide grid items until GridStack initializes them (prevents flash of unstyled vertical strips) */
+  .grid-stack:not(.grid-stack-instance) > .grid-stack-item { opacity: 0; }
   .grid-stack-item-content { overflow: hidden; overflow-y: auto; border-radius: 8px; }
   .grid-stack-item-content::-webkit-scrollbar { width: 4px; }
   .grid-stack-item-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }

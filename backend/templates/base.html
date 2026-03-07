@@ -450,6 +450,13 @@
           window._pageIntervals = [];
           window._pageTimeouts = [];
 
+          // Inject any new <link> stylesheets from <head> that we don't have yet
+          doc.querySelectorAll('head link[rel="stylesheet"]').forEach(link => {
+            if (!document.querySelector('link[href="' + link.getAttribute('href') + '"]')) {
+              document.head.appendChild(link.cloneNode());
+            }
+          });
+
           const newNav     = doc.querySelector('nav');
           const newMain    = doc.querySelector('main');
           const newScripts = doc.getElementById('page-scripts');
