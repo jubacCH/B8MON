@@ -43,7 +43,7 @@ async def get_latest(
     result = await db.execute(
         select(Snapshot)
         .where(Snapshot.entity_type == entity_type, Snapshot.entity_id == entity_id)
-        .order_by(Snapshot.timestamp.desc())
+        .order_by(Snapshot.timestamp.desc(), Snapshot.id.desc())
         .limit(1)
     )
     return result.scalar_one_or_none()

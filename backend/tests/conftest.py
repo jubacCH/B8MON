@@ -11,15 +11,35 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("DATA_DIR", os.path.join(os.path.dirname(__file__), ".test_data"))
 
 import pytest
+from sqlalchemy import event, String
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from models.base import Base
+
+
+def _skip_pg_only(ddl, target, bind, **kw):
+    """Skip PostgreSQL-specific DDL (GIN indexes, TSVECTOR columns) on SQLite."""
+    return bind.dialect.name != "sqlite"
 
 
 @pytest.fixture
 async def db():
     """Provide a fresh in-memory SQLite database session per test."""
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+
+    # Replace TSVECTOR columns with String for SQLite compatibility
+    from sqlalchemy.dialects.postgresql import TSVECTOR
+    for table in Base.metadata.tables.values():
+        for col in table.columns:
+            if isinstance(col.type, TSVECTOR):
+                col.type = String()
+        # Remove GIN indexes that SQLite can't handle
+        table.indexes = {
+            idx for idx in table.indexes
+            if not getattr(idx, 'dialect_options', {}).get('postgresql', {}).get('using')
+            and 'gin' not in str(getattr(idx, 'kwargs', {}))
+        }
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

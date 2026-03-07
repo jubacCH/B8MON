@@ -538,6 +538,43 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         .limit(5)
     )).scalars().all()
 
+    # ── Syslog stats (last 24h) ──────────────────────────────────────────────
+    from models.syslog import SyslogMessage, SEVERITY_LABELS
+    syslog_stats = {"total": 0, "by_severity": {}, "top_sources": [], "error_rate_1h": 0}
+    try:
+        syslog_stats["total"] = (await db.execute(
+            select(func.count(SyslogMessage.id))
+            .where(SyslogMessage.timestamp >= window_24h)
+        )).scalar() or 0
+
+        sev_rows = (await db.execute(
+            select(SyslogMessage.severity, func.count(SyslogMessage.id).label("cnt"))
+            .where(SyslogMessage.timestamp >= window_24h)
+            .group_by(SyslogMessage.severity)
+            .order_by(SyslogMessage.severity)
+        )).all()
+        syslog_stats["by_severity"] = {
+            row.severity: {"count": row.cnt, "label": SEVERITY_LABELS.get(row.severity, f"Sev {row.severity}")}
+            for row in sev_rows if row.severity is not None
+        }
+
+        src_rows = (await db.execute(
+            select(SyslogMessage.source_ip, func.count(SyslogMessage.id).label("cnt"))
+            .where(SyslogMessage.timestamp >= window_24h)
+            .group_by(SyslogMessage.source_ip)
+            .order_by(func.count(SyslogMessage.id).desc())
+            .limit(5)
+        )).all()
+        syslog_stats["top_sources"] = [{"ip": row.source_ip, "count": row.cnt} for row in src_rows]
+
+        window_1h = now - timedelta(hours=1)
+        syslog_stats["error_rate_1h"] = (await db.execute(
+            select(func.count(SyslogMessage.id))
+            .where(SyslogMessage.severity <= 3, SyslogMessage.timestamp >= window_1h)
+        )).scalar() or 0
+    except Exception:
+        pass  # syslog table may not exist yet
+
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "host_stats": host_stats,
@@ -555,6 +592,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         "warnings": warnings,
         "integration_health": integration_health,
         "active_incidents": active_incidents,
+        "syslog_stats": syslog_stats,
         "topology": topology,
         "active_page": "dashboard",
     })
