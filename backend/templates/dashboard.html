@@ -620,23 +620,40 @@
     const standaloneRoots = roots.filter(r => !childrenOf.has(r.id));
 
     let html = '';
-    let totalLeaves = 0;
-    infraRoots.forEach(r => { totalLeaves += (childrenOf.get(r.id) || []).length; });
-    totalLeaves += standaloneRoots.length;
-
     const availW = W - padX * 2;
-    const leafSpacing = Math.min(Math.round(56 * scale), availW / Math.max(1, totalLeaves));
 
-    let curX = padX;
+    // ── Infrastructure trees (centered, generous spacing) ──
+    // Calculate infra leaf count separately from standalone
+    let infraLeaves = 0;
+    infraRoots.forEach(r => {
+      const kids = childrenOf.get(r.id) || [];
+      kids.forEach(k => { infraLeaves += Math.max(1, (childrenOf.get(k.id) || []).length); });
+      if (kids.length === 0) infraLeaves++;
+      else infraLeaves = Math.max(infraLeaves, kids.length);
+    });
+    infraRoots.forEach(r => { infraLeaves = Math.max(infraLeaves, (childrenOf.get(r.id) || []).length); });
+
+    const infraSpacing = infraLeaves > 0 ? Math.min(Math.round(80 * scale), availW / Math.max(1, infraLeaves)) : Math.round(80 * scale);
+    const groupGap = Math.round(60 * scale);
+
     const parentY = padY + Math.round(30 * scale);
     const childY = parentY + tierGap;
-    const standaloneY = childY + tierGap;
+    let maxInfraY = childY;
 
     infraRoots.sort((a, b) => (childrenOf.get(b.id) || []).length - (childrenOf.get(a.id) || []).length);
 
+    // First pass: calculate total infra width for centering
+    let totalInfraW = 0;
+    infraRoots.forEach((r, i) => {
+      const kids = childrenOf.get(r.id) || [];
+      totalInfraW += Math.max(1, kids.length) * infraSpacing;
+      if (i < infraRoots.length - 1) totalInfraW += groupGap;
+    });
+    let curX = Math.max(padX, (W - totalInfraW) / 2);
+
     infraRoots.forEach(parent => {
       const kids = (childrenOf.get(parent.id) || []).sort((a, b) => a.name.localeCompare(b.name));
-      const groupW = kids.length * leafSpacing;
+      const groupW = Math.max(1, kids.length) * infraSpacing;
       const px = curX + groupW / 2;
       const py = parentY;
       const c = getNodeColor(parent);
@@ -652,7 +669,7 @@
       html += `<circle cx="${px}" cy="${py}" r="${parentR + 6}" fill="transparent" class="node-hit cursor-pointer" data-host-id="${parent.id}"/>`;
 
       kids.forEach((kid, i) => {
-        const kx = curX + i * leafSpacing + leafSpacing / 2;
+        const kx = curX + i * infraSpacing + infraSpacing / 2;
         const ky = childY;
         const kc = getNodeColor(kid);
         nodePositions.set(kid.id, {x: kx, y: ky});
@@ -670,10 +687,11 @@
         const grandkids = childrenOf.get(kid.id);
         if (grandkids) {
           grandkids.sort((a, b) => a.name.localeCompare(b.name));
-          const gSpacing = Math.min(leafSpacing, groupW / grandkids.length);
+          const gSpacing = Math.min(infraSpacing, groupW / Math.max(1, grandkids.length));
+          const gy = childY + Math.round(90 * scale);
+          if (gy + grandR + Math.round(20 * scale) > maxInfraY) maxInfraY = gy + grandR + Math.round(20 * scale);
           grandkids.forEach((gk, gi) => {
             const gx = kx - (grandkids.length - 1) * gSpacing / 2 + gi * gSpacing;
-            const gy = childY + Math.round(90 * scale);
             const gc = getNodeColor(gk);
             nodePositions.set(gk.id, {x: gx, y: gy});
             html += `<line x1="${kx}" y1="${ky + childR}" x2="${gx}" y2="${gy - grandR}" stroke="${gc.fill}" stroke-width="${Math.max(0.8, scale)}" opacity="0.12"/>`;
@@ -685,20 +703,23 @@
         }
       });
 
-      curX += groupW + leafSpacing * 1.5;
+      curX += groupW + groupGap;
     });
 
-    // Standalone hosts — hex grid
-    let H = standaloneY + 40;
+    if (infraRoots.length > 0) maxInfraY = Math.max(maxInfraY, childY + childR + Math.round(20 * scale));
+
+    // ── Standalone hosts — wrapped grid (max ~10 cols) ──
+    const standaloneStartY = (infraRoots.length > 0 ? maxInfraY + Math.round(30 * scale) : padY + Math.round(30 * scale));
+    let H = standaloneStartY + 40;
     if (standaloneRoots.length > 0) {
       standaloneRoots.sort((a, b) => a.name.localeCompare(b.name));
-      const sY = infraRoots.length > 0 ? standaloneY : padY + Math.round(30 * scale);
-      const minCellW = Math.round(52 * scale);
-      const sCols = Math.min(standaloneRoots.length, Math.max(1, Math.floor(availW / minCellW)));
+      const maxCols = Math.min(10, standaloneRoots.length);
+      const sCols = Math.min(maxCols, Math.max(1, Math.floor(availW / Math.round(100 * scale))));
       const sSpacing = availW / sCols;
 
       if (infraRoots.length > 0) {
-        html += `<text x="${padX}" y="${sY - Math.round(16 * scale)}" fill="var(--ng-text-muted)" font-family="'JetBrains Mono', monospace" font-size="${Math.round(10 * scale)}" opacity="0.45" style="pointer-events:none">Standalone</text>`;
+        html += `<line x1="${padX}" y1="${standaloneStartY - Math.round(14 * scale)}" x2="${W - padX}" y2="${standaloneStartY - Math.round(14 * scale)}" stroke="var(--ng-text-muted)" stroke-width="0.5" opacity="0.15"/>`;
+        html += `<text x="${W / 2}" y="${standaloneStartY - Math.round(20 * scale)}" text-anchor="middle" fill="var(--ng-text-muted)" font-family="'JetBrains Mono', monospace" font-size="${Math.round(10 * scale)}" opacity="0.4" style="pointer-events:none">Standalone</text>`;
       }
 
       standaloneRoots.forEach((h, i) => {
@@ -706,7 +727,7 @@
         const row = Math.floor(i / sCols);
         const hcOffset = (row % 2 === 1) ? sSpacing * 0.5 : 0;
         const sx = padX + sSpacing * 0.5 + col * sSpacing + hcOffset;
-        const sy = sY + row * rowHeight;
+        const sy = standaloneStartY + row * rowHeight;
         const sc = getNodeColor(h);
 
         nodePositions.set(h.id, {x: sx, y: sy});
@@ -720,7 +741,7 @@
       });
 
       const sRows = Math.ceil(standaloneRoots.length / sCols);
-      H = sY + sRows * rowHeight + Math.round(40 * scale);
+      H = standaloneStartY + sRows * rowHeight + Math.round(30 * scale);
     }
 
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
