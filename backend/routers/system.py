@@ -1,5 +1,6 @@
 """System status / self-monitoring page."""
 
+import asyncio
 import os
 import platform
 import sys
@@ -9,7 +10,7 @@ from datetime import datetime, timedelta
 import psutil
 from fastapi import APIRouter, Depends, Request
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select, text
+from sqlalchemy import func, literal_column, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import PingHost, PingResult, Setting, get_db
@@ -20,13 +21,11 @@ router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 
 
-@router.get("/system/status")
-async def system_status(request: Request, db: AsyncSession = Depends(get_db)):
-    now = datetime.utcnow()
-
-    # ── Application info ─────────────────────────────────────────────────
+def _collect_system_info() -> tuple[dict, dict, dict]:
+    """Collect psutil data in one shot (runs in thread executor)."""
     start_ts = float(os.environ.get("VIGIL_START_TIME", "0"))
-    uptime_seconds = int(now.timestamp() - start_ts) if start_ts > 0 else 0
+    now_ts = time.time()
+    uptime_seconds = int(now_ts - start_ts) if start_ts > 0 else 0
 
     app_info = {
         "python_version": sys.version.split()[0],
@@ -38,8 +37,7 @@ async def system_status(request: Request, db: AsyncSession = Depends(get_db)):
         "start_time": datetime.fromtimestamp(start_ts).strftime("%Y-%m-%d %H:%M:%S") if start_ts else "—",
     }
 
-    # ── System resources (host machine) ──────────────────────────────────
-    cpu_pct = psutil.cpu_percent(interval=0.1)
+    cpu_pct = psutil.cpu_percent(interval=None)
     mem = psutil.virtual_memory()
     disk = psutil.disk_usage("/")
     load_avg = os.getloadavg() if hasattr(os, "getloadavg") else (0, 0, 0)
@@ -58,7 +56,6 @@ async def system_status(request: Request, db: AsyncSession = Depends(get_db)):
         "disk_pct": round(disk.percent, 1),
     }
 
-    # ── Process info ─────────────────────────────────────────────────────
     proc = psutil.Process(os.getpid())
     proc_mem = proc.memory_info()
     process_info = {
@@ -69,41 +66,56 @@ async def system_status(request: Request, db: AsyncSession = Depends(get_db)):
         "connections": len(proc.net_connections()),
     }
 
-    # ── Database stats ───────────────────────────────────────────────────
+    return app_info, system_info, process_info
+
+
+def _collect_logs() -> list[str]:
+    """Read log lines (runs in thread executor)."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["tail", "-n", "100", "/proc/1/fd/1"],
+            capture_output=True, text=True, timeout=1
+        )
+        if result.stdout:
+            return result.stdout.strip().split("\n")[-100:]
+    except Exception:
+        pass
+    return []
+
+
+@router.get("/system/status")
+async def system_status(request: Request, db: AsyncSession = Depends(get_db)):
+    now = datetime.utcnow()
+    loop = asyncio.get_event_loop()
+
+    # ── Run psutil + logs in thread pool (non-blocking) ──────────────────
+    sysinfo_fut = loop.run_in_executor(None, _collect_system_info)
+    logs_fut = loop.run_in_executor(None, _collect_logs)
+
+    # ── Database stats (single query with estimated counts for big tables) ─
     db_stats = {}
     try:
-        # Table sizes
-        host_count = (await db.execute(select(func.count(PingHost.id)))).scalar() or 0
-        result_count = (await db.execute(select(func.count(PingResult.id)))).scalar() or 0
-        config_count = (await db.execute(select(func.count(IntegrationConfig.id)))).scalar() or 0
-        snapshot_count = (await db.execute(select(func.count(Snapshot.id)))).scalar() or 0
-        syslog_count = 0
-        try:
-            syslog_count = (await db.execute(select(func.count(SyslogMessage.id)))).scalar() or 0
-        except Exception:
-            pass
-
-        # DB size (PostgreSQL)
-        db_size = "—"
-        try:
-            row = (await db.execute(text("SELECT pg_size_pretty(pg_database_size(current_database()))"))).scalar()
-            db_size = row or "—"
-        except Exception:
-            pass
-
-        # Oldest/newest ping result
-        oldest_ping = (await db.execute(select(func.min(PingResult.timestamp)))).scalar()
-        newest_ping = (await db.execute(select(func.max(PingResult.timestamp)))).scalar()
-
+        row = (await db.execute(text("""
+            SELECT
+                (SELECT count(*) FROM ping_hosts) AS host_count,
+                (SELECT reltuples::bigint FROM pg_class WHERE relname = 'ping_results') AS result_count,
+                (SELECT count(*) FROM integration_configs) AS config_count,
+                (SELECT reltuples::bigint FROM pg_class WHERE relname = 'snapshots') AS snapshot_count,
+                (SELECT reltuples::bigint FROM pg_class WHERE relname = 'syslog_messages') AS syslog_count,
+                (SELECT pg_size_pretty(pg_database_size(current_database()))) AS db_size,
+                (SELECT min(timestamp) FROM ping_results) AS oldest_ping,
+                (SELECT max(timestamp) FROM ping_results) AS newest_ping
+        """))).one()
         db_stats = {
-            "db_size": db_size,
-            "host_count": host_count,
-            "result_count": result_count,
-            "config_count": config_count,
-            "snapshot_count": snapshot_count,
-            "syslog_count": syslog_count,
-            "oldest_ping": oldest_ping.strftime("%Y-%m-%d %H:%M") if oldest_ping else "—",
-            "newest_ping": newest_ping.strftime("%Y-%m-%d %H:%M") if newest_ping else "—",
+            "db_size": row.db_size or "—",
+            "host_count": row.host_count or 0,
+            "result_count": max(row.result_count or 0, 0),
+            "config_count": row.config_count or 0,
+            "snapshot_count": max(row.snapshot_count or 0, 0),
+            "syslog_count": max(row.syslog_count or 0, 0),
+            "oldest_ping": row.oldest_ping.strftime("%Y-%m-%d %H:%M") if row.oldest_ping else "—",
+            "newest_ping": row.newest_ping.strftime("%Y-%m-%d %H:%M") if row.newest_ping else "—",
         }
     except Exception as e:
         db_stats = {"error": str(e)}
@@ -123,81 +135,69 @@ async def system_status(request: Request, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
-    # ── Integration health summary ───────────────────────────────────────
+    # ── Integration health (batch: 1 query with DISTINCT ON) ─────────────
     integration_summary = []
     try:
-        configs = (await db.execute(
-            select(IntegrationConfig).where(IntegrationConfig.enabled == True)
-            .order_by(IntegrationConfig.type, IntegrationConfig.name)
-        )).scalars().all()
+        # Latest snapshot per (entity_type, entity_id) via DISTINCT ON
+        latest_sub = (
+            select(Snapshot)
+            .distinct(Snapshot.entity_type, Snapshot.entity_id)
+            .order_by(Snapshot.entity_type, Snapshot.entity_id, Snapshot.timestamp.desc())
+        ).subquery()
 
-        from services import snapshot as snap_svc
-        for cfg in configs:
-            latest = (await db.execute(
-                select(Snapshot)
-                .where(Snapshot.entity_type == cfg.type, Snapshot.entity_id == cfg.id)
-                .order_by(Snapshot.timestamp.desc())
-                .limit(1)
-            )).scalar_one_or_none()
+        rows = (await db.execute(
+            select(
+                IntegrationConfig.type,
+                IntegrationConfig.name,
+                literal_column("anon_1.ok").label("ok"),
+                literal_column("anon_1.timestamp").label("ts"),
+                literal_column("anon_1.error").label("error"),
+            )
+            .select_from(IntegrationConfig)
+            .outerjoin(
+                latest_sub,
+                (literal_column("anon_1.entity_type") == IntegrationConfig.type) &
+                (literal_column("anon_1.entity_id") == IntegrationConfig.id)
+            )
+            .where(IntegrationConfig.enabled == True)
+            .order_by(IntegrationConfig.type, IntegrationConfig.name)
+        )).all()
+
+        for r in rows:
             integration_summary.append({
-                "type": cfg.type,
-                "name": cfg.name,
-                "ok": latest.ok if latest else None,
-                "last_check": latest.timestamp.strftime("%H:%M:%S") if latest and latest.timestamp else "—",
-                "error": latest.error[:100] if latest and latest.error else None,
+                "type": r.type,
+                "name": r.name,
+                "ok": r.ok,
+                "last_check": r.ts.strftime("%H:%M:%S") if r.ts else "—",
+                "error": r.error[:100] if r.error else None,
             })
     except Exception:
         pass
 
-    # ── Recent application logs (last 100 lines from Docker stdout) ──────
-    log_lines = []
-    try:
-        import subprocess
-        result = subprocess.run(
-            ["tail", "-n", "100", "/proc/1/fd/1"],
-            capture_output=True, text=True, timeout=2
-        )
-        if result.stdout:
-            log_lines = result.stdout.strip().split("\n")[-100:]
-    except Exception:
-        pass
-    # Fallback: try uvicorn log file
-    if not log_lines:
-        try:
-            import subprocess
-            result = subprocess.run(
-                ["tail", "-n", "100", "/dev/stderr"],
-                capture_output=True, text=True, timeout=2
-            )
-        except Exception:
-            pass
-
-    # ── Ping check stats (last hour) ─────────────────────────────────────
+    # ── Ping check stats (last hour, single query) ───────────────────────
     ping_stats = {}
     try:
         window_1h = now - timedelta(hours=1)
-        row = (await db.execute(
-            select(
-                func.count(PingResult.id).label("total"),
-                func.sum(func.cast(PingResult.success, sqltype=None)).label("ok"),
-                func.avg(PingResult.latency_ms).label("avg_lat"),
-                func.max(PingResult.latency_ms).label("max_lat"),
-            ).where(PingResult.timestamp >= window_1h)
-        )).one_or_none()
-        if row and row.total:
-            from sqlalchemy import Integer as SaInt
-            ok_count = (await db.execute(
-                select(func.count(PingResult.id))
-                .where(PingResult.timestamp >= window_1h, PingResult.success == True)
-            )).scalar() or 0
+        row = (await db.execute(text("""
+            SELECT count(*) AS total,
+                   count(*) FILTER (WHERE success) AS ok,
+                   round(avg(latency_ms)::numeric, 2) AS avg_lat,
+                   round(max(latency_ms)::numeric, 2) AS max_lat
+            FROM ping_results WHERE timestamp >= :since
+        """).bindparams(since=window_1h))).one()
+        if row.total:
             ping_stats = {
                 "checks_1h": row.total,
-                "success_rate": round(ok_count / row.total * 100, 1) if row.total else 0,
-                "avg_latency": round(float(row.avg_lat), 2) if row.avg_lat else 0,
-                "max_latency": round(float(row.max_lat), 2) if row.max_lat else 0,
+                "success_rate": round(float(row.ok) / row.total * 100, 1),
+                "avg_latency": float(row.avg_lat) if row.avg_lat else 0,
+                "max_latency": float(row.max_lat) if row.max_lat else 0,
             }
     except Exception:
         pass
+
+    # ── Await thread pool results ────────────────────────────────────────
+    app_info, system_info, process_info = await sysinfo_fut
+    log_lines = await logs_fut
 
     return templates.TemplateResponse("system_status.html", {
         "request": request,
