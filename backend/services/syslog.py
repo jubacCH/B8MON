@@ -5,6 +5,7 @@ write-buffered DB inserts, and auto-host assignment.
 import asyncio
 import logging
 import re
+import socket
 from datetime import datetime
 from typing import Optional
 
@@ -120,7 +121,17 @@ def parse_syslog(raw: str, source_ip: str) -> dict:
         severity = pri & 7
         ts = _parse_3164_ts(m.group(2))
         hostname = m.group(3)
-        app_name, message = _split_app_message(m.group(4))
+        rest = m.group(4)
+
+        # Detect dual-timestamp format (UniFi etc.): hostname is actually an ISO timestamp
+        # e.g. <PRI>Mon DD HH:MM:SS 2026-03-07T07:26:58.42112 HOSTNAME APP: message
+        if re.match(r"\d{4}-\d{2}-\d{2}T", hostname):
+            parts = rest.split(None, 1)
+            if parts:
+                hostname = parts[0]
+                rest = parts[1] if len(parts) > 1 else ""
+
+        app_name, message = _split_app_message(rest)
         return {
             "timestamp": ts,
             "source_ip": source_ip,
@@ -174,14 +185,38 @@ async def _refresh_host_cache():
         async with AsyncSessionLocal() as db:
             hosts = (await db.execute(select(PingHost))).scalars().all()
         cache: dict[str, int] = {}
+        loop = asyncio.get_running_loop()
         for h in hosts:
             cache[h.hostname.lower()] = h.id
             if h.name:
                 cache[h.name.lower()] = h.id
+
+            # Strip URL parts to get raw hostname/IP
+            raw = h.hostname
+            for prefix in ("https://", "http://"):
+                if raw.startswith(prefix):
+                    raw = raw[len(prefix):]
+            raw = raw.split("/")[0].split(":")[0]
+            cache[raw.lower()] = h.id
+
+            # Forward DNS: resolve hostname to IP (catches FQDNs → IPs)
+            try:
+                resolved_ip = await loop.run_in_executor(None, socket.gethostbyname, raw)
+                cache[resolved_ip] = h.id
+            except Exception:
+                pass
+
         _host_cache = cache
         _host_cache_ts = now
+        log.debug("Syslog host cache refreshed: %d entries from %d hosts", len(cache), len(hosts))
     except Exception as e:
         log.warning("Failed to refresh host cache: %s", e)
+
+
+# Reverse DNS cache for unknown source IPs
+_rdns_cache: dict[str, Optional[str]] = {}
+_RDNS_CACHE_TTL = 300  # 5 minutes
+_rdns_cache_ts: float = 0.0
 
 
 def _resolve_host_id(source_ip: str, hostname: Optional[str]) -> Optional[int]:
@@ -190,7 +225,47 @@ def _resolve_host_id(source_ip: str, hostname: Optional[str]) -> Optional[int]:
         return _host_cache[hostname.lower()]
     if source_ip in _host_cache:
         return _host_cache[source_ip]
+    if source_ip.lower() in _host_cache:
+        return _host_cache[source_ip.lower()]
+
+    # Try reverse DNS on source_ip (cached)
+    rdns_name = _rdns_cache.get(source_ip)
+    if rdns_name and rdns_name.lower() in _host_cache:
+        return _host_cache[rdns_name.lower()]
+    # Also try short hostname from FQDN (e.g. "ucg.b8n.ch" → "ucg")
+    if rdns_name and "." in rdns_name:
+        short = rdns_name.split(".")[0].lower()
+        if short in _host_cache:
+            return _host_cache[short]
+
     return None
+
+
+async def _rdns_resolve_loop():
+    """Periodically resolve reverse DNS for unknown source IPs."""
+    global _rdns_cache, _rdns_cache_ts
+    import time
+    while True:
+        await asyncio.sleep(30)
+        now = time.time()
+        if now - _rdns_cache_ts < _RDNS_CACHE_TTL:
+            continue
+        _rdns_cache_ts = now
+        # Collect unique source IPs from recent buffer entries that had no host_id
+        ips_to_resolve = set()
+        for entry in _buffer:
+            if not entry.get("host_id") and entry.get("source_ip"):
+                ips_to_resolve.add(entry["source_ip"])
+        # Also resolve IPs we haven't seen before
+        loop = asyncio.get_running_loop()
+        for ip in ips_to_resolve:
+            if ip in _rdns_cache:
+                continue
+            try:
+                result = await loop.run_in_executor(None, socket.gethostbyaddr, ip)
+                _rdns_cache[ip] = result[0]
+            except Exception:
+                _rdns_cache[ip] = None
 
 
 # ── Write buffer ────────────────────────────────────────────────────────────
@@ -284,6 +359,7 @@ _udp_transport = None
 _tcp_server = None
 _flush_task = None
 _cache_task = None
+_rdns_task = None
 
 
 async def _cache_refresh_loop():
@@ -321,16 +397,19 @@ async def start_syslog_server(udp_port: int = 1514, tcp_port: int = 1514):
     # Background tasks
     _flush_task = asyncio.create_task(_flush_loop())
     _cache_task = asyncio.create_task(_cache_refresh_loop())
+    _rdns_task = asyncio.create_task(_rdns_resolve_loop())
 
 
 async def stop_syslog_server():
     """Stop syslog listeners and flush remaining buffer."""
-    global _udp_transport, _tcp_server, _flush_task, _cache_task
+    global _udp_transport, _tcp_server, _flush_task, _cache_task, _rdns_task
 
     if _flush_task:
         _flush_task.cancel()
     if _cache_task:
         _cache_task.cancel()
+    if _rdns_task:
+        _rdns_task.cancel()
     if _udp_transport:
         _udp_transport.close()
     if _tcp_server:
