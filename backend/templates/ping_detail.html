@@ -291,7 +291,7 @@
   <div id="panel-monitoring" class="hidden">
 
     <!-- SLA Stats -->
-    <div class="grid grid-cols-6 gap-4 mb-6">
+    <div id="section-latency" class="grid grid-cols-6 gap-4 mb-6">
       <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-5">
         <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Uptime 24h</p>
         <p class="text-2xl font-bold {% if uptime_pct >= 99 %}text-emerald-400{% elif uptime_pct >= 90 %}text-yellow-400{% else %}text-red-400{% endif %}">
@@ -378,7 +378,7 @@
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
 
         <!-- CPU -->
-        <div>
+        <div id="section-cpu">
           <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">CPU</p>
           <p class="text-xl font-bold
             {% if proxmox_guest.cpu_pct >= 85 %}text-red-400{% elif proxmox_guest.cpu_pct >= 60 %}text-yellow-400{% else %}text-white{% endif %}">
@@ -393,7 +393,7 @@
 
         <!-- RAM -->
         {% set mem_pct = (proxmox_guest.mem_used_gb / proxmox_guest.mem_total_gb * 100)|round(1) if proxmox_guest.mem_total_gb > 0 else 0 %}
-        <div>
+        <div id="section-ram">
           <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">RAM</p>
           <p class="text-xl font-bold
             {% if mem_pct >= 85 %}text-red-400{% elif mem_pct >= 70 %}text-yellow-400{% else %}text-white{% endif %}">
@@ -408,7 +408,7 @@
         </div>
 
         <!-- Disk -->
-        <div>
+        <div id="section-disk">
           <p class="text-slate-500 text-xs uppercase tracking-wider mb-1.5">Disk</p>
           {% if proxmox_guest.disk_used_gb > 0 %}
           <p class="text-xl font-bold
@@ -747,6 +747,28 @@
     });
   }
   setRange('24h');
+
+  // ── Highlight from dashboard deep-link ──
+  (function() {
+    const params = new URLSearchParams(window.location.search);
+    const highlight = params.get('highlight');
+    if (!highlight) return;
+    const sectionId = 'section-' + highlight.toLowerCase();
+    const el = document.getElementById(sectionId);
+    if (!el) return;
+    setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.transition = 'box-shadow 0.3s, outline 0.3s';
+      el.style.outline = '2px solid rgba(251,146,60,0.7)';
+      el.style.outlineOffset = '4px';
+      el.style.boxShadow = '0 0 20px rgba(251,146,60,0.3)';
+      el.style.borderRadius = '8px';
+      setTimeout(() => {
+        el.style.outline = '2px solid transparent';
+        el.style.boxShadow = 'none';
+      }, 2500);
+    }, 300);
+  })();
 
   {% if proxmox_history and proxmox_history['24h'] and proxmox_history['24h'].labels %}
   (function() {

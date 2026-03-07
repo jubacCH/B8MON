@@ -113,12 +113,14 @@
     <div class="flex flex-wrap gap-2">
       {% for a in anomalies %}
       {% set a_link = a.get('host_id') or ping_host_map.get(a.name) %}
+      {% set a_metric = a.metric | lower %}
+      {% if a_link %}
+      <a href="/ping/{{ a_link }}?tab=monitoring&highlight={{ a_metric }}"
+         class="flex items-center gap-2 px-3 py-1.5 bg-ng-critical/[0.06] border border-ng-critical/15 rounded-lg hover:!bg-ng-critical/[0.12] hover:!border-ng-critical/30 transition-colors">
+      {% else %}
       <div class="flex items-center gap-2 px-3 py-1.5 bg-ng-critical/[0.06] border border-ng-critical/15 rounded-lg">
-        {% if a_link %}
-        <a href="/ping/{{ a_link }}" class="text-[--ng-text-primary] text-xs font-medium hover:text-ng-critical transition-colors">{{ a.name }}</a>
-        {% else %}
+      {% endif %}
         <span class="text-[--ng-text-primary] text-xs font-medium">{{ a.name }}</span>
-        {% endif %}
         <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium
           {% if a.metric == 'CPU' %}bg-ng-primary/15 text-ng-primary
           {% elif a.metric == 'RAM' %}bg-ng-accent/15 text-ng-accent
@@ -130,7 +132,7 @@
         {% if a.factor %}
         <span class="text-[--ng-text-muted] text-[10px] font-mono">{{ a.factor }}σ</span>
         {% endif %}
-      </div>
+      {% if a_link %}</a>{% else %}</div>{% endif %}
       {% endfor %}
     </div>
   </div>
@@ -149,19 +151,21 @@
     <div class="flex flex-wrap gap-2">
       {% for w in warnings %}
       {% set w_link = ping_host_map.get(w.name) %}
+      {% set w_metric = w.metric | lower %}
+      {% if w_link %}
+      <a href="/ping/{{ w_link }}?tab=monitoring&highlight={{ w_metric }}"
+         class="flex items-center gap-2 px-3 py-1.5 bg-ng-warning/[0.04] border border-ng-warning/10 rounded-lg hover:!bg-ng-warning/[0.10] hover:!border-ng-warning/25 transition-colors">
+      {% else %}
       <div class="flex items-center gap-2 px-3 py-1.5 bg-ng-warning/[0.04] border border-ng-warning/10 rounded-lg">
-        {% if w_link %}
-        <a href="/ping/{{ w_link }}" class="text-[--ng-text-primary] text-xs font-medium hover:text-ng-warning transition-colors">{{ w.name }}</a>
-        {% else %}
+      {% endif %}
         <span class="text-[--ng-text-primary] text-xs font-medium">{{ w.name }}</span>
-        {% endif %}
         <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium
           {% if w.metric == 'CPU' %}bg-ng-primary/15 text-ng-primary
           {% elif w.metric == 'RAM' %}bg-ng-accent/15 text-ng-accent
           {% else %}bg-ng-critical/15 text-ng-critical{% endif %}">{{ w.metric }}</span>
         <span class="text-ng-warning text-xs font-mono tabular-nums">{{ w.current }}%</span>
         <span class="text-[--ng-text-muted] text-[10px] font-mono">≥{{ w.threshold }}%</span>
-      </div>
+      {% if w_link %}</a>{% else %}</div>{% endif %}
       {% endfor %}
     </div>
   </div>
