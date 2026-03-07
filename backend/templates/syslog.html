@@ -181,16 +181,17 @@
               </span>
               {% endif %}
             </td>
+            {% set resolved_id = msg.host_id or ip_to_host_id.get(msg.source_ip) or (ip_to_host_id.get((msg.hostname or '').lower())) %}
             <td class="px-4 py-2 text-xs truncate max-w-[150px]">
-              {% if msg.host_id %}
-              <a href="/ping/{{ msg.host_id }}?tab=syslog" class="text-[--ng-text-secondary] hover:text-white transition-colors underline decoration-dotted underline-offset-2">{{ msg.hostname or '—' }}</a>
+              {% if resolved_id %}
+              <a href="/ping/{{ resolved_id }}?tab=syslog" class="text-[--ng-text-secondary] hover:text-white transition-colors underline decoration-dotted underline-offset-2">{{ msg.hostname or '—' }}</a>
               {% else %}
               <span class="text-[--ng-text-secondary]">{{ msg.hostname or '—' }}</span>
               {% endif %}
             </td>
             <td class="px-4 py-2 text-xs truncate max-w-[120px] font-mono">
-              {% if msg.host_id %}
-              <a href="/ping/{{ msg.host_id }}?tab=syslog" class="text-[--ng-text-muted] hover:text-white transition-colors">{{ msg.source_ip }}</a>
+              {% if resolved_id %}
+              <a href="/ping/{{ resolved_id }}?tab=syslog" class="text-[--ng-text-muted] hover:text-white transition-colors">{{ msg.source_ip }}</a>
               {% else %}
               <span class="text-[--ng-text-muted]">{{ msg.source_ip }}</span>
               {% endif %}

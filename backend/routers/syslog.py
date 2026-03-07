@@ -124,6 +124,22 @@ async def syslog_page(
     )
     known_apps = [r[0] for r in (await db.execute(apps_query)).all()]
 
+    # Build IP → PingHost.id map for clickable host links
+    ip_to_host_id: dict[str, int] = {}
+    try:
+        ping_hosts = (await db.execute(select(PingHost))).scalars().all()
+        for ph in ping_hosts:
+            raw = ph.hostname
+            for prefix in ("https://", "http://"):
+                if raw.startswith(prefix):
+                    raw = raw[len(prefix):]
+            raw = raw.split("/")[0].split(":")[0]
+            ip_to_host_id[raw] = ph.id
+            if ph.name:
+                ip_to_host_id[ph.name.lower()] = ph.id
+    except Exception:
+        pass
+
     return templates.TemplateResponse("syslog.html", {
         "request": request,
         "active_page": "syslog",
@@ -136,6 +152,7 @@ async def syslog_page(
         "severity_counts": severity_counts,
         "known_hosts": known_hosts,
         "known_apps": known_apps,
+        "ip_to_host_id": ip_to_host_id,
         # Current filter/sort values
         "f_severity": sev,
         "f_facility": fac,
