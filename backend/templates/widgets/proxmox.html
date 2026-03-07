@@ -6,7 +6,7 @@
     <h2 class="metric-label !text-[10px] mb-3">Proxmox</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
       {% for cluster in proxmox_clusters %}
-      <a href="/proxmox/{{ cluster.id }}" class="glass-card block" id="px-card-{{ cluster.id }}">
+      <a href="/integration/proxmox/{{ cluster.id }}" class="glass-card block" id="px-card-{{ cluster.id }}">
         <div class="flex items-center justify-between mb-3">
           <div class="min-w-0">
             <p class="text-[--ng-text-primary] font-semibold text-sm truncate">{{ cluster.name }}</p>

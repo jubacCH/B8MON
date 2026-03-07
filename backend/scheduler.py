@@ -96,7 +96,7 @@ async def run_integration_checks():
 async def run_ping_checks():
     """Ping all enabled hosts concurrently and store results."""
     import asyncio as _asyncio
-    from collectors.ping import check_host
+    from utils.ping import check_host
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(PingHost).where(PingHost.enabled == True))
@@ -171,7 +171,7 @@ async def run_ping_checks():
 
 async def update_ssl_expiry():
     """Update ssl_expiry_days for all HTTPS hosts."""
-    from collectors.ping import get_ssl_expiry_days
+    from utils.ping import get_ssl_expiry_days
     from sqlalchemy import update as sa_update
 
     async with AsyncSessionLocal() as db:
@@ -238,42 +238,6 @@ async def cleanup_old_results():
     logger.info("Cleanup done (ping: %dd, integrations: %dd, syslog: %d msgs)", ping_ret, int_ret, total_deleted)
 
 
-# ── Speedtest (old-style, not yet migrated to generic) ───────────────────────
-
-
-async def run_speedtest_check():
-    """Run a scheduled speedtest if configured."""
-    from database import SpeedtestConfig, SpeedtestResult
-    from collectors.speedtest import run_speedtest
-
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(SpeedtestConfig).limit(1))
-        cfg = result.scalar_one_or_none()
-
-    if not cfg or not cfg.schedule_minutes:
-        return
-
-    try:
-        data = await run_speedtest(cfg.server_id)
-        async with AsyncSessionLocal() as db:
-            db.add(SpeedtestResult(
-                config_id=cfg.id, timestamp=datetime.utcnow(), ok=True,
-                download_mbps=data["download_mbps"], upload_mbps=data["upload_mbps"],
-                ping_ms=data["ping_ms"], server_name=data["server_name"],
-            ))
-            await db.commit()
-        logger.info("Speedtest: %.1f/%.1f Mbps, %.0fms",
-                    data["download_mbps"], data["upload_mbps"], data["ping_ms"])
-    except Exception as exc:
-        logger.warning("Speedtest failed: %s", exc)
-        async with AsyncSessionLocal() as db:
-            db.add(SpeedtestResult(
-                config_id=cfg.id, timestamp=datetime.utcnow(),
-                ok=False, error=str(exc),
-            ))
-            await db.commit()
-
-
 # ── Scheduler lifecycle ──────────────────────────────────────────────────────
 
 
@@ -291,23 +255,16 @@ async def run_log_intelligence():
 
 async def start_scheduler():
     """Read intervals from DB, then register and start all jobs."""
-    from database import get_setting, SpeedtestConfig
+    from database import get_setting
 
     async with AsyncSessionLocal() as db:
         ping_interval = int(await get_setting(db, "ping_interval", "60"))
-        proxmox_interval = int(await get_setting(db, "proxmox_interval", "60"))
-
-        # Speedtest schedule
-        result = await db.execute(select(SpeedtestConfig).limit(1))
-        st_cfg = result.scalar_one_or_none()
-        st_minutes = st_cfg.schedule_minutes if st_cfg else 60
+        integration_interval = int(await get_setting(db, "proxmox_interval", "60"))
 
     scheduler.add_job(run_ping_checks, "interval", seconds=ping_interval,
                       id="ping_checks", replace_existing=True)
-    scheduler.add_job(run_integration_checks, "interval", seconds=proxmox_interval,
+    scheduler.add_job(run_integration_checks, "interval", seconds=integration_interval,
                       id="integration_checks", replace_existing=True)
-    scheduler.add_job(run_speedtest_check, "interval", minutes=st_minutes,
-                      id="speedtest_checks", replace_existing=True)
     scheduler.add_job(run_correlation, "interval", seconds=60,
                       id="correlation", replace_existing=True)
     scheduler.add_job(update_ssl_expiry, "interval", hours=6,
@@ -317,8 +274,8 @@ async def start_scheduler():
     scheduler.add_job(run_log_intelligence, "interval", seconds=30,
                       id="log_intelligence", replace_existing=True)
     scheduler.start()
-    logger.info("Scheduler started (ping=%ds, integrations=%ds, speedtest=%dm)",
-                ping_interval, proxmox_interval, st_minutes)
+    logger.info("Scheduler started (ping=%ds, integrations=%ds)",
+                ping_interval, integration_interval)
 
 
 def stop_scheduler():

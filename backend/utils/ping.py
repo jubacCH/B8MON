@@ -1,6 +1,5 @@
 """
-Ping/HTTP/TCP integration – monitors hosts via ICMP, HTTP(S), or TCP.
-Hosts are managed in the DB (PingHost table), not via settings.
+Ping/HTTP/TCP/SSL utilities for host monitoring.
 """
 from __future__ import annotations
 
@@ -8,11 +7,9 @@ import asyncio
 import ssl
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
-
-from collectors.base import BaseCollector, CollectorResult, ConfigField
 
 if TYPE_CHECKING:
     from database import PingHost
@@ -89,19 +86,6 @@ async def get_ssl_expiry_days(hostname: str, port: int = 443) -> int | None:
         cert_pem = await loop.run_in_executor(
             None, lambda: ssl.get_server_certificate((hostname, port), timeout=5)
         )
-        ctx = ssl.create_default_context()
-        # parse notAfter from PEM using ssl module
-        cert = ctx.wrap_bio(
-            ssl.MemoryBIO(), ssl.MemoryBIO(), server_side=False
-        )
-        # Fallback: parse PEM manually with ssl
-        import re
-        from datetime import timezone
-        match = re.search(
-            r"Not After\s*:\s*(.+)",
-            ssl.PEM_cert_to_DER_cert.__doc__ or "",  # dummy – use cryptography-free path below
-        )
-        # Use pyopenssl-free approach: subprocess openssl
         proc = await asyncio.create_subprocess_exec(
             "openssl", "x509", "-noout", "-enddate",
             stdin=asyncio.subprocess.PIPE,
@@ -109,8 +93,9 @@ async def get_ssl_expiry_days(hostname: str, port: int = 443) -> int | None:
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await proc.communicate(input=cert_pem.encode())
-        line = stdout.decode().strip()   # e.g. "notAfter=Mar  4 12:00:00 2026 GMT"
+        line = stdout.decode().strip()
         date_str = line.split("=", 1)[1].strip()
+        from datetime import timezone
         expiry = datetime.strptime(date_str, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
         delta = expiry - datetime.now(timezone.utc)
         return max(0, delta.days)
@@ -147,7 +132,6 @@ async def check_host(host: "PingHost") -> tuple[bool, float | None]:
         *[_check_single(host, ct) for ct in types]
     )
     all_ok = all(r[0] for r in results)
-    # Primary latency: prefer ICMP, then first with a value
     primary: float | None = None
     if "icmp" in types:
         idx = types.index("icmp")
@@ -155,23 +139,3 @@ async def check_host(host: "PingHost") -> tuple[bool, float | None]:
     if primary is None:
         primary = next((r[1] for r in results if r[1] is not None), None)
     return all_ok, primary
-
-
-# ── Collector class ────────────────────────────────────────────────────────────
-
-class PingCollector(BaseCollector):
-    name = "ping"
-    display_name = "Ping Monitor"
-    description = "Überwacht Hosts per ICMP Ping, HTTP(S) oder TCP"
-    icon = "📡"
-
-    @classmethod
-    def get_config_fields(cls) -> list[ConfigField]:
-        return []
-
-    async def collect(self) -> CollectorResult:
-        return CollectorResult(success=True, data={})
-
-    async def health_check(self) -> bool:
-        ok, _ = await ping_host("127.0.0.1", timeout=1.0)
-        return ok

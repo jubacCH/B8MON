@@ -280,6 +280,44 @@ async def test_connection(
         return JSONResponse({"ok": False, "error": str(exc)})
 
 
+# ── Refresh (trigger immediate re-collect) ────────────────────────────────────
+
+
+@router.post("/integration/{integration_type}/{config_id}/refresh")
+async def refresh_instance(
+    request: Request,
+    integration_type: str,
+    config_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    integration_cls = get_integration(integration_type)
+    if not integration_cls:
+        return HTMLResponse("Integration not found", status_code=404)
+
+    cfg = await int_svc.get_config(db, config_id)
+    if not cfg or cfg.type != integration_type:
+        return HTMLResponse("Instance not found", status_code=404)
+
+    config_dict = int_svc.decrypt_config(cfg.config_json)
+    instance = integration_cls(config=config_dict)
+
+    try:
+        result = await instance.collect()
+        if result.success:
+            await snap_svc.save(db, integration_type, config_id, True, result.data)
+        else:
+            await snap_svc.save(db, integration_type, config_id, False, error=result.error)
+        await db.commit()
+    except Exception as exc:
+        await snap_svc.save(db, integration_type, config_id, False, error=str(exc))
+        await db.commit()
+
+    return RedirectResponse(
+        url=f"/integration/{integration_type}/{config_id}",
+        status_code=303,
+    )
+
+
 # ── JSON API: latest status ───────────────────────────────────────────────────
 
 

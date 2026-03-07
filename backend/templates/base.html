@@ -181,77 +181,77 @@
                class="mt-0.5 ml-3 pl-3 border-l border-white/[0.06] space-y-0.5 {% if not integ_active %}hidden{% endif %}">
 
             {% if nc.proxmox > 0 or active_page == 'proxmox' %}
-            <a href="/proxmox" class="ng-nav-item text-xs {% if active_page == 'proxmox' %}ng-nav-active{% endif %}">
+            <a href="/integration/proxmox" class="ng-nav-item text-xs {% if active_page == 'proxmox' %}ng-nav-active{% endif %}">
               <img src="https://cdn.simpleicons.org/proxmox/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">Proxmox
             </a>
             {% endif %}
             {% if nc.unifi > 0 or active_page == 'unifi' %}
-            <a href="/unifi" class="ng-nav-item text-xs {% if active_page == 'unifi' %}ng-nav-active{% endif %}">
+            <a href="/integration/unifi" class="ng-nav-item text-xs {% if active_page == 'unifi' %}ng-nav-active{% endif %}">
               <img src="https://cdn.simpleicons.org/ubiquiti/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">UniFi
             </a>
             {% endif %}
             {% if nc.unas > 0 or active_page == 'unas' %}
-            <a href="/unas" class="ng-nav-item text-xs {% if active_page == 'unas' %}ng-nav-active{% endif %}">
+            <a href="/integration/unas" class="ng-nav-item text-xs {% if active_page == 'unas' %}ng-nav-active{% endif %}">
               <img src="https://cdn.simpleicons.org/ubiquiti/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">UniFi NAS
             </a>
             {% endif %}
             {% if nc.portainer > 0 or active_page == 'portainer' %}
-            <a href="/portainer" class="ng-nav-item text-xs {% if active_page == 'portainer' %}ng-nav-active{% endif %}">
+            <a href="/integration/portainer" class="ng-nav-item text-xs {% if active_page == 'portainer' %}ng-nav-active{% endif %}">
               <img src="https://cdn.simpleicons.org/portainer/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">Portainer
             </a>
             {% endif %}
             {% if nc.truenas > 0 or active_page == 'truenas' %}
-            <a href="/truenas" class="ng-nav-item text-xs {% if active_page == 'truenas' %}ng-nav-active{% endif %}">
+            <a href="/integration/truenas" class="ng-nav-item text-xs {% if active_page == 'truenas' %}ng-nav-active{% endif %}">
               <img src="https://cdn.simpleicons.org/truenas/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">TrueNAS
             </a>
             {% endif %}
             {% if nc.synology > 0 or active_page == 'synology' %}
-            <a href="/synology" class="ng-nav-item text-xs {% if active_page == 'synology' %}ng-nav-active{% endif %}">
+            <a href="/integration/synology" class="ng-nav-item text-xs {% if active_page == 'synology' %}ng-nav-active{% endif %}">
               <img src="https://cdn.simpleicons.org/synology/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">Synology
             </a>
             {% endif %}
             {% if nc.pihole > 0 or active_page == 'pihole' %}
-            <a href="/pihole" class="ng-nav-item text-xs {% if active_page == 'pihole' %}ng-nav-active{% endif %}">
+            <a href="/integration/pihole" class="ng-nav-item text-xs {% if active_page == 'pihole' %}ng-nav-active{% endif %}">
               <img src="https://cdn.simpleicons.org/pihole/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">Pi-hole
             </a>
             {% endif %}
             {% if nc.adguard > 0 or active_page == 'adguard' %}
-            <a href="/adguard" class="ng-nav-item text-xs {% if active_page == 'adguard' %}ng-nav-active{% endif %}">
+            <a href="/integration/adguard" class="ng-nav-item text-xs {% if active_page == 'adguard' %}ng-nav-active{% endif %}">
               <img src="https://cdn.simpleicons.org/adguard/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">AdGuard
             </a>
             {% endif %}
             {% if nc.firewall > 0 or active_page == 'firewall' %}
-            <a href="/firewall" class="ng-nav-item text-xs {% if active_page == 'firewall' %}ng-nav-active{% endif %}">
+            <a href="/integration/firewall" class="ng-nav-item text-xs {% if active_page == 'firewall' %}ng-nav-active{% endif %}">
               <img src="https://cdn.simpleicons.org/opnsense/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">Firewall
             </a>
             {% endif %}
             {% if nc.hass > 0 or active_page == 'hass' %}
-            <a href="/hass" class="ng-nav-item text-xs {% if active_page == 'hass' %}ng-nav-active{% endif %}">
+            <a href="/integration/hass" class="ng-nav-item text-xs {% if active_page == 'hass' %}ng-nav-active{% endif %}">
               <img src="https://cdn.simpleicons.org/homeassistant/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">Home Assistant
             </a>
             {% endif %}
             {% if nc.gitea > 0 or active_page == 'gitea' %}
-            <a href="/gitea" class="ng-nav-item text-xs {% if active_page == 'gitea' %}ng-nav-active{% endif %}">
+            <a href="/integration/gitea" class="ng-nav-item text-xs {% if active_page == 'gitea' %}ng-nav-active{% endif %}">
               <img src="https://cdn.simpleicons.org/gitea/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">Gitea
             </a>
             {% endif %}
             {% if nc.phpipam > 0 or active_page == 'phpipam' %}
-            <a href="/phpipam" class="ng-nav-item text-xs {% if active_page == 'phpipam' %}ng-nav-active{% endif %}">
+            <a href="/integration/phpipam" class="ng-nav-item text-xs {% if active_page == 'phpipam' %}ng-nav-active{% endif %}">
               <svg class="brand-icon w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>phpIPAM
             </a>
             {% endif %}
             {% if nc.speedtest > 0 or active_page == 'speedtest' %}
-            <a href="/speedtest" class="ng-nav-item text-xs {% if active_page == 'speedtest' %}ng-nav-active{% endif %}">
+            <a href="/integration/speedtest" class="ng-nav-item text-xs {% if active_page == 'speedtest' %}ng-nav-active{% endif %}">
               <svg class="brand-icon w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 2a8 8 0 110 16A8 8 0 0112 4zm0 2a6 6 0 00-5.1 9.15l1.42-1.42A4 4 0 1116.92 12h2a6 6 0 00-6.92-5.99V6zm4.24 2.34l-5.66 5.66a1 1 0 101.42 1.42l5.66-5.66-1.42-1.42z"/></svg>Speedtest
             </a>
             {% endif %}
             {% if nc.ups > 0 or active_page == 'ups' %}
-            <a href="/ups" class="ng-nav-item text-xs {% if active_page == 'ups' %}ng-nav-active{% endif %}">
+            <a href="/integration/ups" class="ng-nav-item text-xs {% if active_page == 'ups' %}ng-nav-active{% endif %}">
               <svg class="brand-icon w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M17 5H7a5 5 0 000 10h10a5 5 0 000-10zm-8 8H7a3 3 0 010-6h2v6zm6 0h-4V7h4v6zm2 0V7a3 3 0 010 6z"/></svg>UPS / NUT
             </a>
             {% endif %}
             {% if nc.redfish > 0 or active_page == 'redfish' %}
-            <a href="/redfish" class="ng-nav-item text-xs {% if active_page == 'redfish' %}ng-nav-active{% endif %}">
+            <a href="/integration/redfish" class="ng-nav-item text-xs {% if active_page == 'redfish' %}ng-nav-active{% endif %}">
               <img src="https://cdn.simpleicons.org/dell/white" class="brand-icon w-3.5 h-3.5 shrink-0" alt="">Redfish / iDRAC
             </a>
             {% endif %}
@@ -378,21 +378,21 @@
       </div>
       <div class="grid grid-cols-3 gap-2.5">
         {% for item in [
-          ('/proxmox',   'Proxmox',        'VMs & LXC',        'proxmox'),
-          ('/unifi',     'UniFi',          'Network',          'ubiquiti'),
-          ('/unas',      'UniFi NAS',      'Storage',          'ubiquiti'),
-          ('/portainer', 'Portainer',      'Containers',       'portainer'),
-          ('/truenas',   'TrueNAS',        'NAS Storage',      'truenas'),
-          ('/synology',  'Synology',       'DSM NAS',          'synology'),
-          ('/pihole',    'Pi-hole',        'DNS Blocking',     'pihole'),
-          ('/adguard',   'AdGuard',        'DNS Blocking',     'adguard'),
-          ('/firewall',  'Firewall',       'OPNsense/pfSense', 'opnsense'),
-          ('/hass',      'Home Assistant', 'Smart Home',       'homeassistant'),
-          ('/gitea',     'Gitea',          'Git Hosting',      'gitea'),
-          ('/phpipam',   'phpIPAM',        'IP Management',    ''),
-          ('/speedtest', 'Speedtest',      'Internet Speed',   ''),
-          ('/ups',       'UPS / NUT',      'Battery Backup',   ''),
-          ('/redfish',   'Redfish',        'Server Hardware',  'dell'),
+          ('/integration/proxmox',   'Proxmox',        'VMs & LXC',        'proxmox'),
+          ('/integration/unifi',     'UniFi',          'Network',          'ubiquiti'),
+          ('/integration/unas',      'UniFi NAS',      'Storage',          'ubiquiti'),
+          ('/integration/portainer', 'Portainer',      'Containers',       'portainer'),
+          ('/integration/truenas',   'TrueNAS',        'NAS Storage',      'truenas'),
+          ('/integration/synology',  'Synology',       'DSM NAS',          'synology'),
+          ('/integration/pihole',    'Pi-hole',        'DNS Blocking',     'pihole'),
+          ('/integration/adguard',   'AdGuard',        'DNS Blocking',     'adguard'),
+          ('/integration/firewall',  'Firewall',       'OPNsense/pfSense', 'opnsense'),
+          ('/integration/hass',      'Home Assistant', 'Smart Home',       'homeassistant'),
+          ('/integration/gitea',     'Gitea',          'Git Hosting',      'gitea'),
+          ('/integration/phpipam',   'phpIPAM',        'IP Management',    ''),
+          ('/integration/speedtest', 'Speedtest',      'Internet Speed',   ''),
+          ('/integration/ups',       'UPS / NUT',      'Battery Backup',   ''),
+          ('/integration/redfish',   'Redfish',        'Server Hardware',  'dell'),
         ] %}
         <a href="{{ item[0] }}"
            onclick="document.getElementById('integration-picker').classList.add('hidden')"
@@ -400,9 +400,9 @@
           <div class="w-10 h-10 rounded-xl bg-white/[0.04] flex items-center justify-center">
             {% if item[3] %}
             <img src="https://cdn.simpleicons.org/{{ item[3] }}" class="w-6 h-6" alt="{{ item[1] }}">
-            {% elif item[0] == '/phpipam' %}
+            {% elif item[0] == '/integration/phpipam' %}
             <svg class="w-5 h-5 text-[--ng-text-muted]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM7 13.5v-3h2v3H7zm4 0v-3h2v3h-2zm4 0v-3h2v3h-2z"/></svg>
-            {% elif item[0] == '/speedtest' %}
+            {% elif item[0] == '/integration/speedtest' %}
             <svg class="w-5 h-5 text-[--ng-text-muted]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 2a8 8 0 110 16A8 8 0 0112 4zm0 2a6 6 0 00-5.1 9.15l1.42-1.42A4 4 0 1116.92 12h2a6 6 0 00-6.92-5.99V6zm4.24 2.34l-5.66 5.66a1 1 0 101.42 1.42l5.66-5.66-1.42-1.42z"/></svg>
             {% else %}
             <svg class="w-5 h-5 text-[--ng-text-muted]" fill="currentColor" viewBox="0 0 24 24"><path d="M17 5H7a5 5 0 000 10h10a5 5 0 000-10zm-8 8H7a3 3 0 010-6h2v6zm6 0h-4V7h4v6zm2 0V7a3 3 0 010 6z"/></svg>

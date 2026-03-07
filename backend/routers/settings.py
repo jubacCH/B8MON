@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import encrypt_value, get_db, get_setting, set_setting
+from models.integration import IntegrationConfig
 
 router = APIRouter(prefix="/settings")
 templates = Jinja2Templates(directory="templates")
@@ -216,7 +218,8 @@ async def save_phpipam(
 
     # Reschedule or remove phpIPAM sync job
     from scheduler import scheduler
-    from collectors.phpipam import sync_phpipam_hosts
+    from integrations.phpipam import sync_phpipam_hosts
+    from services import integration as _int_svc
     job = scheduler.get_job("phpipam_sync")
     if sync_h > 0:
         if job:
@@ -224,8 +227,14 @@ async def save_phpipam(
         else:
             async def _sync():
                 from database import AsyncSessionLocal
+                from models.integration import IntegrationConfig
                 async with AsyncSessionLocal() as _db:
-                    await sync_phpipam_hosts(_db)
+                    cfgs = (await _db.execute(
+                        select(IntegrationConfig).where(IntegrationConfig.type == "phpipam")
+                    )).scalars().all()
+                    for cfg in cfgs:
+                        config_dict = _int_svc.decrypt_config(cfg.config_json)
+                        await sync_phpipam_hosts(_db, config_dict)
             scheduler.add_job(_sync, "interval", hours=sync_h, id="phpipam_sync", replace_existing=True)
     else:
         if job:
@@ -237,9 +246,17 @@ async def save_phpipam(
 @router.post("/phpipam/sync")
 async def manual_phpipam_sync(db: AsyncSession = Depends(get_db)):
     """Trigger a manual phpIPAM host import. Returns JSON result."""
-    from collectors.phpipam import sync_phpipam_hosts
-    result = await sync_phpipam_hosts(db)
-    return JSONResponse(result)
+    from integrations.phpipam import sync_phpipam_hosts
+    from services import integration as _int_svc
+    cfgs = (await db.execute(
+        select(IntegrationConfig).where(IntegrationConfig.type == "phpipam")
+    )).scalars().all()
+    results = []
+    for cfg in cfgs:
+        config_dict = _int_svc.decrypt_config(cfg.config_json)
+        result = await sync_phpipam_hosts(db, config_dict)
+        results.append(result)
+    return JSONResponse(results[0] if len(results) == 1 else {"synced": results})
 
 
 # ── Notifications ─────────────────────────────────────────────────────────────

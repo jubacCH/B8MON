@@ -11,9 +11,12 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import cast, func, select, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from collectors.ping import check_host
-from database import PingHost, PingResult, ProxmoxCluster, ProxmoxSnapshot, UnifiSnapshot, get_db
+from utils.ping import check_host
+from database import PingHost, PingResult, get_db
+from models.integration import IntegrationConfig, Snapshot
 from models.syslog import SyslogMessage
+from services import integration as int_svc
+from services import snapshot as snap_svc
 
 router = APIRouter(prefix="/ping")
 templates = Jinja2Templates(directory="templates")
@@ -307,31 +310,29 @@ async def ping_detail(host_id: int, request: Request, db: AsyncSession = Depends
     # Look up Proxmox metrics for this host (by name or hostname match)
     proxmox_guest = None
     proxmox_history: dict = {}
-    clusters = (await db.execute(select(ProxmoxCluster))).scalars().all()
-    for cluster in clusters:
-        snap = (await db.execute(
-            select(ProxmoxSnapshot)
-            .where(ProxmoxSnapshot.cluster_id == cluster.id, ProxmoxSnapshot.ok == True)
-            .order_by(ProxmoxSnapshot.timestamp.desc())
-            .limit(1)
-        )).scalar_one_or_none()
-        if not snap:
+    px_configs = (await db.execute(
+        select(IntegrationConfig).where(IntegrationConfig.type == "proxmox")
+    )).scalars().all()
+    px_latest = await snap_svc.get_latest_batch(db, "proxmox")
+    for cfg in px_configs:
+        snap = px_latest.get(cfg.id)
+        if not snap or not snap.ok or not snap.data_json:
             continue
         snap_data = json.loads(snap.data_json)
         for g in snap_data.get("vms", []) + snap_data.get("containers", []):
             if g.get("name") in (host.hostname, host.name):
-                proxmox_guest = {**g, "cluster_name": cluster.name, "snap_time": snap.timestamp}
+                proxmox_guest = {**g, "cluster_name": cfg.name, "snap_time": snap.timestamp}
                 break
         if proxmox_guest:
-            # Historical snapshots for charts (last 7d, split into 2h/24h/7d ranges)
             hist_snaps = (await db.execute(
-                select(ProxmoxSnapshot)
+                select(Snapshot)
                 .where(
-                    ProxmoxSnapshot.cluster_id == cluster.id,
-                    ProxmoxSnapshot.ok == True,
-                    ProxmoxSnapshot.timestamp >= window_7d,
+                    Snapshot.entity_type == "proxmox",
+                    Snapshot.entity_id == cfg.id,
+                    Snapshot.ok == True,
+                    Snapshot.timestamp >= window_7d,
                 )
-                .order_by(ProxmoxSnapshot.timestamp.asc())
+                .order_by(Snapshot.timestamp.asc())
             )).scalars().all()
 
             all_px = []
@@ -373,18 +374,12 @@ async def ping_detail(host_id: int, request: Request, db: AsyncSession = Depends
     host_ip  = (dns_info.get("ip") or "").strip()
     host_mac = (host.mac_address or "").strip().lower()
 
-    unifi_snaps = (await db.execute(
-        select(UnifiSnapshot).where(UnifiSnapshot.ok == True)
-        .order_by(UnifiSnapshot.timestamp.desc())
-        .limit(20)
-    )).scalars().all()
-    seen_ctrl: set[int] = set()
-    for us in unifi_snaps:
-        if us.controller_id in seen_ctrl:
+    unifi_latest = await snap_svc.get_latest_batch(db, "unifi")
+    for snap in unifi_latest.values():
+        if not snap or not snap.ok or not snap.data_json:
             continue
-        seen_ctrl.add(us.controller_id)
         try:
-            ud = json.loads(us.data_json)
+            ud = json.loads(snap.data_json)
             for c in ud.get("clients", []) + [
                 {**d, "_is_device": True} for d in ud.get("devices", [])
             ]:

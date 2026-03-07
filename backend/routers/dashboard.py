@@ -10,21 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import (
     PingHost, PingResult,
-    ProxmoxCluster, ProxmoxSnapshot,
-    UnifiController, UnifiSnapshot,
-    UnasServer, UnasSnapshot,
-    PiholeInstance, PiholeSnapshot,
-    AdguardInstance, AdguardSnapshot,
-    PortainerInstance, PortainerSnapshot,
-    TruenasServer, TruenasSnapshot,
-    SynologyServer, SynologySnapshot,
-    FirewallInstance, FirewallSnapshot,
-    HassInstance, HassSnapshot,
-    GiteaInstance, GiteaSnapshot,
-    NutInstance, NutSnapshot,
-    RedfishServer, RedfishSnapshot,
-    SpeedtestConfig, SpeedtestResult,
-    get_db, get_setting, set_setting, is_setup_complete, decrypt_value,
+    get_db, get_setting, set_setting, is_setup_complete,
 )
 from models.integration import IntegrationConfig, Snapshot
 from services import integration as int_svc
@@ -50,24 +36,24 @@ DEFAULT_LAYOUT = [
 ]
 
 
-# ── Helper: build integration_health from new generic tables ─────────────────
+# ── Helper: build integration_health from generic tables ─────────────────
 
 _INTEGRATION_META = {
-    "proxmox":      {"label": "Proxmox",        "color": "orange",  "url_prefix": "/proxmox"},
-    "unifi":        {"label": "UniFi",           "color": "blue",    "url_prefix": "/unifi"},
-    "unas":         {"label": "UniFi NAS",       "color": "cyan",    "url_prefix": "/unas"},
-    "pihole":       {"label": "Pi-hole",         "color": "red",     "url_prefix": "/pihole"},
-    "adguard":      {"label": "AdGuard",         "color": "emerald", "url_prefix": "/adguard"},
-    "portainer":    {"label": "Portainer",       "color": "teal",    "url_prefix": "/portainer"},
-    "truenas":      {"label": "TrueNAS",         "color": "slate",   "url_prefix": "/truenas"},
-    "synology":     {"label": "Synology",        "color": "blue",    "url_prefix": "/synology"},
-    "firewall":     {"label": "Firewall",        "color": "orange",  "url_prefix": "/firewall"},
-    "hass":         {"label": "Home Assistant",   "color": "orange",  "url_prefix": "/hass"},
-    "gitea":        {"label": "Gitea",           "color": "green",   "url_prefix": "/gitea"},
-    "phpipam":      {"label": "phpIPAM",         "color": "purple",  "url_prefix": "/phpipam"},
-    "speedtest":    {"label": "Speedtest",       "color": "blue",    "url_prefix": "/speedtest"},
-    "ups":          {"label": "UPS / NUT",       "color": "yellow",  "url_prefix": "/ups"},
-    "redfish":      {"label": "Redfish",         "color": "purple",  "url_prefix": "/redfish"},
+    "proxmox":      {"label": "Proxmox",        "color": "orange",  "url_prefix": "/integration/proxmox"},
+    "unifi":        {"label": "UniFi",           "color": "blue",    "url_prefix": "/integration/unifi"},
+    "unas":         {"label": "UniFi NAS",       "color": "cyan",    "url_prefix": "/integration/unas"},
+    "pihole":       {"label": "Pi-hole",         "color": "red",     "url_prefix": "/integration/pihole"},
+    "adguard":      {"label": "AdGuard",         "color": "emerald", "url_prefix": "/integration/adguard"},
+    "portainer":    {"label": "Portainer",       "color": "teal",    "url_prefix": "/integration/portainer"},
+    "truenas":      {"label": "TrueNAS",         "color": "slate",   "url_prefix": "/integration/truenas"},
+    "synology":     {"label": "Synology",        "color": "blue",    "url_prefix": "/integration/synology"},
+    "firewall":     {"label": "Firewall",        "color": "orange",  "url_prefix": "/integration/firewall"},
+    "hass":         {"label": "Home Assistant",   "color": "orange",  "url_prefix": "/integration/hass"},
+    "gitea":        {"label": "Gitea",           "color": "green",   "url_prefix": "/integration/gitea"},
+    "phpipam":      {"label": "phpIPAM",         "color": "purple",  "url_prefix": "/integration/phpipam"},
+    "speedtest":    {"label": "Speedtest",       "color": "blue",    "url_prefix": "/integration/speedtest"},
+    "ups":          {"label": "UPS / NUT",       "color": "yellow",  "url_prefix": "/integration/ups"},
+    "redfish":      {"label": "Redfish",         "color": "purple",  "url_prefix": "/integration/redfish"},
 }
 
 
@@ -195,83 +181,54 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     top_latency  = sorted(with_latency, key=lambda s: s["avg_latency"], reverse=True)[:10]
     top_downtime = sorted(active_stats, key=lambda s: s["uptime_pct"])[:10]
 
-    # ── Proxmox clusters ────────────────────────────────────────────────────
-    # Try new generic tables first, fall back to old ProxmoxCluster table
-    px_configs_result = await db.execute(
-        select(IntegrationConfig)
-        .where(IntegrationConfig.type == "proxmox")
-        .order_by(IntegrationConfig.name)
+    # ── Pre-fetch all integration data ────────────────────────────────────────
+    all_configs_result = await db.execute(
+        select(IntegrationConfig).order_by(IntegrationConfig.type, IntegrationConfig.name)
     )
-    px_configs = px_configs_result.scalars().all()
-    _use_new_px = len(px_configs) > 0
+    all_configs = all_configs_result.scalars().all()
+    all_snaps_cache = await snap_svc.get_latest_batch_all(db)
 
-    if _use_new_px:
-        class _PxCluster:
-            def __init__(self, cfg):
-                self.id = cfg.id
-                self.name = cfg.name
-                try:
-                    d = int_svc.decrypt_config(cfg.config_json)
-                    self.host = d.get("host", "")
-                except Exception:
-                    self.host = ""
-        proxmox_clusters = [_PxCluster(c) for c in px_configs]
-    else:
-        px_result = await db.execute(select(ProxmoxCluster).order_by(ProxmoxCluster.name))
-        proxmox_clusters = px_result.scalars().all()
+    # ── Proxmox clusters ──────────────────────────────────────────────────────
+    px_configs = [c for c in all_configs if c.type == "proxmox"]
+
+    class _PxCluster:
+        def __init__(self, cfg):
+            self.id = cfg.id
+            self.name = cfg.name
+            try:
+                d = int_svc.decrypt_config(cfg.config_json)
+                self.host = d.get("host", "")
+            except Exception:
+                self.host = ""
+    proxmox_clusters = [_PxCluster(c) for c in px_configs]
 
     anomaly_threshold = float(await get_setting(db, "anomaly_threshold", "2.0"))
 
     all_guests: list[dict] = []
-    anomalies:  list[dict] = []   # Statistical deviations (current >> historical mean)
-    warnings:   list[dict] = []   # Absolute threshold breaches (always above limit)
+    anomalies:  list[dict] = []
+    warnings:   list[dict] = []
 
-    if _use_new_px:
-        px_snapshots = await snap_svc.get_latest_batch(db, "proxmox")
-    else:
-        px_snapshots = {}
+    px_snapshots = await snap_svc.get_latest_batch(db, "proxmox")
 
     for cluster in proxmox_clusters:
-        if _use_new_px:
-            latest_snap = px_snapshots.get(cluster.id)
-            if not latest_snap or not latest_snap.ok or not latest_snap.data_json:
-                continue
-            latest_data = json.loads(latest_snap.data_json)
-        else:
-            latest_snap = (await db.execute(
-                select(ProxmoxSnapshot)
-                .where(ProxmoxSnapshot.cluster_id == cluster.id, ProxmoxSnapshot.ok == True)
-                .order_by(ProxmoxSnapshot.timestamp.desc())
-                .limit(1)
-            )).scalar_one_or_none()
-            if not latest_snap or not latest_snap.data_json:
-                continue
-            latest_data = json.loads(latest_snap.data_json)
+        latest_snap = px_snapshots.get(cluster.id)
+        if not latest_snap or not latest_snap.ok or not latest_snap.data_json:
+            continue
+        latest_data = json.loads(latest_snap.data_json)
 
         guests_now = latest_data.get("vms", []) + latest_data.get("containers", [])
 
         # Historical snapshots for anomaly baseline
-        if _use_new_px:
-            hist_snaps = (await db.execute(
-                select(Snapshot)
-                .where(
-                    Snapshot.entity_type == "proxmox",
-                    Snapshot.entity_id == cluster.id,
-                    Snapshot.ok == True,
-                    Snapshot.timestamp >= window_24h,
-                    Snapshot.timestamp < latest_snap.timestamp,
-                )
-            )).scalars().all()
-        else:
-            hist_snaps = (await db.execute(
-                select(ProxmoxSnapshot)
-                .where(
-                    ProxmoxSnapshot.cluster_id == cluster.id,
-                    ProxmoxSnapshot.ok == True,
-                    ProxmoxSnapshot.timestamp >= window_24h,
-                    ProxmoxSnapshot.timestamp < latest_snap.timestamp,
-                )
-            )).scalars().all()
+        hist_snaps = (await db.execute(
+            select(Snapshot)
+            .where(
+                Snapshot.entity_type == "proxmox",
+                Snapshot.entity_id == cluster.id,
+                Snapshot.ok == True,
+                Snapshot.timestamp >= window_24h,
+                Snapshot.timestamp < latest_snap.timestamp,
+            )
+        )).scalars().all()
 
         # Sort historical snapshots by time (oldest first) so recent slicing works
         hist_snaps_sorted = sorted(hist_snaps, key=lambda s: s.timestamp)
@@ -287,10 +244,10 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
                     hist[gid]["mem"].append(g.get("mem_used_gb", 0))
 
         # Stddev floors to prevent micro-fluctuations from triggering anomalies
-        CPU_STD_FLOOR = 3.0    # minimum 3% stddev
-        MEM_STD_FLOOR = 0.3    # minimum 0.3 GB stddev
-        SUSTAINED_WINDOW = 5   # check last N snapshots
-        SUSTAINED_MIN = 3      # require at least this many above threshold
+        CPU_STD_FLOOR = 3.0
+        MEM_STD_FLOOR = 0.3
+        SUSTAINED_WINDOW = 5
+        SUSTAINED_MIN = 3
 
         for g in guests_now:
             gid = g.get("id")
@@ -306,12 +263,10 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
                 mean_cpu = sum(all_cpu) / len(all_cpu)
                 std_cpu = max((sum((x - mean_cpu) ** 2 for x in all_cpu) / len(all_cpu)) ** 0.5, CPU_STD_FLOOR)
                 if cur_cpu > 10 and mean_cpu > 0:
-                    # Check last N snapshots + current for sustained anomaly
                     recent_values = all_cpu[-SUSTAINED_WINDOW:] + [cur_cpu]
                     anomalous_count = sum(1 for v in recent_values if (v - mean_cpu) / std_cpu >= anomaly_threshold)
                     if anomalous_count >= SUSTAINED_MIN:
                         z_score = (cur_cpu - mean_cpu) / std_cpu
-                        # Severity: combines z-score magnitude with how sustained it is
                         severity = round(z_score * (anomalous_count / len(recent_values)), 1)
                         anomalies.append({
                             "name": g["name"], "type": g["type"], "node": g["node"],
@@ -369,7 +324,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             "cluster_name": "Ping", "metric": "Latency",
             "current": pa["latency"], "mean": pa["threshold"], "factor": None,
             "host_id": pa["host_id"],
-            "sustained": None, "severity": 99,  # ping alarms always high priority
+            "sustained": None, "severity": 99,
         })
 
     # Sort anomalies by severity (highest first)
@@ -388,13 +343,10 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     all_ph = (await db.execute(select(PingHost))).scalars().all()
     ping_host_map: dict[str, int] = {}
     for h in all_ph:
-        # Exact matches
         ping_host_map[h.hostname] = h.id
         ping_host_map.setdefault(h.name, h.id)
-        # Lowercase matches
         ping_host_map.setdefault(h.hostname.lower(), h.id)
         ping_host_map.setdefault(h.name.lower(), h.id)
-        # Strip URL parts for hostname matching (https://host:port/path → host)
         raw = h.hostname
         for pfx in ("https://", "http://"):
             if raw.startswith(pfx):
@@ -403,57 +355,39 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         short_host = raw.split("/")[0].split(":")[0]
         ping_host_map.setdefault(short_host, h.id)
         ping_host_map.setdefault(short_host.lower(), h.id)
-        # Also map short hostname (before first dot) for FQDN matching
         if "." in short_host:
             ping_host_map.setdefault(short_host.split(".")[0].lower(), h.id)
 
-    # Pre-fetch all integration configs (used by topology + integration health)
-    all_configs_result = await db.execute(
-        select(IntegrationConfig).order_by(IntegrationConfig.type, IntegrationConfig.name)
-    )
-    all_configs = all_configs_result.scalars().all()
-
     # ── Build topology tree ──────────────────────────────────────────────────
-    # Map host id -> parent_id using: 1) DB parent_id, 2) Proxmox VM/LXC → node
-    topology: dict[int, int | None] = {}  # child_id → parent_id
+    topology: dict[int, int | None] = {}
     host_by_id = {h.id: h for h in all_ph}
 
-    # First pass: use DB parent_id
     for h in all_ph:
         topology[h.id] = getattr(h, 'parent_id', None)
 
-    # Second pass: auto-detect Proxmox VM/LXC → Proxmox node relationships
-    # Find all Proxmox node hostnames in PingHosts
+    # Auto-detect Proxmox VM/LXC → Proxmox node relationships
     px_node_names: set[str] = set()
     for cluster in proxmox_clusters:
-        if _use_new_px:
-            snap = px_snapshots.get(cluster.id)
-            if not snap or not snap.ok or not snap.data_json:
-                continue
-            d = json.loads(snap.data_json)
-        else:
+        snap = px_snapshots.get(cluster.id)
+        if not snap or not snap.ok or not snap.data_json:
             continue
+        d = json.loads(snap.data_json)
         for node_info in d.get("nodes", []):
             px_node_names.add(node_info.get("node", ""))
-        # Map VM/LXC name → node name
         for g in d.get("vms", []) + d.get("containers", []):
             guest_name = (g.get("name") or "").strip()
             node_name = (g.get("node") or "").strip()
             if not guest_name or not node_name:
                 continue
-            # Find the PingHost for this guest (try exact, lowercase, and short name)
             guest_ph_id = (ping_host_map.get(guest_name)
                            or ping_host_map.get(guest_name.lower()))
-            # Find the PingHost for the Proxmox node
             node_ph_id = (ping_host_map.get(node_name)
                           or ping_host_map.get(node_name.lower()))
             if guest_ph_id and node_ph_id and guest_ph_id != node_ph_id:
-                # Only auto-link if no manual parent_id is set
                 if topology.get(guest_ph_id) is None:
                     topology[guest_ph_id] = node_ph_id
 
-    # Third pass: auto-detect UniFi device hierarchy (Gateway → Switch → AP)
-    # Build IP → PingHost.id map for UniFi matching
+    # Auto-detect UniFi device hierarchy (Gateway → Switch → AP)
     ip_to_ph: dict[str, int] = {}
     for h in all_ph:
         raw = h.hostname
@@ -474,7 +408,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
                 continue
             ud = json.loads(usnap.data_json)
             devices = ud.get("devices", [])
-            # Find gateway/router PingHost id
             gw_ph_id = None
             sw_ph_ids: list[int] = []
             ap_ph_ids: list[int] = []
@@ -491,7 +424,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
                     sw_ph_ids.append(ph_id)
                 elif dtype == "uap":
                     ap_ph_ids.append(ph_id)
-            # Link: switches → gateway, APs → first switch (or gateway)
             if gw_ph_id:
                 for sw_id in sw_ph_ids:
                     if topology.get(sw_id) is None:
@@ -503,76 +435,21 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
 
     # ── Integration health ──────────────────────────────────────────────────
     integration_health = []
-    # Filter out proxmox (shown separately)
     non_px_configs = [c for c in all_configs if c.type != "proxmox"]
 
-    if non_px_configs:
-        all_snaps = await snap_svc.get_latest_batch_all(db)
-        for cfg in non_px_configs:
-            meta = _INTEGRATION_META.get(cfg.type, {"label": cfg.type, "color": "slate", "url_prefix": f"/{cfg.type}"})
-            snap = all_snaps.get(cfg.type, {}).get(cfg.id)
-            url = f"{meta['url_prefix']}/{cfg.id}" if cfg.type != "speedtest" else meta["url_prefix"]
-            integration_health.append({
-                "label": meta["label"],
-                "name": cfg.name,
-                "url": url,
-                "color": meta["color"],
-                "ok": snap.ok if snap else None,
-                "error": snap.error if snap and not snap.ok else None,
-                "cached_at": snap.timestamp if snap else None,
-            })
-    else:
-        # Fall back to old per-integration tables
-        for label, config_model, snap_model, snap_fk, url_prefix, color in [
-            ("UniFi",         UnifiController,   UnifiSnapshot,     "controller_id", "/unifi",     "blue"),
-            ("UniFi NAS",     UnasServer,        UnasSnapshot,      "server_id",     "/unas",      "cyan"),
-            ("Pi-hole",       PiholeInstance,    PiholeSnapshot,    "instance_id",   "/pihole",    "red"),
-            ("AdGuard",       AdguardInstance,   AdguardSnapshot,   "instance_id",   "/adguard",   "emerald"),
-            ("Portainer",     PortainerInstance, PortainerSnapshot, "instance_id",   "/portainer", "teal"),
-            ("TrueNAS",       TruenasServer,     TruenasSnapshot,   "server_id",     "/truenas",   "slate"),
-            ("Synology",      SynologyServer,    SynologySnapshot,  "server_id",     "/synology",  "blue"),
-            ("Firewall",      FirewallInstance,  FirewallSnapshot,  "instance_id",   "/firewall",  "orange"),
-            ("Home Assistant",HassInstance,      HassSnapshot,      "instance_id",   "/hass",      "orange"),
-            ("Gitea",         GiteaInstance,     GiteaSnapshot,     "instance_id",   "/gitea",     "green"),
-            ("UPS / NUT",     NutInstance,       NutSnapshot,       "instance_id",   "/ups",       "yellow"),
-            ("Redfish",       RedfishServer,     RedfishSnapshot,   "server_id",     "/redfish",   "purple"),
-        ]:
-            instances = (await db.execute(select(config_model))).scalars().all()
-            if not instances:
-                continue
-            for inst in instances:
-                snap = (await db.execute(
-                    select(snap_model)
-                    .where(getattr(snap_model, snap_fk) == inst.id)
-                    .order_by(snap_model.timestamp.desc())
-                    .limit(1)
-                )).scalar_one_or_none()
-                integration_health.append({
-                    "label": label,
-                    "name": inst.name,
-                    "url": f"{url_prefix}/{inst.id}",
-                    "color": color,
-                    "ok": snap.ok if snap else None,
-                    "error": snap.error if snap and not snap.ok else None,
-                    "cached_at": snap.timestamp if snap else None,
-                })
-        # Speedtest
-        for st in (await db.execute(select(SpeedtestConfig))).scalars().all():
-            snap = (await db.execute(
-                select(SpeedtestResult)
-                .where(SpeedtestResult.config_id == st.id)
-                .order_by(SpeedtestResult.timestamp.desc())
-                .limit(1)
-            )).scalar_one_or_none()
-            integration_health.append({
-                "label": "Speedtest",
-                "name": st.name,
-                "url": "/speedtest",
-                "color": "blue",
-                "ok": snap.ok if snap else None,
-                "error": snap.error if snap and not snap.ok else None,
-                "cached_at": snap.timestamp if snap else None,
-            })
+    for cfg in non_px_configs:
+        meta = _INTEGRATION_META.get(cfg.type, {"label": cfg.type, "color": "slate", "url_prefix": f"/integration/{cfg.type}"})
+        snap = all_snaps_cache.get(cfg.type, {}).get(cfg.id)
+        url = f"{meta['url_prefix']}/{cfg.id}" if cfg.type != "speedtest" else meta["url_prefix"]
+        integration_health.append({
+            "label": meta["label"],
+            "name": cfg.name,
+            "url": url,
+            "color": meta["color"],
+            "ok": snap.ok if snap else None,
+            "error": snap.error if snap and not snap.ok else None,
+            "cached_at": snap.timestamp if snap else None,
+        })
 
     # Active incidents
     from models.incident import Incident
@@ -618,7 +495,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             .where(SyslogMessage.severity <= 3, SyslogMessage.timestamp >= window_1h)
         )).scalar() or 0
     except Exception:
-        pass  # syslog table may not exist yet
+        pass
 
     # ── Speedtest (latest + 24h history) ─────────────────────────────────────
     speedtest_data = None
@@ -626,7 +503,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     try:
         st_configs = [c for c in all_configs if c.type == "speedtest"]
         if st_configs:
-            st_snap = (await snap_svc.get_latest_batch(db, "speedtest")).get(st_configs[0].id)
+            st_snap = all_snaps_cache.get("speedtest", {}).get(st_configs[0].id)
             if st_snap and st_snap.ok and st_snap.data_json:
                 st_d = json.loads(st_snap.data_json)
                 speedtest_data = {
@@ -636,7 +513,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
                     "server_name": st_d.get("server_name", ""),
                     "timestamp": st_snap.timestamp.strftime("%d.%m %H:%M") if st_snap.timestamp else "",
                 }
-                # History: last 24h snapshots
                 hist_rows = (await db.execute(
                     select(Snapshot)
                     .where(Snapshot.entity_type == "speedtest", Snapshot.entity_id == st_configs[0].id,
@@ -655,7 +531,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     # ── Storage pools (TrueNAS/Synology/UNAS) ────────────────────────────────
     storage_pools = []
     try:
-        all_snaps_cache = await snap_svc.get_latest_batch_all(db)
         for stype, label in [("truenas", "TrueNAS"), ("synology", "Synology"), ("unas", "UNAS")]:
             type_snaps = all_snaps_cache.get(stype, {})
             type_configs = [c for c in all_configs if c.type == stype]
@@ -765,12 +640,10 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     heatmap_days = []
     try:
         window_7d = now - timedelta(days=7)
-        # Day labels
         for i in range(7):
             d = (now - timedelta(days=6 - i))
             heatmap_days.append(d.strftime("%a")[:2])
 
-        # Batch query: per-host per-day success rate
         from sqlalchemy import cast, Date
         day_stats = (await db.execute(
             select(
@@ -783,13 +656,11 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             .group_by(PingResult.host_id, cast(PingResult.timestamp, Date))
         )).all()
 
-        # Build lookup: (host_id, date_str) -> pct
         day_map: dict[tuple, float] = {}
         for row in day_stats:
             pct = round(row.ok / row.total * 100, 1) if row.total > 0 else None
             day_map[(row.host_id, str(row.day))] = pct
 
-        # Top 15 hosts by lowest uptime (most interesting)
         heatmap_hosts = sorted(
             [h for h in hosts if not h.maintenance],
             key=lambda h: min(
@@ -826,12 +697,10 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         pass
 
     # ── Compute health scores (gravity well) with ALL metrics ──────────────
-    # 1) Proxmox guest metrics per PingHost (CPU/RAM/Disk vs thresholds)
-    guest_metrics_by_host: dict[int, dict] = {}  # host_id → {cpu_ratio, ram_ratio, disk_ratio}
+    guest_metrics_by_host: dict[int, dict] = {}
     for g in all_guests:
         if not g.get("running"):
             continue
-        # Match guest name/node to PingHost
         gname = g.get("name", "").lower()
         gnode = g.get("node", "").lower()
         host_id = ping_host_map.get(gname) or ping_host_map.get(gnode)
@@ -842,7 +711,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         ram_pct = (g.get("mem_used_gb", 0) / mem_total * 100) if mem_total > 0 else 0
         ram_ratio = ram_pct / px_ram_pct_threshold if px_ram_pct_threshold else 0
         disk_ratio = g.get("disk_pct", 0) / px_disk_threshold if px_disk_threshold else 0
-        # Keep worst values per host
         prev = guest_metrics_by_host.get(host_id)
         if prev:
             prev["cpu"] = max(prev["cpu"], cpu_ratio)
@@ -851,7 +719,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         else:
             guest_metrics_by_host[host_id] = {"cpu": cpu_ratio, "ram": ram_ratio, "disk": disk_ratio}
 
-    # 2) Syslog error count per host (severity <= 3 = error/critical/alert/emergency)
     syslog_errors_by_host: dict[int, int] = {}
     try:
         syslog_err_rows = (await db.execute(
@@ -864,7 +731,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
-    # 3) Integration health per host (from integration_health)
     int_errors_by_host: set[int] = set()
     for ih in integration_health:
         if not ih.get("ok"):
@@ -873,7 +739,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             if hid:
                 int_errors_by_host.add(hid)
 
-    # 4) Compute final health score per host
     for s in host_stats:
         h = s["host"]
         if s["online"] is False:
@@ -890,7 +755,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         _lat = s["latency"]
         _thr = s["effective_threshold"]
 
-        # Latency vs threshold (weight 0.20)
         if _lat is not None and _thr:
             ratio = _lat / _thr
             if ratio <= 0.5:
@@ -904,19 +768,16 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         elif _lat is not None:
             score += min(_lat / 200.0, 0.20)
 
-        # Uptime deficit (weight 0.15)
         deficit = 1 - s["uptime_pct"] / 100.0
         if deficit > 0:
             score += min((deficit ** 0.5) * 0.15, 0.15)
 
-        # Packet loss from sparkline (weight 0.10)
         sp = s["sparkline"]
         if sp:
             losses = sum(1 for v in sp if v is None)
             if losses > 0:
                 score += min((losses / len(sp)) ** 0.6 * 0.10, 0.10)
 
-        # CPU vs threshold (weight 0.15)
         gm = guest_metrics_by_host.get(h.id)
         if gm:
             cpu_r = gm["cpu"]
@@ -929,7 +790,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             else:
                 score += 0.15
 
-            # RAM vs threshold (weight 0.15)
             ram_r = gm["ram"]
             if ram_r <= 0.5:
                 score += ram_r * 0.03
@@ -940,7 +800,6 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             else:
                 score += 0.15
 
-            # Disk vs threshold (weight 0.10)
             disk_r = gm["disk"]
             if disk_r <= 0.7:
                 score += disk_r * 0.02
@@ -951,12 +810,10 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             else:
                 score += 0.10
 
-        # Syslog errors (weight 0.10): 1 error → small, 10+ → strong pull
         err_count = syslog_errors_by_host.get(h.id, 0)
         if err_count > 0:
             score += min((err_count ** 0.4) / 10.0 * 0.10, 0.10)
 
-        # Integration errors (weight 0.05): flat penalty if integration is down
         if h.id in int_errors_by_host:
             score += 0.05
 
@@ -966,10 +823,8 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     layout_json = await get_setting(db, "dashboard_layout")
     try:
         layout = json.loads(layout_json) if layout_json else DEFAULT_LAYOUT
-        # Detect old format (has 'size' key instead of 'x'/'y') and fall back
         if layout and isinstance(layout[0], dict) and "x" not in layout[0]:
             layout = DEFAULT_LAYOUT
-        # Migrate old 80px-cellHeight layouts to 40px (double h and y)
         elif layout and max(w.get("h", 0) for w in layout) <= 8:
             for w in layout:
                 w["h"] = w.get("h", 2) * 2

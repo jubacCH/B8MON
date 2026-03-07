@@ -4,34 +4,31 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import func, select
-from database import (
-    AsyncSessionLocal, get_setting, init_db,
-    ProxmoxCluster, UnifiController, UnasServer,
-    PiholeInstance, AdguardInstance, PortainerInstance, TruenasServer,
-    SynologyServer, FirewallInstance, HassInstance, GiteaInstance,
-    PhpipamServer, SpeedtestConfig, NutInstance, RedfishServer,
-)
+from sqlalchemy import select
+
+from database import AsyncSessionLocal, get_setting, init_db
+from models.integration import IntegrationConfig
 from scheduler import start_scheduler, stop_scheduler
-from routers import auth, dashboard, ping, proxmox, setup, settings, unifi, unas, pihole, adguard, portainer, truenas, synology, firewall, hass, gitea, phpipam, speedtest, nut, redfish, alerts, users, syslog as syslog_router, incidents as incidents_router, system
-from routers import integrations as integrations_router
+from routers import (
+    auth, dashboard, ping, setup, settings, alerts, users,
+    syslog as syslog_router,
+    incidents as incidents_router,
+    system,
+    integrations as integrations_router,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    # Create new generic tables (IntegrationConfig, Snapshot, SyslogMessage)
     from models import init_db as init_new_db
     await init_new_db()
     await start_scheduler()
-    # Set start time for uptime tracking
     os.environ["VIGIL_START_TIME"] = str(time.time())
-    # Start syslog receiver (port from DB setting, fallback to env/1514)
     from services.syslog import start_syslog_server, stop_syslog_server
-    from database import AsyncSessionLocal, get_setting as _get_setting
     try:
         async with AsyncSessionLocal() as _db:
-            syslog_port = int(await _get_setting(_db, "syslog_port", ""))
+            syslog_port = int(await get_setting(_db, "syslog_port", ""))
     except (ValueError, TypeError):
         syslog_port = int(os.environ.get("SYSLOG_PORT", "1514"))
     await start_syslog_server(udp_port=syslog_port, tcp_port=syslog_port)
@@ -59,9 +56,8 @@ async def health():
 # ── Nav counts cache (60s TTL, single GROUP BY query) ────────────────────────
 
 _nav_cache: dict = {"counts": {}, "ts": 0.0}
-_NAV_CACHE_TTL = 60  # seconds
+_NAV_CACHE_TTL = 60
 
-# All integration type keys expected by templates
 _NAV_KEYS = (
     "proxmox", "unifi", "unas", "pihole", "adguard", "portainer",
     "truenas", "synology", "firewall", "hass", "gitea", "phpipam",
@@ -69,34 +65,14 @@ _NAV_KEYS = (
 )
 
 
-# Old table mapping for nav counts (fallback until data is fully in integration_configs)
-_OLD_MODELS = {
-    "proxmox": ProxmoxCluster, "unifi": UnifiController, "unas": UnasServer,
-    "pihole": PiholeInstance, "adguard": AdguardInstance, "portainer": PortainerInstance,
-    "truenas": TruenasServer, "synology": SynologyServer, "firewall": FirewallInstance,
-    "hass": HassInstance, "gitea": GiteaInstance, "phpipam": PhpipamServer,
-    "speedtest": SpeedtestConfig, "ups": NutInstance, "redfish": RedfishServer,
-}
-
-
 async def _get_nav_counts(db) -> dict:
     now = time.time()
     if now - _nav_cache["ts"] < _NAV_CACHE_TTL and _nav_cache["counts"]:
         return _nav_cache["counts"]
 
-    # Try new generic table first
     from services.integration import count_all_by_type
     raw = await count_all_by_type(db)
     counts = {k: raw.get(k, 0) for k in _NAV_KEYS}
-
-    # Fall back to old tables if new table is empty
-    if not any(counts.values()):
-        for key, model in _OLD_MODELS.items():
-            try:
-                r = await db.execute(select(func.count()).select_from(model))
-                counts[key] = r.scalar() or 0
-            except Exception:
-                counts[key] = 0
 
     _nav_cache["counts"] = counts
     _nav_cache["ts"] = now
@@ -105,11 +81,9 @@ async def _get_nav_counts(db) -> dict:
 
 @app.middleware("http")
 async def inject_globals(request: Request, call_next):
-    # Skip middleware for static files and health check
     if request.url.path.startswith("/static/") or request.url.path == "/health":
         return await call_next(request)
 
-    # Auth check – skip for public paths
     PUBLIC_PATHS = {"/login", "/logout"}
     is_public = request.url.path in PUBLIC_PATHS or request.url.path.startswith("/setup")
     if not is_public:
@@ -121,7 +95,6 @@ async def inject_globals(request: Request, call_next):
             return _RR(url="/login", status_code=302)
         request.state.current_user = user
         role = getattr(user, "role", "admin") or "admin"
-        # Admin-only paths
         if (request.url.path.startswith("/settings") or request.url.path.startswith("/users")) \
                 and role != "admin":
             from fastapi.responses import HTMLResponse as _HTML
@@ -133,7 +106,6 @@ async def inject_globals(request: Request, call_next):
                 "<a href='/' style='color:#3b82f6;font-size:.875rem'>← Back</a></div></body></html>",
                 status_code=403,
             )
-        # Read-only users cannot mutate
         if role == "readonly" and request.method in ("POST", "PUT", "DELETE", "PATCH"):
             from fastapi.responses import HTMLResponse as _HTML
             return _HTML(
@@ -153,32 +125,15 @@ async def inject_globals(request: Request, call_next):
     return await call_next(request)
 
 
-# ── Old routers (backward compat – will be removed after full migration) ─────
+# ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(setup.router)
 app.include_router(ping.router)
 app.include_router(settings.router)
-app.include_router(proxmox.router)
-app.include_router(unifi.router)
-app.include_router(unas.router)
-app.include_router(pihole.router)
-app.include_router(adguard.router)
-app.include_router(portainer.router)
-app.include_router(truenas.router)
-app.include_router(synology.router)
-app.include_router(firewall.router)
-app.include_router(hass.router)
-app.include_router(gitea.router)
-app.include_router(phpipam.router)
-app.include_router(speedtest.router)
-app.include_router(nut.router)
-app.include_router(redfish.router)
 app.include_router(alerts.router)
 app.include_router(syslog_router.router)
 app.include_router(incidents_router.router)
 app.include_router(users.router)
 app.include_router(system.router)
-
-# ── New generic integration router ───────────────────────────────────────────
 app.include_router(integrations_router.router)
