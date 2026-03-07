@@ -292,3 +292,23 @@ class ProxmoxIntegration(BaseIntegration):
 
     async def health_check(self) -> bool:
         return await self._api().health_check()
+
+    async def on_snapshot(self, data: dict, config: dict, db) -> None:
+        """Auto-import VMs/LXCs as ping hosts after each successful collect."""
+        cluster_name = data.get("cluster_name", config.get("host", "Proxmox"))
+        await import_proxmox_hosts(cluster_name, data, db)
+
+    def get_detail_context(self, data: dict, config: dict) -> dict:
+        """Provide parsed data for the Proxmox detail template."""
+        nodes = data.get("nodes", [])
+        vms = data.get("vms", [])
+        containers = data.get("containers", [])
+        totals = data.get("totals", {})
+        return {
+            "nodes": nodes,
+            "vms": vms,
+            "containers": containers,
+            "totals": totals,
+            "quorum_ok": data.get("quorum_ok", True),
+            "cluster_name": data.get("cluster_name", ""),
+        }
