@@ -11,8 +11,9 @@
 {% set unknown_hosts = host_stats | selectattr('online', 'none') | rejectattr('host.maintenance') | list %}
 <style>
   .grid-stack { min-height: 100px; }
-  /* Hide grid items until GridStack initializes them (prevents flash of unstyled vertical strips) */
-  .grid-stack:not(.grid-stack-instance) > .grid-stack-item { opacity: 0; }
+  /* Fade in grid items — prevents flash of unstyled vertical strips before GridStack positions them */
+  .grid-stack:not(.grid-stack-instance) > .grid-stack-item { animation: gs-fadein 0.3s ease 0.15s both; }
+  @keyframes gs-fadein { from { opacity: 0; } to { opacity: 1; } }
   .grid-stack-item-content { overflow: hidden; overflow-y: auto; border-radius: 8px; }
   .grid-stack-item-content::-webkit-scrollbar { width: 4px; }
   .grid-stack-item-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
