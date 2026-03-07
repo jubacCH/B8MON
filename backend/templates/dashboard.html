@@ -657,12 +657,10 @@
     nodePositions.clear();
 
     const W = wrap.clientWidth - 32;
-    // S = visual scale (stars, fonts). L = layout scale (spacing, orbits) — tighter.
-    const S = Math.max(0.7, Math.min(1.8, W / 1100));
-    const L = Math.max(0.5, Math.min(1.2, W / 1400));
-    const PAD = Math.round(20 * L);
+    const S = Math.max(0.7, Math.min(1.6, W / 1100));
+    const PAD = 16;
 
-    // Seeded random for consistent star placement across renders
+    // Seeded random for consistent star placement
     function makeRng(seed) {
       let s = Math.abs(seed) || 1;
       return () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
@@ -673,23 +671,13 @@
       return h;
     }
 
-    // ── Build tree ────────────────────────────────────────────────────────
-    const byId = new Map(hosts.map(h => [h.id, h]));
-    const childrenOf = new Map();
-    const roots = [];
-    hosts.forEach(h => {
-      if (h.parentId && byId.has(h.parentId)) {
-        if (!childrenOf.has(h.parentId)) childrenOf.set(h.parentId, []);
-        childrenOf.get(h.parentId).push(h);
-      } else {
-        roots.push(h);
-      }
+    // ── Sort: offline first, then maintenance, then online by name ────────
+    const sorted = [...hosts].sort((a, b) => {
+      const statusOrder = h => h.online === false ? 0 : h.maintenance ? 1 : h.online === null ? 2 : 3;
+      const sa = statusOrder(a), sb = statusOrder(b);
+      if (sa !== sb) return sa - sb;
+      return a.name.localeCompare(b.name);
     });
-
-    const clusters = roots.filter(r => childrenOf.has(r.id))
-      .sort((a, b) => (childrenOf.get(b.id)||[]).length - (childrenOf.get(a.id)||[]).length);
-    const standalone = roots.filter(r => !childrenOf.has(r.id))
-      .sort((a, b) => a.name.localeCompare(b.name));
 
     // ── Star visual properties ────────────────────────────────────────────
     function starColor(h) {
@@ -701,175 +689,91 @@
       if (l !== null && l > 40)  return { fill: '#FFF0D0', glow: '#EAB308' };
       return { fill: '#D4E0FF', glow: '#6C8EFF' };
     }
-    function starRadius(h, role) {
-      let r;
-      if (role === 'root') r = 8 + Math.min(5, (childrenOf.get(h.id)||[]).length * 0.5);
-      else if (role === 'child') r = 5;
-      else if (role === 'grandchild') r = 3.5;
-      else r = 4;
-      return r * S;
+    function starRadius(h) {
+      // Offline stars slightly larger to stand out
+      if (h.online === false) return 5.5 * S;
+      return 4 * S;
     }
     function starBrightness(h) {
       if (h.online === false) return 0.95;
-      if (h.uptimePct !== null) return 0.3 + (h.uptimePct / 100) * 0.65;
+      if (h.uptimePct !== null) return 0.35 + (h.uptimePct / 100) * 0.6;
       return 0.5;
     }
 
     // ── Render helpers ────────────────────────────────────────────────────
-    let linesHtml = '';
     let starsHtml = '';
 
-    function addStar(x, y, h, role) {
-      const r = starRadius(h, role);
+    function addStar(x, y, h) {
+      const r = starRadius(h);
       const c = starColor(h);
       const b = starBrightness(h);
       const delay = (nameHash(h.name) % 7000) / 1000;
       const dur = 3 + (nameHash(h.name) % 4000) / 1000;
       const anim = h.online === false ? 'cst-pulse' : h.maintenance ? 'cst-pulse-slow' : 'cst-twinkle';
 
-      // Animated group: outer glow + star body + core
-      starsHtml += `<g class="${anim}" style="--dur:${dur}s;animation-delay:${delay}s;animation-duration:${dur}s">`;
-      starsHtml += `<circle cx="${x}" cy="${y}" r="${r*4}" fill="${c.glow}" opacity="${b*0.06}"/>`;
-      if (role === 'root') {
-        starsHtml += `<circle cx="${x}" cy="${y}" r="${r*2.5}" fill="${c.glow}" opacity="${b*0.12}" filter="url(#cst-glow)"/>`;
-      } else {
-        starsHtml += `<circle cx="${x}" cy="${y}" r="${r*2}" fill="${c.glow}" opacity="${b*0.1}" filter="url(#cst-blur)"/>`;
-      }
+      starsHtml += `<g class="${anim}" style="animation-delay:${delay}s;animation-duration:${dur}s">`;
+      starsHtml += `<circle cx="${x}" cy="${y}" r="${r*3.5}" fill="${c.glow}" opacity="${b*0.06}"/>`;
+      starsHtml += `<circle cx="${x}" cy="${y}" r="${r*2}" fill="${c.glow}" opacity="${b*0.12}" filter="url(#cst-blur)"/>`;
       starsHtml += `<circle cx="${x}" cy="${y}" r="${r}" fill="${c.fill}" opacity="${b}"/>`;
-      if (r > 3.5) starsHtml += `<circle cx="${x}" cy="${y}" r="${r*0.25}" fill="#fff" opacity="${b*0.7}" style="pointer-events:none"/>`;
+      starsHtml += `<circle cx="${x}" cy="${y}" r="${r*0.25}" fill="#fff" opacity="${b*0.65}" style="pointer-events:none"/>`;
       starsHtml += `</g>`;
 
-      // Hit area + label (outside animated group)
-      const hitR = Math.max(r + 10 * S, 14 * S);
+      const hitR = Math.max(r + 8, 12);
       starsHtml += `<circle cx="${x}" cy="${y}" r="${hitR}" fill="transparent" class="node-hit cursor-pointer" data-host-id="${h.id}"/>`;
-      const maxL = role === 'root' ? 16 : role === 'child' ? 12 : 10;
-      const lbl = h.name.length > maxL ? h.name.slice(0, maxL-1) + '..' : h.name;
-      const fs = Math.round((role === 'root' ? 11 : role === 'child' ? 9 : 8.5) * S);
-      const lo = role === 'root' ? 0.75 : role === 'child' ? 0.5 : 0.35;
-      const labelY = y + r + Math.round(14 * S);
-      starsHtml += `<text x="${x}" y="${labelY}" text-anchor="middle" fill="var(--ng-text-secondary)" font-family="'JetBrains Mono',monospace" font-size="${fs}" opacity="${lo}" style="pointer-events:none">${lbl}</text>`;
+      const maxLen = Math.round(12 * S);
+      const lbl = h.name.length > maxLen ? h.name.slice(0, maxLen - 1) + '..' : h.name;
+      const fs = Math.round(8.5 * S);
+      const labelY = y + r + Math.round(12 * S);
+      starsHtml += `<text x="${x}" y="${labelY}" text-anchor="middle" fill="var(--ng-text-secondary)" font-family="'JetBrains Mono',monospace" font-size="${fs}" opacity="0.5" style="pointer-events:none">${lbl}</text>`;
 
       nodePositions.set(h.id, {x, y});
-    }
-
-    function addLine(x1, y1, x2, y2, color, op) {
-      const lw = Math.max(0.4, 0.6 * S);
-      linesHtml += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${lw}" opacity="${op||0.1}" stroke-dasharray="${4*S},${6*S}"/>`;
     }
 
     // ── Background star dust ──────────────────────────────────────────────
     let bgHtml = '';
     const bgRng = makeRng(42);
 
-    // ── Layout: Constellation clusters ────────────────────────────────────
+    // ── Layout: compact grid with gentle jitter ───────────────────────────
+    const availW = W - PAD * 2;
+    const cellW = Math.max(55, Math.round(80 * S));
+    const cellH = Math.max(40, Math.round(42 * S));
+    const cols = Math.max(3, Math.floor(availW / cellW));
+    const spacingX = availW / cols;
+    const rows = Math.ceil(sorted.length / cols);
     let maxY = PAD;
 
-    if (clusters.length > 0) {
-      const clusterData = clusters.map(root => {
-        const kids = (childrenOf.get(root.id) || []).sort((a,b) => a.name.localeCompare(b.name));
-        let gkCount = 0;
-        kids.forEach(k => gkCount += (childrenOf.get(k.id)||[]).length);
-        const orbitR = Math.round((45 + kids.length * 15) * L);
-        return { root, kids, orbitR, gkCount };
-      });
+    sorted.forEach((h, i) => {
+      const rng = makeRng(nameHash(h.name));
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const jx = (rng() - 0.5) * spacingX * 0.15;
+      const jy = (rng() - 0.5) * 6;
+      const x = PAD + spacingX * 0.5 + col * spacingX + jx;
+      const y = PAD + cellH * 0.5 + row * cellH + jy;
+      addStar(x, y, h);
+      maxY = Math.max(maxY, y + Math.round(16 * S));
+    });
+    maxY += 10;
 
-      // Scale orbits if they'd exceed canvas width
-      const clusterGap = Math.round(50 * L);
-      let totalW = clusterData.reduce((s, c) => s + c.orbitR * 2, 0)
-        + Math.max(0, clusterData.length - 1) * clusterGap;
-      if (totalW > W - PAD * 2) {
-        const sc = (W - PAD * 2) / totalW;
-        clusterData.forEach(c => c.orbitR = Math.max(Math.round(30 * L), Math.round(c.orbitR * sc)));
-        totalW = clusterData.reduce((s, c) => s + c.orbitR * 2, 0)
-          + Math.max(0, clusterData.length - 1) * clusterGap;
-      }
+    const H = Math.max(100, maxY);
 
-      const clusterCenterY = PAD + Math.round(20 * L) + Math.max(...clusterData.map(c => c.orbitR));
-      let cx = Math.max(PAD, (W - totalW) / 2);
-
-      clusterData.forEach(cd => {
-        const rootX = cx + cd.orbitR;
-        const rootY = clusterCenterY;
-
-        // Root star
-        addStar(rootX, rootY, cd.root, 'root');
-
-        // Children in orbit
-        cd.kids.forEach((kid, i) => {
-          const angle = (i / cd.kids.length) * Math.PI * 2 - Math.PI / 2;
-          const kx = rootX + Math.cos(angle) * cd.orbitR;
-          const ky = rootY + Math.sin(angle) * cd.orbitR;
-
-          // Constellation line: parent → child
-          addLine(rootX, rootY, kx, ky, starColor(kid).glow, 0.1);
-          addStar(kx, ky, kid, 'child');
-
-          // Grandchildren in smaller orbit
-          const gkids = (childrenOf.get(kid.id) || []).sort((a,b) => a.name.localeCompare(b.name));
-          if (gkids.length > 0) {
-            const gOrbit = Math.round((20 + gkids.length * 6) * L);
-            gkids.forEach((gk, gi) => {
-              const ga = (gi / gkids.length) * Math.PI * 2 - Math.PI / 2;
-              const gx = kx + Math.cos(ga) * gOrbit;
-              const gy = ky + Math.sin(ga) * gOrbit;
-              addLine(kx, ky, gx, gy, starColor(gk).glow, 0.06);
-              addStar(gx, gy, gk, 'grandchild');
-              maxY = Math.max(maxY, gy + Math.round(18 * L));
-            });
-          }
-          maxY = Math.max(maxY, ky + Math.round(18 * L));
-        });
-
-        cx += cd.orbitR * 2 + clusterGap;
-        maxY = Math.max(maxY, rootY + cd.orbitR + Math.round(30 * L));
-      });
-    }
-
-    // ── Layout: Standalone star field ─────────────────────────────────────
-    if (standalone.length > 0) {
-      const startY = maxY + (clusters.length > 0 ? Math.round(30 * L) : Math.round(8 * L));
-      const cols = Math.min(14, Math.max(4, Math.floor((W - PAD*2) / Math.round(80 * L))));
-      const spacingX = (W - PAD*2) / cols;
-      const rowH = Math.round(36 * L);
-
-      standalone.forEach((h, i) => {
-        const rng = makeRng(nameHash(h.name));
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        // Jitter for organic star-field feel
-        const jx = (rng() - 0.5) * spacingX * 0.2;
-        const jy = (rng() - 0.5) * 8 * L;
-        const sx = PAD + spacingX * 0.5 + col * spacingX + jx;
-        const sy = startY + row * rowH + jy;
-        addStar(sx, sy, h, 'standalone');
-        maxY = Math.max(maxY, sy + Math.round(18 * L));
-      });
-      maxY += Math.round(12 * L);
-    }
-
-    const H = Math.max(200, maxY);
-
-    // Generate background dust after knowing dimensions
-    for (let i = 0; i < 140; i++) {
+    // Background dust
+    for (let i = 0; i < 100; i++) {
       const bx = bgRng() * W;
       const by = bgRng() * H;
-      const br = 0.2 + bgRng() * 0.8;
-      const bo = 0.03 + bgRng() * 0.12;
+      const br = 0.2 + bgRng() * 0.7;
+      const bo = 0.03 + bgRng() * 0.1;
       bgHtml += `<circle cx="${bx}" cy="${by}" r="${br}" fill="#C8D6FF" opacity="${bo}"/>`;
     }
-    // A few brighter "distant stars"
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 10; i++) {
       const bx = bgRng() * W;
       const by = bgRng() * H;
-      const br = 0.4 + bgRng() * 0.5;
-      bgHtml += `<circle cx="${bx}" cy="${by}" r="${br}" fill="#E8EEFF" opacity="${0.15 + bgRng() * 0.15}"/>`;
+      bgHtml += `<circle cx="${bx}" cy="${by}" r="${0.4 + bgRng() * 0.4}" fill="#E8EEFF" opacity="${0.12 + bgRng() * 0.12}"/>`;
     }
 
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-
-    // Render order: bg dust → constellation lines → stars (on top)
     const tmp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    tmp.innerHTML = bgHtml + linesHtml + starsHtml;
+    tmp.innerHTML = bgHtml + starsHtml;
     while (tmp.firstChild) svg.appendChild(tmp.firstChild);
   }
 
