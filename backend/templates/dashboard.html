@@ -208,10 +208,6 @@
     <div class="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between cursor-pointer section-header" data-section="nodemap">
       <h2 class="metric-label !text-[10px]">Node Map</h2>
       <div class="flex items-center gap-3">
-        <span id="subnet-filter-badge" class="hidden items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-ng-primary/10 text-ng-primary border border-ng-primary/20">
-          <span id="subnet-filter-label"></span>
-          <button onclick="event.stopPropagation(); window.clearSubnetFilter()" class="hover:text-[--ng-text-primary] ml-1">&times;</button>
-        </span>
         <span class="text-[--ng-text-muted] text-[10px] font-mono">{{ host_stats|length }} nodes</span>
         <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
       </div>
@@ -286,10 +282,6 @@
   <div class="mb-8">
     <div class="flex items-center gap-2 mb-3">
       <h2 class="metric-label !text-[10px]">{% if offline_hosts %}All Hosts{% else %}Hosts{% endif %} ({{ host_stats|length }})</h2>
-      <span id="grid-filter-badge" class="hidden items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-ng-primary/10 text-ng-primary border border-ng-primary/20">
-        <span id="grid-filter-label"></span>
-        <button onclick="window.clearSubnetFilter()" class="hover:text-[--ng-text-primary] ml-1">&times;</button>
-      </span>
     </div>
     <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2" id="host-grid">
       {% for s in host_stats | sort(attribute='uptime_pct') %}
@@ -566,106 +558,66 @@
     {% endfor %}
   ];
 
-  // Host → subnet map (shared between map + filter)
-  const ipRe = /^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/;
-  function getSubnet(h) {
-    let addr = h.hostname.replace(/^https?:\/\//, '').replace(/[:/].*$/, '');
-    const m = addr.match(ipRe);
-    if (m) return m[1] + '.0/24';
-    if (h.checkType === 'http' || h.checkType === 'https') return 'External';
-    return 'Other';
-  }
-  const hostSubnetMap = new Map();
-  hosts.forEach(h => hostSubnetMap.set(h.id, getSubnet(h)));
-
   // ── Node-Bubble Map ─────────────────────────────────────────────────────
-  const nodePositions = new Map(); // id → {x, y, subnet}
+  const nodePositions = new Map(); // id → {x, y}
   function initNodeMap() {
     const svg = document.getElementById('node-map');
     if (!svg || hosts.length === 0) return;
     if (svg.querySelector('[data-host-id]')) return;
 
     const W = 1000, H = 450;
-    const pad = 60; // padding from edges
-
-    // Group hosts by subnet
-    const subnets = new Map();
-    hosts.forEach(h => {
-      const sn = getSubnet(h);
-      if (!subnets.has(sn)) subnets.set(sn, []);
-      subnets.get(sn).push(h);
-    });
-    const snKeys = [...subnets.keys()].sort((a, b) => {
-      const aExt = a === 'External' || a === 'Other' ? 1 : 0;
-      const bExt = b === 'External' || b === 'Other' ? 1 : 0;
-      if (aExt !== bExt) return aExt - bExt;
-      return subnets.get(b).length - subnets.get(a).length;
-    });
-
-    const subnetColors = [
-      '#38bdf8', '#a78bfa', '#34d399', '#fbbf24', '#fb923c',
-      '#f472b6', '#22d3ee', '#818cf8', '#4ade80', '#facc15',
-    ];
+    const padX = 50, padY = 30;
 
     function getNodeColor(h) {
-      if (h.maintenance) return { fill: '#FBBF24', opacity: 0.5 };
+      if (h.maintenance) return { fill: '#FBBF24', opacity: 0.6 };
       if (h.online === true)  return { fill: '#34D399', opacity: 0.7 };
       if (h.online === false) return { fill: '#FB7185', opacity: 0.85 };
-      return { fill: '#475569', opacity: 0.25 };
+      return { fill: '#475569', opacity: 0.3 };
     }
 
-    const nodeR = Math.max(5, Math.min(12, 160 / Math.sqrt(hosts.length)));
+    // Sort: offline first, then maintenance, then online (by name)
+    const sorted = [...hosts].sort((a, b) => {
+      const prio = h => h.online === false ? 0 : h.maintenance ? 1 : h.online === true ? 3 : 2;
+      const d = prio(a) - prio(b);
+      return d !== 0 ? d : a.name.localeCompare(b.name);
+    });
+
+    // Calculate hex grid dimensions to fill the available space
+    const n = sorted.length;
+    const availW = W - padX * 2, availH = H - padY * 2;
+    // Find best columns count that fits all nodes with good aspect ratio
+    let bestCols = Math.ceil(Math.sqrt(n * (availW / availH)));
+    bestCols = Math.max(3, Math.min(n, bestCols));
+    const rows = Math.ceil(n / bestCols);
+    const spacingX = availW / bestCols;
+    const spacingY = availH / Math.max(1, rows);
+    const nodeR = Math.max(6, Math.min(14, Math.min(spacingX, spacingY) * 0.32));
+
     let html = '';
 
-    // ── Layout: columns per subnet, filling width evenly ──
-    const numCols = snKeys.length;
-    const colW = (W - pad * 2) / Math.max(1, numCols);
-    const hubY = pad + 18;
+    sorted.forEach((h, i) => {
+      const col = i % bestCols;
+      const row = Math.floor(i / bestCols);
+      const honeycomb = (row % 2 === 1) ? spacingX * 0.5 : 0;
+      const x = padX + spacingX * 0.5 + col * spacingX + honeycomb;
+      const y = padY + spacingY * 0.5 + row * spacingY;
+      const c = getNodeColor(h);
 
-    snKeys.forEach((snLabel, si) => {
-      const snHosts = subnets.get(snLabel);
-      const snColor = subnetColors[si % subnetColors.length];
-      const colCx = pad + colW * si + colW / 2;
+      nodePositions.set(h.id, {x, y});
 
-      // Subnet label + hub
-      html += `<text x="${colCx}" y="${hubY - 4}" text-anchor="middle" fill="${snColor}" font-family="'JetBrains Mono', monospace" font-size="9" opacity="0.6" font-weight="600" class="subnet-hub" data-subnet="${snLabel}" style="cursor:pointer">${snLabel}</text>`;
-      html += `<circle cx="${colCx}" cy="${hubY + 12}" r="6" fill="${snColor}" opacity="0.3" filter="url(#glow-sm)" class="subnet-hub" data-subnet="${snLabel}" style="cursor:pointer"/>`;
-
-      // Grid layout within column
-      const startY = hubY + 36;
-      const availH = H - startY - pad;
-      const availW = colW - 20;
-      const spacing = nodeR * 3.2;
-      const cols = Math.max(1, Math.floor(availW / spacing));
-      const offsetX = colCx - (cols - 1) * spacing / 2;
-
-      snHosts.forEach((h, hi) => {
-        const row = Math.floor(hi / cols);
-        const col = hi % cols;
-        // Offset odd rows for honeycomb effect
-        const honeycombShift = (row % 2 === 1) ? spacing * 0.5 : 0;
-        const x = offsetX + col * spacing + honeycombShift;
-        const y = startY + row * (spacing * 0.85);
-        const c = getNodeColor(h);
-
-        nodePositions.set(h.id, {x, y, subnet: snLabel});
-
-        // Connection line to hub
-        html += `<line x1="${colCx}" y1="${hubY + 12}" x2="${x}" y2="${y}" stroke="${c.fill}" stroke-width="0.4" opacity="0.08"/>`;
-        // Glow halo
-        html += `<circle cx="${x}" cy="${y}" r="${nodeR * 1.8}" fill="${c.fill}" opacity="0.04"/>`;
-        // Main node
-        const filter = h.online === false ? 'url(#glow-lg)' : (h.online ? 'url(#glow-sm)' : '');
-        const anim = h.online === false ? ' class="node-critical"' : (h.maintenance ? ' class="node-warning"' : '');
-        html += `<circle cx="${x}" cy="${y}" r="${nodeR}" fill="${c.fill}" opacity="${c.opacity}" ${filter ? `filter="${filter}"` : ''}${anim} data-host-id="${h.id}"/>`;
-        // Specular highlight
-        html += `<circle cx="${x - nodeR * 0.2}" cy="${y - nodeR * 0.2}" r="${nodeR * 0.25}" fill="white" opacity="0.18" style="pointer-events:none"/>`;
-        // Label
-        const lbl = h.name.length > 10 ? h.name.slice(0, 9) + '..' : h.name;
-        html += `<text x="${x}" y="${y + nodeR + 10}" text-anchor="middle" fill="var(--ng-text-secondary)" font-family="'JetBrains Mono', monospace" font-size="7" opacity="0.5" style="pointer-events:none">${lbl}</text>`;
-        // Hit area
-        html += `<circle cx="${x}" cy="${y}" r="${nodeR + 5}" fill="transparent" class="node-hit cursor-pointer" data-host-id="${h.id}" data-subnet="${snLabel}"/>`;
-      });
+      // Soft glow halo
+      html += `<circle cx="${x}" cy="${y}" r="${nodeR * 2}" fill="${c.fill}" opacity="0.04"/>`;
+      // Main node
+      const filter = h.online === false ? 'url(#glow-lg)' : (h.online ? 'url(#glow-sm)' : '');
+      const anim = h.online === false ? ' class="node-critical"' : (h.maintenance ? ' class="node-warning"' : '');
+      html += `<circle cx="${x}" cy="${y}" r="${nodeR}" fill="${c.fill}" opacity="${c.opacity}" ${filter ? `filter="${filter}"` : ''}${anim} data-host-id="${h.id}"/>`;
+      // Specular highlight
+      html += `<circle cx="${x - nodeR * 0.22}" cy="${y - nodeR * 0.22}" r="${nodeR * 0.25}" fill="white" opacity="0.18" style="pointer-events:none"/>`;
+      // Label below node
+      const lbl = h.name.length > 12 ? h.name.slice(0, 11) + '..' : h.name;
+      html += `<text x="${x}" y="${y + nodeR + 11}" text-anchor="middle" fill="var(--ng-text-secondary)" font-family="'JetBrains Mono', monospace" font-size="7.5" opacity="0.5" style="pointer-events:none">${lbl}</text>`;
+      // Invisible hit area
+      html += `<circle cx="${x}" cy="${y}" r="${nodeR + 6}" fill="transparent" class="node-hit cursor-pointer" data-host-id="${h.id}"/>`;
     });
 
     // Insert via SVG namespace container
@@ -726,48 +678,14 @@
     });
     svg.addEventListener('click', e => {
       const hit = e.target.closest('.node-hit');
-      if (hit) { window.location.href = '/ping/' + hit.dataset.hostId; return; }
-      const hub = e.target.closest('.subnet-hub');
-      if (hub) { filterBySubnet(hub.dataset.subnet); return; }
+      if (hit) window.location.href = '/ping/' + hit.dataset.hostId;
     });
   }
   // Run after DOM settles (handles SPA navigation + initial load)
   requestAnimationFrame(() => requestAnimationFrame(initNodeMap));
 
-  // ── Subnet Filter ───────────────────────────────────────────────────────
+  // ── Filter stub (kept for keyboard nav compatibility) ──
   let activeSubnetFilter = null;
-  function filterBySubnet(subnet) {
-    activeSubnetFilter = subnet;
-    const grid = document.getElementById('host-grid');
-    const cards = grid.querySelectorAll('[data-host-id]');
-    let shown = 0;
-    cards.forEach(c => {
-      const hid = parseInt(c.dataset.hostId);
-      const match = hostSubnetMap.get(hid) === subnet;
-      c.style.display = match ? '' : 'none';
-      if (match) shown++;
-    });
-    // Show filter badges
-    ['subnet-filter-badge', 'grid-filter-badge'].forEach(id => {
-      const el = document.getElementById(id);
-      el.classList.remove('hidden');
-      el.classList.add('flex');
-    });
-    document.getElementById('subnet-filter-label').textContent = subnet;
-    document.getElementById('grid-filter-label').textContent = `${subnet} (${shown})`;
-    // Scroll to host grid
-    grid.scrollIntoView({behavior: 'smooth', block: 'nearest'});
-  }
-  window.clearSubnetFilter = function() {
-    activeSubnetFilter = null;
-    const grid = document.getElementById('host-grid');
-    grid.querySelectorAll('[data-host-id]').forEach(c => c.style.display = '');
-    ['subnet-filter-badge', 'grid-filter-badge'].forEach(id => {
-      const el = document.getElementById(id);
-      el.classList.add('hidden');
-      el.classList.remove('flex');
-    });
-  };
 
   // ── Sparklines in Host Cards ────────────────────────────────────────────
   function initSparklines() {
@@ -890,8 +808,6 @@
         focusIdx = Math.max(focusIdx - 1, 0);
         cards[focusIdx]?.focus();
         cards[focusIdx]?.scrollIntoView({block: 'nearest'});
-      } else if (e.key === 'Escape' && activeSubnetFilter) {
-        window.clearSubnetFilter();
       }
     });
   })();
