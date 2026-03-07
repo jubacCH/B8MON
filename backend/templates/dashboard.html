@@ -749,7 +749,7 @@
   // Cleanup previous instances (SPA re-navigation)
   if (window._gravityAnim) { cancelAnimationFrame(window._gravityAnim); window._gravityAnim = null; }
   if (window._gravityObserver) { window._gravityObserver.disconnect(); window._gravityObserver = null; }
-  if (window._gsGridPrev) { try { window._gsGridPrev.destroy(false); } catch(e) {} }
+  if (window._gsGridPrev) { try { window._gsGridPrev.destroy(true); } catch(e) {} window._gsGridPrev = null; }
 
   function initGridStack() {
     const el = document.getElementById('widget-grid');

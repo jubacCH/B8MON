@@ -452,7 +452,10 @@
           document.title = doc.title;
           history.pushState({url}, '', url);
 
-          // Clear any intervals/timeouts from previous page scripts
+          // Cleanup previous page state BEFORE DOM swap
+          if (window._gravityAnim) { cancelAnimationFrame(window._gravityAnim); window._gravityAnim = null; }
+          if (window._gravityObserver) { window._gravityObserver.disconnect(); window._gravityObserver = null; }
+          if (window._gsGridPrev) { try { window._gsGridPrev.destroy(true); } catch(e) {} window._gsGridPrev = null; }
           if (window._pageIntervals) window._pageIntervals.forEach(clearInterval);
           if (window._pageTimeouts) window._pageTimeouts.forEach(clearTimeout);
           window._pageIntervals = [];
