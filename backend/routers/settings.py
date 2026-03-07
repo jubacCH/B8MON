@@ -11,7 +11,7 @@ templates = Jinja2Templates(directory="templates")
 
 @router.get("", response_class=HTMLResponse)
 async def settings_page(request: Request, db: AsyncSession = Depends(get_db)):
-    site_name           = await get_setting(db, "site_name", "Vigil")
+    site_name           = await get_setting(db, "site_name", "NODEGLOW")
     ping_interval       = await get_setting(db, "ping_interval", "60")
     proxmox_interval    = await get_setting(db, "proxmox_interval", "60")
     ping_retention      = await get_setting(db, "ping_retention_days", "30")
@@ -83,7 +83,7 @@ async def settings_page(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.post("/save")
 async def save_settings(
-    site_name:          str = Form("Homelab Monitor"),
+    site_name:          str = Form("NODEGLOW"),
     ping_interval:      str = Form("60"),
     proxmox_interval:   str = Form("60"),
     ping_retention:     str = Form("30"),
@@ -286,10 +286,10 @@ async def test_notification(channel: str = Form(""), db: AsyncSession = Depends(
         if channel == "telegram":
             token = await get_setting(db, "telegram_bot_token", "")
             chat  = await get_setting(db, "telegram_chat_id", "")
-            await _send_telegram(token, chat, "<b>Vigil Test</b>\nNotifications are working ✓")
+            await _send_telegram(token, chat, "<b>Nodeglow Test</b>\nNotifications are working ✓")
         elif channel == "discord":
             url = await get_setting(db, "discord_webhook_url", "")
-            await _send_discord(url, "Vigil Test", "Notifications are working ✓", 0x3498db)
+            await _send_discord(url, "Nodeglow Test", "Notifications are working ✓", 0x3498db)
         elif channel == "email":
             host  = await get_setting(db, "smtp_host", "")
             port  = int(await get_setting(db, "smtp_port", "587"))
@@ -297,7 +297,7 @@ async def test_notification(channel: str = Form(""), db: AsyncSession = Depends(
             pw    = decrypt_value(await get_setting(db, "smtp_password", ""))
             frm   = await get_setting(db, "smtp_from", "") or user
             to    = await get_setting(db, "smtp_to", "")
-            await _send_email(host, port, user, pw, frm, to, "Vigil Test", "Notifications are working ✓")
+            await _send_email(host, port, user, pw, frm, to, "Nodeglow Test", "Notifications are working ✓")
         return JSONResponse({"ok": True, "message": "Test notification sent"})
     except Exception as e:
         return JSONResponse({"ok": False, "message": str(e)}, status_code=500)

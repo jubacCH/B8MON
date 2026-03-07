@@ -149,7 +149,7 @@ class PhpIpamIntegration(BaseIntegration):
     config_fields = [
         ConfigField(key="host", label="phpIPAM URL", field_type="url",
                     placeholder="https://phpipam.local"),
-        ConfigField(key="app_id", label="App ID", placeholder="vigil"),
+        ConfigField(key="app_id", label="App ID", placeholder="nodeglow"),
         ConfigField(key="username", label="Username", required=False),
         ConfigField(key="password", label="Password", field_type="password",
                     encrypted=True, required=False),

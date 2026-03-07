@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.log_template import HostBaseline, LogTemplate, PrecursorPattern
 from models.syslog import SyslogMessage
 
-log = logging.getLogger("vigil.intelligence")
+log = logging.getLogger("nodeglow.intelligence")
 
 # ── Drain-lite: Template Extraction ───────────────────────────────────────────
 

@@ -1,6 +1,6 @@
-# Vigil – Homelab Monitor
+# Nodeglow
 
-A self-hosted homelab monitoring dashboard built with **FastAPI**, **SQLAlchemy (async/aiosqlite)**, **Jinja2** templates and **Tailwind CSS**.
+A self-hosted infrastructure monitoring dashboard built with **FastAPI**, **PostgreSQL** (async via asyncpg), **Jinja2** templates and **Tailwind CSS**.
 
 ---
 
@@ -11,21 +11,28 @@ A self-hosted homelab monitoring dashboard built with **FastAPI**, **SQLAlchemy 
 | **Host monitoring** | ICMP Ping, HTTP/HTTPS, TCP — configurable per host |
 | **30-day heatmap** | Visual uptime history per host |
 | **SLA tracking** | Uptime % for 24h / 7d / 30d |
+| **Health score** | Composite score (0–100%) from latency, uptime, CPU, RAM, disk, syslog errors |
+| **Gravity well** | Animated particle visualization — healthy hosts orbit center, unhealthy drift outward |
 | **Maintenance mode** | Pauses checks, hides host from alarms |
 | **SSL expiry** | Badge + alert when certificate expires in <30 days |
 | **Latency thresholds** | Per-host or global alarm when latency exceeds limit |
-| **15 integrations** | See table below |
-| **Integration health grid** | Dashboard shows status of all configured integrations |
-| **Global alerts page** | `/alerts` — offline hosts, integration errors, UPS on battery, SSL expiry |
+| **15 integrations** | Generic plugin system — see table below |
+| **Syslog receiver** | UDP/TCP syslog (RFC 3164/5424) with auto-host assignment and full-text search |
+| **Incident correlation** | Auto-detects related failures (multi-host down, syslog + ping, integration + host) |
+| **Alerts page** | Offline hosts, integration errors, UPS on battery, SSL expiry |
 | **Anomaly detection** | Proxmox VM CPU/RAM spike detection (statistical + threshold) |
-| **VM history charts** | 24h CPU & RAM chart per VM on Proxmox detail page |
+| **System status** | Self-monitoring page with CPU, RAM, disk, DB stats, scheduler, logs |
+| **Multi-user** | Admin / Editor / Read-only roles |
+| **Notifications** | Telegram, Discord, Email (SMTP) |
 | **Sparklines** | 2h latency sparklines in dashboard host cards |
-| **Mobile navigation** | Responsive sidebar with hamburger menu |
-| **Data retention** | Configurable per integration type |
+| **SPA navigation** | Instant page transitions without full reload |
+| **Data retention** | Configurable per integration type, automatic cleanup |
 
 ---
 
 ## Integrations
+
+All integrations use a generic plugin system (`BaseIntegration` ABC). Adding a new integration = one Python file + one HTML template.
 
 | Integration | What is monitored |
 |---|---|
@@ -52,23 +59,19 @@ A self-hosted homelab monitoring dashboard built with **FastAPI**, **SQLAlchemy 
 ### Requirements
 
 - Docker & Docker Compose
-- `NET_RAW` capability for ICMP ping (already set in `docker-compose.yml`)
+- Linux host (for ICMP ping via `NET_RAW` capability)
 
 ### Run
 
 ```bash
-git clone https://github.com/jubacCH/B8MON.git
-cd B8MON  # rename to vigil if desired
+git clone https://github.com/jubacCH/Vigil.git nodeglow
+cd nodeglow
 docker compose up -d
 ```
 
 Open **http://localhost:8000** — the setup wizard runs on first start.
 
-> Data (SQLite DB) is persisted in `./data/monitor.db`.
-
-### Live reload (development)
-
-The `docker-compose.yml` mounts `./backend` into the container and runs Uvicorn with `--reload`, so code changes take effect immediately without rebuilding.
+> Data is stored in PostgreSQL (managed by Docker Compose). The `./data/` volume holds the encryption key.
 
 ---
 
@@ -78,68 +81,69 @@ All settings are available at **`/settings`**:
 
 | Setting | Default | Description |
 |---|---|---|
-| Site name | Vigil | Shown in page title and sidebar |
+| Site name | NODEGLOW | Shown in page title and sidebar |
 | Timezone | UTC | Display timezone |
 | Ping interval | 60 s | How often hosts are checked |
-| Proxmox interval | 60 s | How often Proxmox is polled |
+| Integration interval | 60 s | How often integrations are polled |
 | Ping retention | 30 days | How long ping results are kept |
-| Proxmox retention | 7 days | How long Proxmox snapshots are kept |
-| Integration retention | 7 days | How long all other integration snapshots are kept |
+| Integration retention | 7 days | How long integration snapshots are kept |
 | Latency threshold (global) | — | Alarm when latency exceeds this (ms) |
-| Proxmox CPU/RAM/Disk threshold | 85 / 85 / 90 % | Absolute threshold for anomaly alerts |
-| Anomaly multiplier | 2.0× | Spike detection: alert when metric > N× 24h avg |
-
-phpIPAM credentials are also configured in Settings (separate form, auto-sync available).
+| CPU/RAM/Disk threshold | 85 / 85 / 90 % | Threshold for anomaly alerts |
+| Anomaly multiplier | 2.0× | Alert when metric > N× 24h avg |
+| Syslog port | 1514 | UDP/TCP syslog listener port |
 
 ---
 
 ## Architecture
 
 ```
-vigil/
+nodeglow/
 ├── backend/
-│   ├── main.py               # FastAPI app, middleware, router registration
-│   ├── database.py           # SQLAlchemy models, async session, helpers
-│   ├── scheduler.py          # APScheduler background jobs
-│   ├── collectors/           # One file per integration (async HTTP / TCP)
-│   │   ├── ping.py           # ICMP, HTTP, HTTPS, TCP, SSL expiry
+│   ├── main.py                # FastAPI app, middleware, router registration
+│   ├── config.py              # Environment config, secret key
+│   ├── models/                # SQLAlchemy models
+│   │   ├── base.py            # Engine, session factory, encryption helpers
+│   │   ├── integration.py     # IntegrationConfig + Snapshot (generic)
+│   │   ├── syslog.py          # SyslogMessage
+│   │   └── incidents.py       # Incident + IncidentEvent
+│   ├── integrations/          # Plugin system (one file per integration)
+│   │   ├── _base.py           # BaseIntegration ABC, ConfigField, CollectorResult
+│   │   ├── __init__.py        # Auto-discovery + registry
 │   │   ├── proxmox.py
 │   │   ├── unifi.py
-│   │   └── ...
-│   ├── routers/              # FastAPI routers (HTML + JSON endpoints)
+│   │   └── ...                # 15 integration plugins
+│   ├── services/              # Business logic layer
+│   │   ├── snapshot.py        # Snapshot CRUD + batch queries
+│   │   ├── integration.py     # Integration CRUD + encryption
+│   │   ├── syslog.py          # UDP/TCP syslog server + parser
+│   │   ├── correlation.py     # Incident correlation engine
+│   │   └── log_intelligence.py # Template extraction + noise scoring
+│   ├── routers/               # FastAPI routers (HTML + JSON)
 │   │   ├── dashboard.py
 │   │   ├── ping.py
-│   │   ├── alerts.py
+│   │   ├── integrations.py    # Generic CRUD for all integrations
+│   │   ├── system.py          # Self-monitoring status page
+│   │   ├── syslog.py          # Syslog viewer
+│   │   ├── incidents.py       # Incident management
 │   │   └── ...
-│   └── templates/            # Jinja2 HTML templates
-│       ├── base.html         # Shared layout, sidebar, mobile nav
-│       ├── dashboard.html
-│       └── ...
-├── data/                     # Persisted SQLite DB (docker volume)
-└── docker-compose.yml
+│   ├── scheduler.py           # APScheduler (ping, integrations, SSL, cleanup)
+│   ├── templates/             # Jinja2 templates
+│   │   ├── base.html          # Layout, sidebar, SPA navigation
+│   │   ├── widgets/           # Dashboard widget templates (GridStack)
+│   │   └── integrations/      # Generic list/detail templates
+│   └── static/                # CSS, JS, icons
+├── docker-compose.yml         # App + PostgreSQL
+└── data/                      # Encryption key (Docker volume)
 ```
 
 ### Data flow
 
-1. **Scheduler** (APScheduler, async) runs collector functions on a configurable interval.
-2. Each collector stores a **snapshot** row in SQLite (`data_json` column holds full JSON).
+1. **Scheduler** (APScheduler, async) runs collector functions on configurable intervals.
+2. Each collector stores a **snapshot** row in PostgreSQL (`data_json` column holds full JSON).
 3. **Routers** read the latest snapshot on page load — no live API calls on every request.
-4. Background **cleanup job** (daily at 03:00) prunes snapshots older than the configured retention.
-
----
-
-## Host check types
-
-Each host supports one or more check types (combinable):
-
-| Type | How it works |
-|---|---|
-| `icmp` | Raw ICMP ping via `icmplib` |
-| `http` | HTTP GET, success = 2xx/3xx |
-| `https` | HTTPS GET, additionally tracks SSL expiry |
-| `tcp` | TCP connect to host:port |
-
-Per-host latency threshold and a global fallback threshold are both supported.
+4. **Syslog receiver** buffers incoming messages and batch-inserts with auto-host assignment.
+5. **Correlation engine** (60s interval) detects related failures and creates incidents.
+6. Background **cleanup job** (daily at 03:00) prunes data older than configured retention.
 
 ---
 

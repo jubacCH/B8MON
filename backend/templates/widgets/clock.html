@@ -1,4 +1,4 @@
-{# Widget: Clock + Vigil system uptime #}
+{# Widget: Clock + Nodeglow system uptime #}
 <div class="grid-stack-item" gs-id="clock" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="3" gs-min-w="2">
   <div class="grid-stack-item-content p-4 relative flex flex-col items-center justify-center">
     {{ widget_remove_btn() }}
@@ -6,7 +6,7 @@
     <p id="widget-clock-date" class="text-xs text-[--ng-text-muted] font-mono mt-1.5 tabular-nums"></p>
     {% if vigil_uptime %}
     <div class="mt-3 pt-3 border-t border-white/[0.06] text-center">
-      <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Vigil Uptime</p>
+      <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Nodeglow Uptime</p>
       <p class="text-[--ng-text-secondary] text-sm font-mono tabular-nums">{{ vigil_uptime }}</p>
     </div>
     {% endif %}

@@ -1,4 +1,4 @@
-"""Notification senders for Vigil – Telegram, Discord, Email."""
+"""Notification senders for Nodeglow – Telegram, Discord, Email."""
 import asyncio
 import logging
 import smtplib

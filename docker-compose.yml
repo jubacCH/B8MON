@@ -4,19 +4,19 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-vigil}
-      POSTGRES_USER: ${POSTGRES_USER:-vigil}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vigil}
+      POSTGRES_DB: ${POSTGRES_DB:-nodeglow}
+      POSTGRES_USER: ${POSTGRES_USER:-nodeglow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nodeglow}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vigil}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nodeglow}"]
       interval: 5s
       timeout: 3s
       retries: 5
     restart: unless-stopped
 
-  vigil:
+  nodeglow:
     build: ./backend
-    container_name: vigil
+    container_name: nodeglow
     ports:
       - "8000:8000"
       - "514:1514/udp"    # Syslog UDP (host 514 → container 1514)
@@ -24,7 +24,7 @@ services:
     volumes:
       - ./data:/data
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-vigil}:${POSTGRES_PASSWORD:-vigil}@db:5432/${POSTGRES_DB:-vigil}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-nodeglow}:${POSTGRES_PASSWORD:-nodeglow}@db:5432/${POSTGRES_DB:-nodeglow}
       DATA_DIR: /data
       SYSLOG_PORT: "1514"
     depends_on:

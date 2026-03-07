@@ -807,7 +807,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
-    # ── Vigil uptime ──────────────────────────────────────────────────────────
+    # ── Nodeglow uptime ────────────────────────────────────────────────────────
     vigil_uptime = ""
     try:
         import os

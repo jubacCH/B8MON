@@ -10,7 +10,7 @@ SECRET_KEY_FILE = DATA_DIR / ".secret_key"
 # Database: prefer DATABASE_URL env, fall back to SQLite in DATA_DIR
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 if not DATABASE_URL:
-    DATABASE_PATH = DATA_DIR / "homelab.db"
+    DATABASE_PATH = DATA_DIR / "nodeglow.db"
     DATABASE_URL = f"sqlite+aiosqlite:///{DATABASE_PATH}"
 
 

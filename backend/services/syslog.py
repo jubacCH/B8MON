@@ -15,7 +15,7 @@ from models.base import AsyncSessionLocal
 from models.ping import PingHost
 from models.syslog import SyslogMessage
 
-log = logging.getLogger("vigil.syslog")
+log = logging.getLogger("nodeglow.syslog")
 
 # ── RFC 3164 (BSD syslog) parser ────────────────────────────────────────────
 

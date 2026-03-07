@@ -21,7 +21,7 @@ from models.syslog import SyslogMessage
 from models.integration import IntegrationConfig, Snapshot
 from models.incident import Incident, IncidentEvent
 
-log = logging.getLogger("vigil.correlation")
+log = logging.getLogger("nodeglow.correlation")
 
 
 def _host_ids_hash(host_ids: list[int]) -> str:
