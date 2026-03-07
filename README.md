@@ -64,7 +64,7 @@ All integrations use a generic plugin system (`BaseIntegration` ABC). Adding a n
 ### Run
 
 ```bash
-git clone https://github.com/jubacCH/Vigil.git nodeglow
+git clone https://github.com/jubacCH/Nodeglow.git nodeglow
 cd nodeglow
 docker compose up -d
 ```

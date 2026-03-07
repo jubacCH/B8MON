@@ -83,7 +83,7 @@ info "Docker installed."
 # ── Clone and start Nodeglow ────────────────────────────────────────────────
 info "Cloning Nodeglow repository..."
 pct exec $CTID -- bash -c "
-  git clone https://github.com/jubacCH/Vigil.git /opt/nodeglow
+  git clone https://github.com/jubacCH/Nodeglow.git /opt/nodeglow
   cd /opt/nodeglow
   docker compose up -d
 "
