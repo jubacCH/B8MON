@@ -173,57 +173,16 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
                 "host_id": host.id,
             })
 
-        # Health score for gravity well (0.0 = perfect, 1.0 = critical)
-        # Granular: orbit grows progressively as metrics approach thresholds
-        _online = latest_row.success if latest_row else None
-        _lat = latest_row.latency_ms if latest_row else None
-        if _online is False:
-            health_score = 1.0
-        elif host.maintenance:
-            health_score = 0.5
-        elif _online is None:
-            health_score = 0.8
-        else:
-            import math
-            score = 0.0
-            # Latency vs threshold (weight 0.4) — exponential curve
-            # <50% threshold: barely moves | 50-80%: starts drifting | 80-100%: rapid | >100%: max
-            if _lat is not None and effective_threshold:
-                ratio = _lat / effective_threshold  # 0.0 → 2.0+
-                if ratio <= 0.5:
-                    lat_score = ratio * 0.1           # 0→0.05 (barely visible)
-                elif ratio <= 0.8:
-                    lat_score = 0.05 + (ratio - 0.5) / 0.3 * 0.15  # 0.05→0.20
-                elif ratio <= 1.0:
-                    lat_score = 0.20 + (ratio - 0.8) / 0.2 * 0.20  # 0.20→0.40
-                else:
-                    lat_score = 0.40                  # over threshold = max
-                score += lat_score
-            elif _lat is not None:
-                score += min(_lat / 200.0, 0.4)  # no threshold: scale to 200ms
-            # Uptime deficit (weight 0.35) — exponential below 99%
-            # 100%→0 | 99.5%→0.02 | 99%→0.05 | 97%→0.15 | 95%→0.25 | 90%→0.35
-            deficit = 1 - uptime_pct / 100.0  # 0.0 → 1.0
-            uptime_score = min((deficit ** 0.5) * 0.35, 0.35) if deficit > 0 else 0.0
-            score += uptime_score
-            # Packet loss from sparkline (weight 0.25)
-            if sparkline:
-                losses = sum(1 for v in sparkline if v is None)
-                loss_ratio = losses / len(sparkline)
-                # Any loss is significant: 1 loss → noticeable, >10% → strong pull
-                loss_score = min((loss_ratio ** 0.6) * 0.25, 0.25) if loss_ratio > 0 else 0.0
-                score += loss_score
-            health_score = round(min(score, 1.0), 3)
-
         host_stats.append({
             "host": host,
-            "online": _online,
-            "latency": _lat,
+            "online": latest_row.success if latest_row else None,
+            "latency": latest_row.latency_ms if latest_row else None,
             "uptime_pct": uptime_pct,
             "avg_latency": avg_latency,
             "last_check": latest_row.timestamp if latest_row else None,
             "sparkline": sparkline,
-            "health_score": health_score,
+            "effective_threshold": effective_threshold,
+            "health_score": 0.0,  # computed later with all metrics
         })
 
     # Exclude maintenance hosts from counts and Top-10
@@ -865,6 +824,143 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             vigil_uptime = f"{int(delta // 60)}m"
     except Exception:
         pass
+
+    # ── Compute health scores (gravity well) with ALL metrics ──────────────
+    # 1) Proxmox guest metrics per PingHost (CPU/RAM/Disk vs thresholds)
+    guest_metrics_by_host: dict[int, dict] = {}  # host_id → {cpu_ratio, ram_ratio, disk_ratio}
+    for g in all_guests:
+        if not g.get("running"):
+            continue
+        # Match guest name/node to PingHost
+        gname = g.get("name", "").lower()
+        gnode = g.get("node", "").lower()
+        host_id = ping_host_map.get(gname) or ping_host_map.get(gnode)
+        if not host_id:
+            continue
+        cpu_ratio = g.get("cpu_pct", 0) / px_cpu_threshold if px_cpu_threshold else 0
+        mem_total = g.get("mem_total_gb", 0)
+        ram_pct = (g.get("mem_used_gb", 0) / mem_total * 100) if mem_total > 0 else 0
+        ram_ratio = ram_pct / px_ram_pct_threshold if px_ram_pct_threshold else 0
+        disk_ratio = g.get("disk_pct", 0) / px_disk_threshold if px_disk_threshold else 0
+        # Keep worst values per host
+        prev = guest_metrics_by_host.get(host_id)
+        if prev:
+            prev["cpu"] = max(prev["cpu"], cpu_ratio)
+            prev["ram"] = max(prev["ram"], ram_ratio)
+            prev["disk"] = max(prev["disk"], disk_ratio)
+        else:
+            guest_metrics_by_host[host_id] = {"cpu": cpu_ratio, "ram": ram_ratio, "disk": disk_ratio}
+
+    # 2) Syslog error count per host (severity <= 3 = error/critical/alert/emergency)
+    syslog_errors_by_host: dict[int, int] = {}
+    try:
+        syslog_err_rows = (await db.execute(
+            select(SyslogMessage.host_id, func.count(SyslogMessage.id).label("cnt"))
+            .where(SyslogMessage.host_id.isnot(None), SyslogMessage.severity <= 3,
+                   SyslogMessage.timestamp >= window_24h)
+            .group_by(SyslogMessage.host_id)
+        )).all()
+        syslog_errors_by_host = {row.host_id: row.cnt for row in syslog_err_rows}
+    except Exception:
+        pass
+
+    # 3) Integration health per host (from integration_health)
+    int_errors_by_host: set[int] = set()
+    for ih in integration_health:
+        if not ih.get("ok"):
+            host_str = ih.get("host", "").lower()
+            hid = ping_host_map.get(host_str)
+            if hid:
+                int_errors_by_host.add(hid)
+
+    # 4) Compute final health score per host
+    for s in host_stats:
+        h = s["host"]
+        if s["online"] is False:
+            s["health_score"] = 1.0
+            continue
+        if h.maintenance:
+            s["health_score"] = 0.5
+            continue
+        if s["online"] is None:
+            s["health_score"] = 0.8
+            continue
+
+        score = 0.0
+        _lat = s["latency"]
+        _thr = s["effective_threshold"]
+
+        # Latency vs threshold (weight 0.20)
+        if _lat is not None and _thr:
+            ratio = _lat / _thr
+            if ratio <= 0.5:
+                score += ratio * 0.05
+            elif ratio <= 0.8:
+                score += 0.025 + (ratio - 0.5) / 0.3 * 0.075
+            elif ratio <= 1.0:
+                score += 0.10 + (ratio - 0.8) / 0.2 * 0.10
+            else:
+                score += 0.20
+        elif _lat is not None:
+            score += min(_lat / 200.0, 0.20)
+
+        # Uptime deficit (weight 0.15)
+        deficit = 1 - s["uptime_pct"] / 100.0
+        if deficit > 0:
+            score += min((deficit ** 0.5) * 0.15, 0.15)
+
+        # Packet loss from sparkline (weight 0.10)
+        sp = s["sparkline"]
+        if sp:
+            losses = sum(1 for v in sp if v is None)
+            if losses > 0:
+                score += min((losses / len(sp)) ** 0.6 * 0.10, 0.10)
+
+        # CPU vs threshold (weight 0.15)
+        gm = guest_metrics_by_host.get(h.id)
+        if gm:
+            cpu_r = gm["cpu"]
+            if cpu_r <= 0.5:
+                score += cpu_r * 0.03
+            elif cpu_r <= 0.8:
+                score += 0.015 + (cpu_r - 0.5) / 0.3 * 0.06
+            elif cpu_r <= 1.0:
+                score += 0.075 + (cpu_r - 0.8) / 0.2 * 0.075
+            else:
+                score += 0.15
+
+            # RAM vs threshold (weight 0.15)
+            ram_r = gm["ram"]
+            if ram_r <= 0.5:
+                score += ram_r * 0.03
+            elif ram_r <= 0.8:
+                score += 0.015 + (ram_r - 0.5) / 0.3 * 0.06
+            elif ram_r <= 1.0:
+                score += 0.075 + (ram_r - 0.8) / 0.2 * 0.075
+            else:
+                score += 0.15
+
+            # Disk vs threshold (weight 0.10)
+            disk_r = gm["disk"]
+            if disk_r <= 0.7:
+                score += disk_r * 0.02
+            elif disk_r <= 0.9:
+                score += 0.014 + (disk_r - 0.7) / 0.2 * 0.04
+            elif disk_r <= 1.0:
+                score += 0.054 + (disk_r - 0.9) / 0.1 * 0.046
+            else:
+                score += 0.10
+
+        # Syslog errors (weight 0.10): 1 error → small, 10+ → strong pull
+        err_count = syslog_errors_by_host.get(h.id, 0)
+        if err_count > 0:
+            score += min((err_count ** 0.4) / 10.0 * 0.10, 0.10)
+
+        # Integration errors (weight 0.05): flat penalty if integration is down
+        if h.id in int_errors_by_host:
+            score += 0.05
+
+        s["health_score"] = round(min(score, 1.0), 3)
 
     # Dashboard widget layout
     layout_json = await get_setting(db, "dashboard_layout")
