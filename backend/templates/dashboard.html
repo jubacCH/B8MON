@@ -263,9 +263,10 @@
   ];
 
   // ── Gravity Well ────────────────────────────────────────────────────────
-  let _gravityAnim = null;
-  let _gravityObserver = null;
-  let _gravityParticles = null;
+  // Use window.* so SPA cleanup can access them across Function() scopes
+  var _gravityAnim = window._gravityAnim || null;
+  var _gravityObserver = window._gravityObserver || null;
+  var _gravityParticles = null;
 
   function getHostColor(h) {
     if (h.online === false) return { r: 255, g: 48, b: 96 };
@@ -331,6 +332,7 @@
 
     const gsItemEl = wrap.closest('.grid-stack-item');
     _gravityObserver = new ResizeObserver(() => resize());
+    window._gravityObserver = _gravityObserver;
     _gravityObserver.observe(gsItemEl || wrap);
 
     // Build particles — scale sizes based on host count so space is used well
@@ -466,6 +468,7 @@
       });
 
       _gravityAnim = requestAnimationFrame(draw);
+      window._gravityAnim = _gravityAnim;
     }
 
     // Show tooltip
@@ -743,9 +746,16 @@
   let _gsGrid = null;
   let _editing = false;
 
+  // Cleanup previous instances (SPA re-navigation)
+  if (window._gravityAnim) { cancelAnimationFrame(window._gravityAnim); window._gravityAnim = null; }
+  if (window._gravityObserver) { window._gravityObserver.disconnect(); window._gravityObserver = null; }
+  if (window._gsGridPrev) { try { window._gsGridPrev.destroy(false); } catch(e) {} }
+
   function initGridStack() {
     const el = document.getElementById('widget-grid');
     if (!el) return;
+    // Remove stale gridstack classes from SPA re-nav
+    el.classList.remove('grid-stack-instance');
     _gsGrid = GridStack.init({
       column: 12,
       cellHeight: 40,
@@ -756,6 +766,7 @@
       disableDrag: true,
       removable: false,
     }, el);
+    window._gsGridPrev = _gsGrid;
     // Reinit gravity well after gridstack resizes
     _gsGrid.on('resizestop', (event, el) => {
       if (el.getAttribute('gs-id') === 'gravity') setTimeout(() => initGravityWell(0), 100);
