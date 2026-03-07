@@ -657,7 +657,9 @@
     nodePositions.clear();
 
     const W = wrap.clientWidth - 32;
-    const PAD = 30;
+    // Scale factor: reference width 1100px. Larger screens get bigger elements.
+    const S = Math.max(0.7, Math.min(1.8, W / 1100));
+    const PAD = Math.round(30 * S);
 
     // Seeded random for consistent star placement across renders
     function makeRng(seed) {
@@ -699,10 +701,12 @@
       return { fill: '#D4E0FF', glow: '#6C8EFF' };
     }
     function starRadius(h, role) {
-      if (role === 'root') return 7 + Math.min(4, (childrenOf.get(h.id)||[]).length * 0.5);
-      if (role === 'child') return 4.5;
-      if (role === 'grandchild') return 3;
-      return 3.5;
+      let r;
+      if (role === 'root') r = 8 + Math.min(5, (childrenOf.get(h.id)||[]).length * 0.5);
+      else if (role === 'child') r = 5;
+      else if (role === 'grandchild') r = 3.5;
+      else r = 4;
+      return r * S;
     }
     function starBrightness(h) {
       if (h.online === false) return 0.95;
@@ -735,18 +739,21 @@
       starsHtml += `</g>`;
 
       // Hit area + label (outside animated group)
-      starsHtml += `<circle cx="${x}" cy="${y}" r="${Math.max(r+10,14)}" fill="transparent" class="node-hit cursor-pointer" data-host-id="${h.id}"/>`;
+      const hitR = Math.max(r + 10 * S, 14 * S);
+      starsHtml += `<circle cx="${x}" cy="${y}" r="${hitR}" fill="transparent" class="node-hit cursor-pointer" data-host-id="${h.id}"/>`;
       const maxL = role === 'root' ? 16 : role === 'child' ? 12 : 10;
       const lbl = h.name.length > maxL ? h.name.slice(0, maxL-1) + '..' : h.name;
-      const fs = role === 'root' ? 10 : role === 'child' ? 8 : 7.5;
-      const lo = role === 'root' ? 0.7 : role === 'child' ? 0.4 : 0.3;
-      starsHtml += `<text x="${x}" y="${y + r + 13}" text-anchor="middle" fill="var(--ng-text-secondary)" font-family="'JetBrains Mono',monospace" font-size="${fs}" opacity="${lo}" style="pointer-events:none">${lbl}</text>`;
+      const fs = Math.round((role === 'root' ? 11 : role === 'child' ? 9 : 8.5) * S);
+      const lo = role === 'root' ? 0.75 : role === 'child' ? 0.5 : 0.35;
+      const labelY = y + r + Math.round(14 * S);
+      starsHtml += `<text x="${x}" y="${labelY}" text-anchor="middle" fill="var(--ng-text-secondary)" font-family="'JetBrains Mono',monospace" font-size="${fs}" opacity="${lo}" style="pointer-events:none">${lbl}</text>`;
 
       nodePositions.set(h.id, {x, y});
     }
 
     function addLine(x1, y1, x2, y2, color, op) {
-      linesHtml += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="0.5" opacity="${op||0.1}" stroke-dasharray="4,6"/>`;
+      const lw = Math.max(0.4, 0.6 * S);
+      linesHtml += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${lw}" opacity="${op||0.1}" stroke-dasharray="${4*S},${6*S}"/>`;
     }
 
     // ── Background star dust ──────────────────────────────────────────────
@@ -761,22 +768,22 @@
         const kids = (childrenOf.get(root.id) || []).sort((a,b) => a.name.localeCompare(b.name));
         let gkCount = 0;
         kids.forEach(k => gkCount += (childrenOf.get(k.id)||[]).length);
-        const orbitR = 55 + kids.length * 18;
+        const orbitR = Math.round((60 + kids.length * 20) * S);
         return { root, kids, orbitR, gkCount };
       });
 
       // Scale orbits if they'd exceed canvas width
-      const clusterGap = 80;
+      const clusterGap = Math.round(80 * S);
       let totalW = clusterData.reduce((s, c) => s + c.orbitR * 2, 0)
         + Math.max(0, clusterData.length - 1) * clusterGap;
       if (totalW > W - PAD * 2) {
         const sc = (W - PAD * 2) / totalW;
-        clusterData.forEach(c => c.orbitR = Math.max(40, Math.round(c.orbitR * sc)));
+        clusterData.forEach(c => c.orbitR = Math.max(Math.round(40 * S), Math.round(c.orbitR * sc)));
         totalW = clusterData.reduce((s, c) => s + c.orbitR * 2, 0)
           + Math.max(0, clusterData.length - 1) * clusterGap;
       }
 
-      const clusterCenterY = PAD + 30 + Math.max(...clusterData.map(c => c.orbitR));
+      const clusterCenterY = PAD + Math.round(30 * S) + Math.max(...clusterData.map(c => c.orbitR));
       let cx = Math.max(PAD, (W - totalW) / 2);
 
       clusterData.forEach(cd => {
@@ -799,44 +806,44 @@
           // Grandchildren in smaller orbit
           const gkids = (childrenOf.get(kid.id) || []).sort((a,b) => a.name.localeCompare(b.name));
           if (gkids.length > 0) {
-            const gOrbit = 24 + gkids.length * 7;
+            const gOrbit = Math.round((28 + gkids.length * 8) * S);
             gkids.forEach((gk, gi) => {
               const ga = (gi / gkids.length) * Math.PI * 2 - Math.PI / 2;
               const gx = kx + Math.cos(ga) * gOrbit;
               const gy = ky + Math.sin(ga) * gOrbit;
               addLine(kx, ky, gx, gy, starColor(gk).glow, 0.06);
               addStar(gx, gy, gk, 'grandchild');
-              maxY = Math.max(maxY, gy + 22);
+              maxY = Math.max(maxY, gy + Math.round(25 * S));
             });
           }
-          maxY = Math.max(maxY, ky + 22);
+          maxY = Math.max(maxY, ky + Math.round(25 * S));
         });
 
         cx += cd.orbitR * 2 + clusterGap;
-        maxY = Math.max(maxY, rootY + cd.orbitR + 45);
+        maxY = Math.max(maxY, rootY + cd.orbitR + Math.round(50 * S));
       });
     }
 
     // ── Layout: Standalone star field ─────────────────────────────────────
     if (standalone.length > 0) {
-      const startY = maxY + (clusters.length > 0 ? 50 : 10);
-      const cols = Math.min(12, Math.max(4, Math.floor((W - PAD*2) / 85)));
+      const startY = maxY + (clusters.length > 0 ? Math.round(50 * S) : Math.round(10 * S));
+      const cols = Math.min(12, Math.max(3, Math.floor((W - PAD*2) / Math.round(95 * S))));
       const spacingX = (W - PAD*2) / cols;
-      const rowH = 42;
+      const rowH = Math.round(46 * S);
 
       standalone.forEach((h, i) => {
         const rng = makeRng(nameHash(h.name));
         const col = i % cols;
         const row = Math.floor(i / cols);
         // Jitter for organic star-field feel
-        const jx = (rng() - 0.5) * spacingX * 0.3;
-        const jy = (rng() - 0.5) * 14;
+        const jx = (rng() - 0.5) * spacingX * 0.25;
+        const jy = (rng() - 0.5) * 12 * S;
         const sx = PAD + spacingX * 0.5 + col * spacingX + jx;
         const sy = startY + row * rowH + jy;
         addStar(sx, sy, h, 'standalone');
-        maxY = Math.max(maxY, sy + 22);
+        maxY = Math.max(maxY, sy + Math.round(25 * S));
       });
-      maxY += 20;
+      maxY += Math.round(20 * S);
     }
 
     const H = Math.max(200, maxY);
