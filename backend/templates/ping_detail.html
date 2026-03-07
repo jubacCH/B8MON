@@ -749,11 +749,10 @@
   setRange('24h');
 
   // ── Highlight from dashboard deep-link ──
+  const _highlightMetric = new URLSearchParams(window.location.search).get('highlight');
   (function() {
-    const params = new URLSearchParams(window.location.search);
-    const highlight = params.get('highlight');
-    if (!highlight) return;
-    const sectionId = 'section-' + highlight.toLowerCase();
+    if (!_highlightMetric) return;
+    const sectionId = 'section-' + _highlightMetric.toLowerCase();
     const el = document.getElementById(sectionId);
     if (!el) return;
     setTimeout(() => {
@@ -769,6 +768,45 @@
       }, 2500);
     }, 300);
   })();
+
+  // Highlight the last point in a chart dataset with a pulsing dot
+  function highlightLastPoint(chart, datasetIndex) {
+    const ds = chart.data.datasets[datasetIndex];
+    if (!ds || !ds.data || ds.data.length === 0) return;
+    // Make other datasets faded
+    chart.data.datasets.forEach((d, i) => {
+      if (i !== datasetIndex) {
+        d.borderColor = d._origColor || d.borderColor;
+        d._origColor = d.borderColor;
+        d.borderWidth = 1;
+        d.borderColor = typeof d.borderColor === 'string'
+          ? d.borderColor.replace(/[\d.]+\)$/, '0.15)').replace(/^#/, '')
+          : d.borderColor;
+        // Convert hex to rgba with low opacity
+        if (d._origColor && d._origColor.startsWith('#')) {
+          const hex = d._origColor.slice(1);
+          const r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
+          d.borderColor = `rgba(${r},${g},${b},0.15)`;
+          d.backgroundColor = `rgba(${r},${g},${b},0.02)`;
+        }
+        d.fill = false;
+      }
+    });
+    // Emphasize highlighted dataset
+    ds.borderWidth = 2.5;
+    // Show last point as a big dot
+    const lastIdx = ds.data.length - 1;
+    ds.pointRadius = ds.data.map((_, i) => i === lastIdx ? 6 : 0);
+    ds.pointBackgroundColor = ds.data.map((_, i) => i === lastIdx ? '#fb923c' : 'transparent');
+    ds.pointBorderColor = ds.data.map((_, i) => i === lastIdx ? '#fb923c' : 'transparent');
+    ds.pointBorderWidth = ds.data.map((_, i) => i === lastIdx ? 2 : 0);
+    chart.update();
+  }
+
+  // Highlight latency chart if metric is latency
+  if (_highlightMetric === 'latency') {
+    setTimeout(() => highlightLastPoint(latencyChart, 0), 100);
+  }
 
   {% if proxmox_history and proxmox_history['24h'] and proxmox_history['24h'].labels %}
   (function() {
@@ -805,6 +843,14 @@
         animation: false,
       }
     });
+
+    // Highlight Proxmox chart dataset if deep-linked
+    if (_highlightMetric) {
+      const metricIdx = { cpu: 0, ram: 1, disk: 2 }[_highlightMetric.toLowerCase()];
+      if (metricIdx !== undefined && metricIdx < pxChart.data.datasets.length) {
+        setTimeout(() => highlightLastPoint(pxChart, metricIdx), 100);
+      }
+    }
 
     window.setPxRange = function(rng) {
       const r = pxRanges[rng];
