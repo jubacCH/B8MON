@@ -669,9 +669,15 @@
     let W, H, CX, CY, maxR;
 
     function resize() {
-      const rect = wrap.getBoundingClientRect();
+      // Get available space from the gridstack item content
+      const gsContent = wrap.closest('.grid-stack-item-content');
+      const header = gsContent ? gsContent.querySelector('.section-header') : null;
+      const availW = wrap.clientWidth || wrap.getBoundingClientRect().width;
+      const availH = gsContent
+        ? gsContent.clientHeight - (header ? header.offsetHeight : 0) - 2
+        : wrap.getBoundingClientRect().height;
+      const side = Math.min(availW, availH > 50 ? availH : availW);
       const dpr = window.devicePixelRatio || 1;
-      const side = Math.min(rect.width, rect.height > 50 ? rect.height : rect.width);
       W = side;
       H = side;
       canvas.width = side * dpr;
