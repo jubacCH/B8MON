@@ -388,13 +388,23 @@ async def ping_detail(host_id: int, request: Request, db: AsyncSession = Depends
         if unifi_client:
             break
 
-    # Syslog message count (24h)
+    # Syslog message count (24h) – match by host_id, source_ip, or hostname
     syslog_count = 0
     try:
         since_24h = datetime.utcnow() - timedelta(hours=24)
+        syslog_filter = SyslogMessage.host_id == host.id
+        # Also match by IP or hostname for messages without host_id
+        raw_host = host.hostname
+        for prefix in ("https://", "http://"):
+            if raw_host.startswith(prefix):
+                raw_host = raw_host[len(prefix):]
+        raw_host = raw_host.split("/")[0].split(":")[0]
+        syslog_filter = syslog_filter | (SyslogMessage.source_ip == raw_host)
+        if host.name:
+            syslog_filter = syslog_filter | (SyslogMessage.hostname.ilike(host.name))
         syslog_count = (await db.execute(
             select(func.count(SyslogMessage.id))
-            .where(SyslogMessage.host_id == host.id, SyslogMessage.timestamp >= since_24h)
+            .where(syslog_filter, SyslogMessage.timestamp >= since_24h)
         )).scalar() or 0
     except Exception:
         pass

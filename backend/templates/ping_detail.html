@@ -99,14 +99,14 @@
       </span>
     </button>
     {% endif %}
-    {% if syslog_count is defined and syslog_count > 0 %}
     <button type="button" id="tab-syslog"
             onclick="switchTab('syslog')"
             class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px">
-      Syslog
+      Logs
+      {% if syslog_count is defined and syslog_count > 0 %}
       <span class="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-500/10 text-slate-500">{{ syslog_count }}</span>
+      {% endif %}
     </button>
-    {% endif %}
   </div>
 
   <!-- ── INFO TAB ──────────────────────────────────────────────────────────── -->
@@ -632,19 +632,26 @@
   {% endif %}
 
   <!-- ── SYSLOG TAB ──────────────────────────────────────────────────────── -->
-  {% if syslog_count is defined and syslog_count > 0 %}
   <div id="panel-syslog" class="hidden">
     <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl overflow-hidden">
       <div class="flex items-center justify-between px-5 py-3 border-b border-white/[0.08]">
-        <h2 class="ng-heading text-sm text-[--ng-text-secondary]">Recent syslog messages</h2>
-        <a href="/syslog?host={{ host.hostname }}" class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">View all</a>
+        <div class="flex items-center gap-3">
+          <h2 class="ng-heading text-sm text-[--ng-text-secondary]">Syslog messages (24h)</h2>
+          <select id="syslog-hours" class="ng-input text-xs py-1 w-[70px]" onchange="loadSyslog()">
+            <option value="1">1h</option>
+            <option value="6">6h</option>
+            <option value="24" selected>24h</option>
+            <option value="48">2d</option>
+            <option value="168">7d</option>
+          </select>
+        </div>
+        <a href="/syslog?host={{ host.hostname }}" class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">View all in Syslog →</a>
       </div>
       <div id="syslog-content">
         <div class="p-6 text-center text-slate-600 text-sm">Loading...</div>
       </div>
     </div>
   </div>
-  {% endif %}
 
 </div>
 {% endblock %}
@@ -654,6 +661,18 @@
   const activeTab = "{{ active_tab }}";
 
   let syslogLoaded = false;
+
+  function loadSyslog() {
+    const hours = document.getElementById('syslog-hours')?.value || 24;
+    const el = document.getElementById('syslog-content');
+    if (!el) return;
+    el.innerHTML = '<div class="p-6 text-center text-slate-600 text-sm">Loading...</div>';
+    fetch('/syslog/api/host/{{ host.id }}?hours=' + hours)
+      .then(r => r.text())
+      .then(html => { el.innerHTML = html; syslogLoaded = true; })
+      .catch(() => { el.innerHTML = '<div class="p-6 text-center text-red-400 text-sm">Failed to load syslog data</div>'; });
+  }
+
   function switchTab(name) {
     ['info', 'monitoring', 'ports', 'syslog'].forEach(t => {
       const btn = document.getElementById('tab-' + t);
@@ -669,6 +688,8 @@
         panel.classList.add('hidden');
       }
     });
+    // Lazy-load syslog on first tab switch
+    if (name === 'syslog' && !syslogLoaded) loadSyslog();
     const url = new URL(window.location);
     url.searchParams.set('tab', name);
     url.searchParams.delete('saved');
@@ -676,21 +697,6 @@
   }
 
   switchTab(activeTab);
-
-  // Lazy-load syslog content when tab is shown
-  const origSwitch = switchTab;
-  const _origName = 'switchTab';
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!syslogLoaded && document.getElementById('panel-syslog') && !document.getElementById('panel-syslog').classList.contains('hidden')) {
-        syslogLoaded = true;
-        fetch('/syslog/api/host/{{ host.id }}?hours=24')
-          .then(r => r.text())
-          .then(html => { document.getElementById('syslog-content').innerHTML = html; })
-          .catch(() => { document.getElementById('syslog-content').innerHTML = '<div class="p-6 text-center text-red-400 text-sm">Failed to load syslog data</div>'; });
-      }
-    });
-  });
 
   function updateEditPort() {
     const checked = [...document.querySelectorAll('input[name="check_types"]:checked')].map(c => c.value);

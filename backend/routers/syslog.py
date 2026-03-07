@@ -7,7 +7,9 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import get_db
+from sqlalchemy import or_
+
+from database import PingHost, get_db
 from models.syslog import SyslogMessage, SEVERITY_LABELS, FACILITY_LABELS
 
 router = APIRouter(prefix="/syslog")
@@ -157,14 +159,27 @@ async def syslog_by_host(
     """Return syslog messages for a specific PingHost (used in host detail tab)."""
     since = datetime.utcnow() - timedelta(hours=hours)
 
+    # Build filter: match by host_id OR by source_ip/hostname
+    host_filter = SyslogMessage.host_id == host_id
+    ping_host = (await db.execute(select(PingHost).where(PingHost.id == host_id))).scalar()
+    if ping_host:
+        raw = ping_host.hostname
+        for prefix in ("https://", "http://"):
+            if raw.startswith(prefix):
+                raw = raw[len(prefix):]
+        raw = raw.split("/")[0].split(":")[0]
+        host_filter = or_(host_filter, SyslogMessage.source_ip == raw)
+        if ping_host.name:
+            host_filter = or_(host_filter, SyslogMessage.hostname.ilike(ping_host.name))
+
     query = (
         select(SyslogMessage)
-        .where(SyslogMessage.host_id == host_id, SyslogMessage.timestamp >= since)
+        .where(host_filter, SyslogMessage.timestamp >= since)
         .order_by(SyslogMessage.timestamp.desc())
     )
     count_query = (
         select(func.count(SyslogMessage.id))
-        .where(SyslogMessage.host_id == host_id, SyslogMessage.timestamp >= since)
+        .where(host_filter, SyslogMessage.timestamp >= since)
     )
 
     total = (await db.execute(count_query)).scalar() or 0
