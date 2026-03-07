@@ -1,0 +1,63 @@
+{# Widget: Speedtest results with sparkline #}
+<div class="grid-stack-item" gs-id="speedtest" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="2" gs-min-w="3">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    {% if speedtest_data %}
+    <div class="flex items-center gap-2 mb-3">
+      <h2 class="metric-label !text-[10px]">Speedtest</h2>
+      {% if speedtest_data.server_name %}
+      <span class="text-[--ng-text-muted] text-[10px] font-mono ml-auto">{{ speedtest_data.server_name }}</span>
+      {% endif %}
+    </div>
+    <div class="grid grid-cols-3 gap-3 mb-3">
+      <div class="glass-card-static !p-3 text-center">
+        <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Download</p>
+        <p class="text-ng-primary text-lg font-mono font-medium tabular-nums">{{ "%.1f"|format(speedtest_data.download_mbps) }}</p>
+        <p class="text-[--ng-text-muted] text-[10px] font-mono">Mbps</p>
+      </div>
+      <div class="glass-card-static !p-3 text-center">
+        <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Upload</p>
+        <p class="text-ng-accent text-lg font-mono font-medium tabular-nums">{{ "%.1f"|format(speedtest_data.upload_mbps) }}</p>
+        <p class="text-[--ng-text-muted] text-[10px] font-mono">Mbps</p>
+      </div>
+      <div class="glass-card-static !p-3 text-center">
+        <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Ping</p>
+        <p class="text-ng-mint text-lg font-mono font-medium tabular-nums">{{ "%.1f"|format(speedtest_data.ping_ms) }}</p>
+        <p class="text-[--ng-text-muted] text-[10px] font-mono">ms</p>
+      </div>
+    </div>
+    {% if speedtest_history %}
+    <div class="glass-card-static !p-3">
+      <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-2">History (24h)</p>
+      <svg id="speedtest-spark" class="w-full h-10" viewBox="0 0 200 40" preserveAspectRatio="none">
+        {% set dl_vals = speedtest_history | map(attribute='download_mbps') | list %}
+        {% if dl_vals %}
+        {% set dl_max = dl_vals | max %}
+        {% set dl_min = dl_vals | min %}
+        {% set dl_range = dl_max - dl_min if dl_max != dl_min else 1 %}
+        <polyline fill="none" stroke="var(--ng-primary)" stroke-width="1.5" opacity="0.7"
+          points="{% for v in dl_vals %}{{ (loop.index0 / (dl_vals|length - 1)) * 200 }},{{ 38 - ((v - dl_min) / dl_range) * 34 }}{% if not loop.last %} {% endif %}{% endfor %}"/>
+        {% endif %}
+        {% set ul_vals = speedtest_history | map(attribute='upload_mbps') | list %}
+        {% if ul_vals %}
+        {% set ul_max = ul_vals | max %}
+        {% set ul_min = ul_vals | min %}
+        {% set ul_range = ul_max - ul_min if ul_max != ul_min else 1 %}
+        <polyline fill="none" stroke="var(--ng-accent)" stroke-width="1.5" opacity="0.5"
+          points="{% for v in ul_vals %}{{ (loop.index0 / (ul_vals|length - 1)) * 200 }},{{ 38 - ((v - ul_min) / ul_range) * 34 }}{% if not loop.last %} {% endif %}{% endfor %}"/>
+        {% endif %}
+      </svg>
+      <div class="flex items-center gap-4 mt-1">
+        <span class="flex items-center gap-1 text-[10px] font-mono text-[--ng-text-muted]"><span class="w-3 h-0.5 bg-ng-primary rounded"></span>Download</span>
+        <span class="flex items-center gap-1 text-[10px] font-mono text-[--ng-text-muted]"><span class="w-3 h-0.5 bg-ng-accent rounded"></span>Upload</span>
+      </div>
+    </div>
+    {% endif %}
+    {% if speedtest_data.timestamp %}
+    <p class="text-[--ng-text-muted] text-[10px] font-mono mt-2 text-right">Last: {{ speedtest_data.timestamp }}</p>
+    {% endif %}
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">No speedtest data</p>
+    {% endif %}
+  </div>
+</div>

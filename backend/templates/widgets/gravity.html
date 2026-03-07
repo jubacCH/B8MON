@@ -1,0 +1,45 @@
+{# Widget: Gravity Well (particle visualization) #}
+<div class="grid-stack-item" gs-id="gravity" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="2" gs-min-w="3">
+  <div class="grid-stack-item-content relative glass-card-static !p-0 flex flex-col" style="overflow:hidden!important">
+    {{ widget_remove_btn() }}
+    {% if host_stats %}
+    <div class="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between cursor-pointer section-header shrink-0" data-section="nodemap">
+      <h2 class="metric-label !text-[10px]">Gravity Well</h2>
+      <div class="flex items-center gap-3">
+        <span class="text-[--ng-text-muted] text-[10px] font-mono">{{ host_stats|length }} nodes</span>
+        <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      </div>
+    </div>
+    <div class="section-body flex-1 min-h-0" id="nodemap-body">
+      <div class="hidden md:flex items-center justify-center relative overflow-hidden h-full" id="node-map-wrap"
+           style="background: radial-gradient(circle at 50% 50%, rgba(99,102,241,0.06) 0%, rgba(6,10,23,0.5) 70%, #0a0c1a 100%);">
+        <canvas id="gravity-canvas" style="display:block;"></canvas>
+        <div id="node-tooltip" class="hidden absolute pointer-events-none z-20 !rounded-lg min-w-[190px] text-xs"
+             style="backdrop-filter:blur(24px);background:rgba(10,12,28,0.9);border:1px solid rgba(255,255,255,0.08);padding:12px">
+          <div class="flex items-center gap-2 mb-2">
+            <span id="tt-dot" class="w-2 h-2 rounded-full shrink-0"></span>
+            <span id="tt-name" class="text-[--ng-text-primary] font-semibold text-sm truncate"></span>
+          </div>
+          <div class="space-y-1 text-[--ng-text-secondary] font-mono text-[10px]">
+            <div class="flex justify-between gap-4"><span class="text-[--ng-text-muted]">Host</span><span id="tt-host"></span></div>
+            <div class="flex justify-between gap-4"><span class="text-[--ng-text-muted]">Type</span><span id="tt-type"></span></div>
+            <div class="flex justify-between gap-4"><span class="text-[--ng-text-muted]">Latency</span><span id="tt-latency"></span></div>
+            <div class="flex justify-between gap-4"><span class="text-[--ng-text-muted]">Uptime</span><span id="tt-uptime"></span></div>
+          </div>
+          <svg id="tt-sparkline" class="w-full h-6 mt-2" viewBox="0 0 60 20" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+      <div class="md:hidden p-3 grid grid-cols-3 gap-1.5 max-h-64 overflow-y-auto">
+        {% for s in host_stats | sort(attribute='host.name') %}
+        <a href="/ping/{{ s.host.id }}" class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
+          <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if s.host.maintenance %}bg-ng-warning{% elif s.online %}bg-ng-success{% elif s.online is false %}bg-ng-critical{% else %}bg-[--ng-text-muted]{% endif %}"></span>
+          <span class="text-[--ng-text-primary] text-[10px] font-mono truncate">{{ s.host.name }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <div class="p-4"><p class="text-[--ng-text-muted] text-xs">No hosts</p></div>
+    {% endif %}
+  </div>
+</div>

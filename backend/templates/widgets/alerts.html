@@ -1,0 +1,34 @@
+{# Widget: Recent alerts/incidents #}
+<div class="grid-stack-item" gs-id="alerts" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="2" gs-min-w="3">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    <div class="flex items-center gap-2 mb-3">
+      <h2 class="metric-label !text-[10px]">Recent Alerts</h2>
+      {% if recent_incidents %}
+      <a href="/incidents" class="text-[10px] text-[--ng-text-muted] hover:text-ng-primary transition-colors font-mono ml-auto">View all</a>
+      {% endif %}
+    </div>
+    {% if recent_incidents %}
+    <div class="space-y-1.5">
+      {% for inc in recent_incidents %}
+      <a href="/incidents/{{ inc.id }}" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-colors group">
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-semibold font-mono uppercase shrink-0
+          {% if inc.severity == 'critical' %}bg-ng-critical/20 text-ng-critical
+          {% elif inc.severity == 'warning' %}bg-ng-warning/20 text-ng-warning
+          {% else %}bg-ng-primary/20 text-ng-primary{% endif %}">{{ inc.severity[:4] }}</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-[--ng-text-primary] text-xs truncate group-hover:text-ng-primary transition-colors">{{ inc.title }}</p>
+          <p class="text-[--ng-text-muted] text-[10px] font-mono">{{ inc.created_at.strftime("%d.%m %H:%M") }}</p>
+        </div>
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-mono shrink-0
+          {% if inc.status == 'open' %}bg-ng-critical/15 text-ng-critical
+          {% elif inc.status == 'acknowledged' %}bg-ng-warning/15 text-ng-warning
+          {% else %}bg-ng-success/15 text-ng-success{% endif %}">{{ inc.status }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">No recent alerts</p>
+    {% endif %}
+  </div>
+</div>

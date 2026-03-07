@@ -1,0 +1,33 @@
+{# Widget: Offline hosts #}
+<div class="grid-stack-item" gs-id="offline" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="2" gs-min-w="4">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    {% if offline_hosts %}
+    <div class="flex items-center gap-2 mb-3">
+      <span class="w-2 h-2 rounded-full bg-ng-critical node-critical"></span>
+      <h2 class="metric-label !text-[10px] !text-ng-critical">Offline ({{ offline_hosts|length }})</h2>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+      {% for s in offline_hosts %}
+      <a href="/ping/{{ s.host.id }}"
+         class="glass-card !bg-ng-critical/[0.06] !border-ng-critical/25 hover:!border-ng-critical/50"
+         data-host-id="{{ s.host.id }}">
+        <div class="flex items-start justify-between mb-2">
+          <p class="text-[--ng-text-primary] font-semibold text-sm leading-tight truncate pr-1">{{ s.host.name }}</p>
+          <span class="w-2.5 h-2.5 rounded-full bg-ng-critical shrink-0 mt-0.5 node-critical"></span>
+        </div>
+        <p class="text-[--ng-text-secondary] text-xs font-mono truncate">{{ s.host.hostname }}</p>
+        <div class="flex items-center justify-between mt-2">
+          <span class="text-ng-critical text-xs font-display tracking-wider uppercase">Offline</span>
+          {% if s.last_check %}
+          <span class="text-[--ng-text-muted] text-[10px] font-mono tabular-nums">{{ s.last_check.strftime("%H:%M") }}</span>
+          {% endif %}
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">All hosts online</p>
+    {% endif %}
+  </div>
+</div>

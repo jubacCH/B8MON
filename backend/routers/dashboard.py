@@ -34,7 +34,11 @@ router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 
 # ── Default dashboard widget layout (gridstack 12-col, cellHeight=80px) ──────
-VALID_WIDGET_IDS = {"integrations", "syslog", "gravity", "offline", "hosts", "proxmox", "top10"}
+VALID_WIDGET_IDS = {
+    "integrations", "syslog", "gravity", "offline", "hosts", "proxmox", "top10",
+    "speedtest", "heatmap", "storage", "containers", "ups", "ssl", "alerts",
+    "uptime", "clock", "quickstats",
+}
 DEFAULT_LAYOUT = [
     {"id": "integrations", "x": 0, "y": 0, "w": 6,  "h": 2},
     {"id": "syslog",       "x": 6, "y": 0, "w": 6,  "h": 2},
@@ -614,6 +618,211 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass  # syslog table may not exist yet
 
+    # ── Speedtest (latest + 24h history) ─────────────────────────────────────
+    speedtest_data = None
+    speedtest_history = []
+    try:
+        st_configs = [c for c in all_configs if c.type == "speedtest"]
+        if st_configs:
+            st_snap = (await snap_svc.get_latest_batch(db, "speedtest")).get(st_configs[0].id)
+            if st_snap and st_snap.ok and st_snap.data_json:
+                st_d = json.loads(st_snap.data_json)
+                speedtest_data = {
+                    "download_mbps": st_d.get("download_mbps", 0),
+                    "upload_mbps": st_d.get("upload_mbps", 0),
+                    "ping_ms": st_d.get("ping_ms", 0),
+                    "server_name": st_d.get("server_name", ""),
+                    "timestamp": st_snap.timestamp.strftime("%d.%m %H:%M") if st_snap.timestamp else "",
+                }
+                # History: last 24h snapshots
+                hist_rows = (await db.execute(
+                    select(Snapshot)
+                    .where(Snapshot.entity_type == "speedtest", Snapshot.entity_id == st_configs[0].id,
+                           Snapshot.ok == True, Snapshot.timestamp >= window_24h)
+                    .order_by(Snapshot.timestamp.asc())
+                )).scalars().all()
+                for hr in hist_rows:
+                    hd = json.loads(hr.data_json)
+                    speedtest_history.append({
+                        "download_mbps": hd.get("download_mbps", 0),
+                        "upload_mbps": hd.get("upload_mbps", 0),
+                    })
+    except Exception:
+        pass
+
+    # ── Storage pools (TrueNAS/Synology/UNAS) ────────────────────────────────
+    storage_pools = []
+    try:
+        all_snaps_cache = await snap_svc.get_latest_batch_all(db)
+        for stype, label in [("truenas", "TrueNAS"), ("synology", "Synology"), ("unas", "UNAS")]:
+            type_snaps = all_snaps_cache.get(stype, {})
+            type_configs = [c for c in all_configs if c.type == stype]
+            for cfg in type_configs:
+                snap = type_snaps.get(cfg.id)
+                if not snap or not snap.ok or not snap.data_json:
+                    continue
+                sd = json.loads(snap.data_json)
+                pools_key = "pools" if stype in ("truenas", "unas") else "volumes"
+                for pool in sd.get(pools_key, []):
+                    storage_pools.append({
+                        "name": pool.get("name", "?"),
+                        "source": f"{label}: {cfg.name}",
+                        "healthy": pool.get("healthy", True),
+                        "pct": pool.get("pct", 0),
+                        "used_gb": pool.get("used_gb", 0),
+                        "total_gb": pool.get("size_gb", 0),
+                    })
+    except Exception:
+        pass
+
+    # ── Containers (Portainer) ────────────────────────────────────────────────
+    container_data = None
+    try:
+        port_configs = [c for c in all_configs if c.type == "portainer"]
+        if port_configs:
+            port_snaps = all_snaps_cache.get("portainer", {})
+            envs = []
+            total_running = total_stopped = 0
+            for cfg in port_configs:
+                snap = port_snaps.get(cfg.id)
+                if not snap or not snap.ok or not snap.data_json:
+                    continue
+                pd = json.loads(snap.data_json)
+                for env in pd.get("environments", []):
+                    envs.append(env)
+                    total_running += env.get("containers_running", 0)
+                    total_stopped += env.get("containers_stopped", 0)
+            if envs:
+                container_data = {"environments": envs, "running": total_running, "stopped": total_stopped}
+    except Exception:
+        pass
+
+    # ── UPS / NUT ─────────────────────────────────────────────────────────────
+    ups_data = None
+    try:
+        ups_configs = [c for c in all_configs if c.type == "ups"]
+        if ups_configs:
+            ups_snaps = all_snaps_cache.get("ups", {})
+            units = []
+            any_on_battery = False
+            for cfg in ups_configs:
+                snap = ups_snaps.get(cfg.id)
+                if not snap or not snap.ok or not snap.data_json:
+                    continue
+                ud = json.loads(snap.data_json)
+                on_bat = ud.get("on_battery", False)
+                if on_bat:
+                    any_on_battery = True
+                units.append({
+                    "name": cfg.name,
+                    "status_label": ud.get("status_label", ud.get("status", "?")),
+                    "on_battery": on_bat,
+                    "battery_pct": ud.get("battery_pct", 0),
+                    "load_pct": ud.get("load_pct", 0),
+                    "runtime_s": ud.get("runtime_s", 0),
+                    "model": ud.get("model", ""),
+                })
+            if units:
+                ups_data = {"units": units, "on_battery": any_on_battery}
+    except Exception:
+        pass
+
+    # ── SSL certificates ──────────────────────────────────────────────────────
+    ssl_certs = []
+    try:
+        https_hosts = [h for h in hosts if "https" in (h.check_type or "")]
+        for h in sorted(https_hosts, key=lambda x: x.ssl_expiry_days if x.ssl_expiry_days is not None else 9999):
+            ssl_certs.append({
+                "host_id": h.id,
+                "name": h.name,
+                "days": h.ssl_expiry_days,
+            })
+    except Exception:
+        pass
+
+    # ── Recent incidents (for alerts widget) ──────────────────────────────────
+    recent_incidents = []
+    try:
+        recent_incidents = (await db.execute(
+            select(Incident)
+            .order_by(Incident.created_at.desc())
+            .limit(10)
+        )).scalars().all()
+    except Exception:
+        pass
+
+    # ── Uptime ranking ────────────────────────────────────────────────────────
+    uptime_ranking = sorted(
+        [{"host_id": s["host"].id, "name": s["host"].name, "uptime": s["uptime_pct"]}
+         for s in active_stats if not s["host"].maintenance],
+        key=lambda x: x["uptime"],
+    )[:15]
+
+    # ── Heatmap (7-day per-host availability) ─────────────────────────────────
+    heatmap_data = []
+    heatmap_days = []
+    try:
+        window_7d = now - timedelta(days=7)
+        # Day labels
+        for i in range(7):
+            d = (now - timedelta(days=6 - i))
+            heatmap_days.append(d.strftime("%a")[:2])
+
+        # Batch query: per-host per-day success rate
+        from sqlalchemy import cast, Date
+        day_stats = (await db.execute(
+            select(
+                PingResult.host_id,
+                cast(PingResult.timestamp, Date).label("day"),
+                func.count().label("total"),
+                func.count().filter(PingResult.success == True).label("ok"),
+            )
+            .where(PingResult.host_id.in_(host_ids), PingResult.timestamp >= window_7d)
+            .group_by(PingResult.host_id, cast(PingResult.timestamp, Date))
+        )).all()
+
+        # Build lookup: (host_id, date_str) -> pct
+        day_map: dict[tuple, float] = {}
+        for row in day_stats:
+            pct = round(row.ok / row.total * 100, 1) if row.total > 0 else None
+            day_map[(row.host_id, str(row.day))] = pct
+
+        # Top 15 hosts by lowest uptime (most interesting)
+        heatmap_hosts = sorted(
+            [h for h in hosts if not h.maintenance],
+            key=lambda h: min(
+                (day_map.get((h.id, str((now - timedelta(days=6 - i)).date())), 100) or 100)
+                for i in range(7)
+            ),
+        )[:15]
+
+        for h in heatmap_hosts:
+            days = []
+            for i in range(7):
+                d = (now - timedelta(days=6 - i)).date()
+                days.append(day_map.get((h.id, str(d))))
+            heatmap_data.append({"host_id": h.id, "name": h.name, "days": days})
+    except Exception:
+        pass
+
+    # ── Vigil uptime ──────────────────────────────────────────────────────────
+    vigil_uptime = ""
+    try:
+        import os
+        _start = float(os.environ.get("VIGIL_START_TIME", "0"))
+        if _start > 0:
+            delta = now.timestamp() - _start
+        else:
+            delta = 0
+        if delta > 86400:
+            vigil_uptime = f"{int(delta // 86400)}d {int((delta % 86400) // 3600)}h"
+        elif delta > 3600:
+            vigil_uptime = f"{int(delta // 3600)}h {int((delta % 3600) // 60)}m"
+        elif delta > 0:
+            vigil_uptime = f"{int(delta // 60)}m"
+    except Exception:
+        pass
+
     # Dashboard widget layout
     layout_json = await get_setting(db, "dashboard_layout")
     try:
@@ -644,6 +853,17 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         "syslog_stats": syslog_stats,
         "topology": topology,
         "layout": layout,
+        "speedtest_data": speedtest_data,
+        "speedtest_history": speedtest_history,
+        "storage_pools": storage_pools,
+        "container_data": container_data,
+        "ups_data": ups_data,
+        "ssl_certs": ssl_certs,
+        "recent_incidents": recent_incidents,
+        "uptime_ranking": uptime_ranking,
+        "heatmap_data": heatmap_data,
+        "heatmap_days": heatmap_days,
+        "vigil_uptime": vigil_uptime,
         "active_page": "dashboard",
     })
 
@@ -664,7 +884,7 @@ async def save_dashboard_layout(request: Request, db: AsyncSession = Depends(get
             "x": max(0, min(11, int(w.get("x", 0)))),
             "y": max(0, int(w.get("y", 0))),
             "w": max(1, min(12, int(w.get("w", 12)))),
-            "h": max(1, min(8, int(w.get("h", 2)))),
+            "h": max(1, min(12, int(w.get("h", 2)))),
         })
     await set_setting(db, "dashboard_layout", json.dumps(cleaned))
     await db.commit()

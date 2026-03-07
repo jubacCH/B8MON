@@ -1,0 +1,37 @@
+{# Widget: SSL certificate expiry #}
+<div class="grid-stack-item" gs-id="ssl" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="2" gs-min-w="3">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    {% if ssl_certs %}
+    <div class="flex items-center gap-2 mb-3 cursor-pointer section-header" data-section="ssl">
+      <h2 class="metric-label !text-[10px]">SSL Certificates</h2>
+      {% set expiring_soon = ssl_certs | selectattr('days', 'le', 30) | list | length %}
+      {% if expiring_soon > 0 %}
+      <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-ng-warning/15 text-ng-warning">{{ expiring_soon }} expiring</span>
+      {% endif %}
+      <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </div>
+    <div class="space-y-1.5 section-body">
+      {% for cert in ssl_certs %}
+      <a href="/ping/{{ cert.host_id }}" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/[0.04] transition-colors">
+        <span class="w-2 h-2 rounded-full shrink-0
+          {% if cert.days is none %}bg-[--ng-text-muted]
+          {% elif cert.days <= 7 %}bg-ng-critical
+          {% elif cert.days <= 30 %}bg-ng-warning
+          {% else %}bg-ng-success{% endif %}"></span>
+        <span class="text-[--ng-text-primary] text-xs font-medium truncate flex-1">{{ cert.name }}</span>
+        <span class="text-[10px] font-mono tabular-nums shrink-0
+          {% if cert.days is none %}text-[--ng-text-muted]
+          {% elif cert.days <= 7 %}text-ng-critical
+          {% elif cert.days <= 30 %}text-ng-warning
+          {% else %}text-ng-success{% endif %}">
+          {% if cert.days is not none %}{{ cert.days }}d{% else %}—{% endif %}
+        </span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">No HTTPS hosts</p>
+    {% endif %}
+  </div>
+</div>

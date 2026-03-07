@@ -1,0 +1,25 @@
+{# Widget: Quick stats summary #}
+<div class="grid-stack-item" gs-id="quickstats" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="2" gs-min-w="3">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    <h2 class="metric-label !text-[10px] mb-3">Overview</h2>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="glass-card-static !p-3 text-center">
+        <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Hosts</p>
+        <p class="text-[--ng-text-primary] text-2xl font-mono font-medium tabular-nums">{{ total_count }}</p>
+      </div>
+      <div class="glass-card-static !p-3 text-center">
+        <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Online</p>
+        <p class="text-ng-success text-2xl font-mono font-medium tabular-nums">{{ online_count }}</p>
+      </div>
+      <div class="glass-card-static !p-3 text-center">
+        <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Integrations</p>
+        <p class="text-ng-primary text-2xl font-mono font-medium tabular-nums">{{ integration_health|length }}</p>
+      </div>
+      <div class="glass-card-static !p-3 text-center">
+        <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Incidents</p>
+        <p class="text-2xl font-mono font-medium tabular-nums {% if active_incidents %}text-ng-critical{% else %}text-ng-success{% endif %}">{{ active_incidents|length }}</p>
+      </div>
+    </div>
+  </div>
+</div>
