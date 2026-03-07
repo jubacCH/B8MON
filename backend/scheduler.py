@@ -144,6 +144,10 @@ async def run_ping_checks():
                 latency_ms=latency,
             ))
 
+            # Broadcast live update via WebSocket
+            from services.websocket import broadcast_ping_update
+            _asyncio.create_task(broadcast_ping_update(host.id, host.name, success, latency))
+
             # Notify on state change
             prev = prev_success.get(host.id)
             if prev is True and not success:
@@ -233,6 +237,10 @@ async def cleanup_old_results():
             .where(SyslogMessage.severity.is_(None), SyslogMessage.timestamp < null_cutoff)
         )
         total_deleted += r.rowcount
+        # Agent snapshots: keep 7 days
+        from models.agent import AgentSnapshot
+        agent_cutoff = datetime.utcnow() - timedelta(days=7)
+        await db.execute(delete(AgentSnapshot).where(AgentSnapshot.timestamp < agent_cutoff))
         await db.commit()
 
     logger.info("Cleanup done (ping: %dd, integrations: %dd, syslog: %d msgs)", ping_ret, int_ret, total_deleted)

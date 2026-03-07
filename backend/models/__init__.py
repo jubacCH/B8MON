@@ -27,6 +27,7 @@ from models.integration import IntegrationConfig, Snapshot
 from models.syslog import SyslogMessage
 from models.incident import Incident, IncidentEvent
 from models.log_template import LogTemplate, HostBaseline, PrecursorPattern
+from models.agent import Agent, AgentSnapshot
 
 
 async def init_db():
@@ -71,5 +72,6 @@ __all__ = [
     "SyslogMessage",
     "Incident", "IncidentEvent",
     "LogTemplate", "HostBaseline", "PrecursorPattern",
+    "Agent", "AgentSnapshot",
     "init_db",
 ]

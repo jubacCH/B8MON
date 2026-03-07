@@ -18,10 +18,12 @@ logger = logging.getLogger(__name__)
 
 
 class PhpIpamClient:
-    def __init__(self, base_url: str, app_id: str, username: str | None = None,
-                 password: str | None = None, verify_ssl: bool = True):
+    def __init__(self, base_url: str, app_id: str, app_secret: str | None = None,
+                 username: str | None = None, password: str | None = None,
+                 verify_ssl: bool = True):
         self.base = base_url.rstrip("/")
         self.app_id = app_id
+        self.app_secret = app_secret
         self.username = username
         self.password = password
         self.verify_ssl = verify_ssl
@@ -31,6 +33,11 @@ class PhpIpamClient:
         return f"{self.base}/api/{self.app_id}/{path.lstrip('/')}"
 
     async def authenticate(self) -> None:
+        # App Code auth: token = app_secret, no login needed
+        if self.app_secret:
+            self._token = self.app_secret
+            return
+        # User auth: POST /user/ with basic auth
         if not self.username or not self.password:
             return
         async with httpx.AsyncClient(verify=self.verify_ssl, timeout=10) as client:
@@ -43,7 +50,7 @@ class PhpIpamClient:
 
     def _headers(self) -> dict:
         if self._token:
-            return {"phpipam-token": self._token}
+            return {"token": self._token, "phpipam-token": self._token}
         return {}
 
     async def get_addresses(self) -> list[dict]:
@@ -76,8 +83,10 @@ async def sync_phpipam_hosts(db: "AsyncSession", config: dict) -> dict:
         return {"added": 0, "merged": 0, "skipped": 0,
                 "errors": ["phpIPAM not configured (URL or App-ID missing)"]}
 
+    app_secret = config.get("app_secret")
+
     client = PhpIpamClient(
-        base_url=url, app_id=app_id,
+        base_url=url, app_id=app_id, app_secret=app_secret or None,
         username=username or None, password=password or None,
         verify_ssl=verify_ssl,
     )
@@ -150,7 +159,11 @@ class PhpIpamIntegration(BaseIntegration):
         ConfigField(key="host", label="phpIPAM URL", field_type="url",
                     placeholder="https://phpipam.local"),
         ConfigField(key="app_id", label="App ID", placeholder="nodeglow"),
-        ConfigField(key="username", label="Username", required=False),
+        ConfigField(key="app_secret", label="App Secret / API Token", field_type="password",
+                    encrypted=True, required=False,
+                    placeholder="For App Code auth (no username needed)"),
+        ConfigField(key="username", label="Username", required=False,
+                    placeholder="Only for User auth (leave empty for App Code)"),
         ConfigField(key="password", label="Password", field_type="password",
                     encrypted=True, required=False),
         ConfigField(key="verify_ssl", label="Verify SSL", field_type="checkbox",
@@ -162,6 +175,7 @@ class PhpIpamIntegration(BaseIntegration):
             client = PhpIpamClient(
                 base_url=self.config.get("host", ""),
                 app_id=self.config.get("app_id", ""),
+                app_secret=self.config.get("app_secret"),
                 username=self.config.get("username"),
                 password=self.config.get("password"),
                 verify_ssl=self.config.get("verify_ssl", True),

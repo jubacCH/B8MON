@@ -156,6 +156,15 @@
           Incidents
         </a>
 
+        <a href="/agents"
+           class="ng-nav-item {% if active_page == 'agents' %}ng-nav-active{% endif %}">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
+          </svg>
+          Agents
+        </a>
+
         <!-- Integrations group -->
         {% set _nc = request.state.nav_counts %}
         {% set _any = _nc.proxmox > 0 or _nc.unifi > 0 or _nc.unas > 0 or _nc.portainer > 0 or _nc.truenas > 0 or _nc.synology > 0 or _nc.pihole > 0 or _nc.adguard > 0 or _nc.firewall > 0 or _nc.hass > 0 or _nc.gitea > 0 or _nc.phpipam > 0 or _nc.speedtest > 0 or _nc.ups > 0 or _nc.redfish > 0 %}
@@ -567,6 +576,7 @@
       {name: 'Alerts', url: '/alerts', section: 'Pages'},
       {name: 'Syslog', url: '/syslog', section: 'Pages'},
       {name: 'Incidents', url: '/incidents', section: 'Pages'},
+      {name: 'Agents', url: '/agents', section: 'Pages'},
       {name: 'Status', url: '/system/status', section: 'Pages'},
       {name: 'Settings', url: '/settings', section: 'Pages'},
       {name: 'Users', url: '/users', section: 'Pages'},

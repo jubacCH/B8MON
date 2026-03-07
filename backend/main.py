@@ -2,7 +2,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
@@ -15,6 +15,7 @@ from routers import (
     incidents as incidents_router,
     system,
     integrations as integrations_router,
+    agents as agents_router,
 )
 
 
@@ -81,7 +82,8 @@ async def _get_nav_counts(db) -> dict:
 
 @app.middleware("http")
 async def inject_globals(request: Request, call_next):
-    if request.url.path.startswith("/static/") or request.url.path == "/health":
+    if request.url.path.startswith("/static/") or request.url.path == "/health" \
+            or request.url.path == "/api/agent/report" or request.url.path.startswith("/ws/"):
         return await call_next(request)
 
     PUBLIC_PATHS = {"/login", "/logout"}
@@ -131,6 +133,20 @@ async def inject_globals(request: Request, call_next):
     return await call_next(request)
 
 
+# ── Global WebSocket ─────────────────────────────────────────────────────────
+@app.websocket("/ws/live")
+async def ws_live(websocket: WebSocket):
+    from services.websocket import register, unregister
+    await register(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        unregister(websocket)
+
+
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router)
 app.include_router(dashboard.router)
@@ -143,3 +159,4 @@ app.include_router(incidents_router.router)
 app.include_router(users.router)
 app.include_router(system.router)
 app.include_router(integrations_router.router)
+app.include_router(agents_router.router)

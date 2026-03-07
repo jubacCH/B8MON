@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Agents – NODEGLOW{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="ng-heading text-2xl text-[--ng-text-primary]">Agents</h1>
+        <p class="text-xs text-[--ng-text-muted] font-mono mt-1">Lightweight host monitoring agents</p>
+    </div>
+    <div class="flex gap-2">
+        <a href="/agents/download/nodeglow-agent.py" class="ng-btn ng-btn-ghost flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Download Agent
+        </a>
+        <button onclick="document.getElementById('addModal').classList.remove('hidden')" class="ng-btn ng-btn-primary flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add Agent
+        </button>
+    </div>
+</div>
+
+{% if not agents %}
+<div class="text-center py-16 text-[--ng-text-secondary]">
+    <svg class="w-12 h-12 mx-auto mb-4 text-[--ng-text-muted]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
+    </svg>
+    <p class="text-lg mb-2">No agents registered</p>
+    <p class="text-sm mb-4">Deploy the Nodeglow agent on your hosts to collect system metrics.</p>
+    <div class="flex gap-3 justify-center">
+        <a href="/agents/download/nodeglow-agent.py" class="ng-btn ng-btn-ghost">Download Agent</a>
+        <button onclick="document.getElementById('addModal').classList.remove('hidden')" class="ng-btn ng-btn-primary">Add Agent</button>
+    </div>
+</div>
+{% else %}
+
+<div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3" id="agents-grid">
+    {% for item in agents %}
+    {% set a = item.agent %}
+    {% set snap = item.snap %}
+    {% set online = item.online %}
+    <a href="/agents/{{ a.id }}" class="glass-card p-4 hover:bg-white/[0.04] transition-colors group" data-agent-id="{{ a.id }}">
+        <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2.5">
+                <span class="w-2.5 h-2.5 rounded-full {% if online %}bg-ng-success{% else %}bg-slate-500{% endif %} agent-status" data-agent-id="{{ a.id }}"></span>
+                <span class="text-[--ng-text-primary] font-medium text-sm group-hover:text-white transition-colors">{{ a.name }}</span>
+            </div>
+            <span class="text-[10px] font-mono text-[--ng-text-muted]">{{ a.hostname or '—' }}</span>
+        </div>
+        {% if snap %}
+        <div class="grid grid-cols-3 gap-3">
+            <div>
+                <p class="text-lg font-bold agent-cpu {% if snap.cpu_pct is not none %}{% if snap.cpu_pct > 85 %}text-ng-critical{% elif snap.cpu_pct > 70 %}text-ng-warning{% else %}text-ng-success{% endif %}{% else %}text-[--ng-text-muted]{% endif %}" data-agent-id="{{ a.id }}">{% if snap.cpu_pct is not none %}{{ snap.cpu_pct }}%{% else %}—{% endif %}</p>
+                <p class="metric-label !text-[10px]">CPU</p>
+            </div>
+            <div>
+                <p class="text-lg font-bold agent-mem {% if snap.mem_pct is not none %}{% if snap.mem_pct > 85 %}text-ng-critical{% elif snap.mem_pct > 70 %}text-ng-warning{% else %}text-ng-success{% endif %}{% else %}text-[--ng-text-muted]{% endif %}" data-agent-id="{{ a.id }}">{% if snap.mem_pct is not none %}{{ snap.mem_pct }}%{% else %}—{% endif %}</p>
+                <p class="metric-label !text-[10px]">Memory</p>
+            </div>
+            <div>
+                <p class="text-lg font-bold agent-disk {% if snap.disk_pct is not none %}{% if snap.disk_pct > 85 %}text-ng-critical{% elif snap.disk_pct > 70 %}text-ng-warning{% else %}text-[--ng-text-primary]{% endif %}{% else %}text-[--ng-text-muted]{% endif %}" data-agent-id="{{ a.id }}">{% if snap.disk_pct is not none %}{{ snap.disk_pct }}%{% else %}—{% endif %}</p>
+                <p class="metric-label !text-[10px]">Disk</p>
+            </div>
+        </div>
+        <div class="flex items-center justify-between mt-2.5 pt-2.5 border-t border-white/[0.06]">
+            <span class="text-[10px] font-mono text-[--ng-text-muted]">{{ a.platform or '' }} {{ a.arch or '' }}</span>
+            <span class="text-[10px] font-mono text-[--ng-text-muted]">{% if a.last_seen %}{{ a.last_seen.strftime('%H:%M:%S') }}{% else %}never{% endif %}</span>
+        </div>
+        {% else %}
+        <p class="text-xs text-[--ng-text-muted] font-mono">Waiting for first report...</p>
+        {% endif %}
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Add Agent Modal -->
+<div id="addModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+     onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="glass-elevated rounded-xl p-6 w-full max-w-md mx-4">
+        <h2 class="ng-heading text-lg text-[--ng-text-primary] mb-4">Register New Agent</h2>
+        <form method="post" action="/agents/add" class="space-y-4">
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Agent Name</label>
+                <input type="text" name="name" required placeholder="e.g. web-server-01" class="ng-input">
+                <p class="text-[10px] text-[--ng-text-muted] mt-1">A token will be generated automatically.</p>
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+                <button type="button" onclick="document.getElementById('addModal').classList.add('hidden')" class="ng-btn ng-btn-ghost">Cancel</button>
+                <button type="submit" class="ng-btn ng-btn-primary">Create Agent</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Live WebSocket updates for agent cards
+(function() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(proto + '//' + location.host + '/ws/live');
+    ws.onmessage = function(e) {
+        try {
+            const d = JSON.parse(e.data);
+            if (d.type !== 'agent_metric') return;
+            const id = d.agent_id;
+
+            // Update status dot
+            document.querySelectorAll('.agent-status[data-agent-id="' + id + '"]').forEach(el => {
+                el.className = 'w-2.5 h-2.5 rounded-full bg-ng-success agent-status';
+                el.setAttribute('data-agent-id', id);
+            });
+
+            // Update CPU
+            document.querySelectorAll('.agent-cpu[data-agent-id="' + id + '"]').forEach(el => {
+                if (d.cpu_pct != null) {
+                    el.textContent = d.cpu_pct + '%';
+                    el.className = 'text-lg font-bold agent-cpu ' +
+                        (d.cpu_pct > 85 ? 'text-ng-critical' : d.cpu_pct > 70 ? 'text-ng-warning' : 'text-ng-success');
+                    el.setAttribute('data-agent-id', id);
+                }
+            });
+
+            // Update Memory
+            document.querySelectorAll('.agent-mem[data-agent-id="' + id + '"]').forEach(el => {
+                if (d.mem_pct != null) {
+                    el.textContent = d.mem_pct + '%';
+                    el.className = 'text-lg font-bold agent-mem ' +
+                        (d.mem_pct > 85 ? 'text-ng-critical' : d.mem_pct > 70 ? 'text-ng-warning' : 'text-ng-success');
+                    el.setAttribute('data-agent-id', id);
+                }
+            });
+
+            // Update Disk
+            document.querySelectorAll('.agent-disk[data-agent-id="' + id + '"]').forEach(el => {
+                if (d.disk_pct != null) {
+                    el.textContent = d.disk_pct + '%';
+                    el.className = 'text-lg font-bold agent-disk ' +
+                        (d.disk_pct > 85 ? 'text-ng-critical' : d.disk_pct > 70 ? 'text-ng-warning' : 'text-[--ng-text-primary]');
+                    el.setAttribute('data-agent-id', id);
+                }
+            });
+        } catch(e) {}
+    };
+    ws.onclose = function() { setTimeout(() => location.reload(), 5000); };
+})();
+</script>
+{% endblock %}
