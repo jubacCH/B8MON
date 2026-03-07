@@ -99,22 +99,23 @@
   </div>
   {% endif %}
 
-  <!-- ── ANOMALY BANNER ─────────────────────────────────────────────────── -->
+  <!-- ── ANOMALY BANNER (statistical deviations only) ──────────────────── -->
   {% if anomalies %}
-  <div class="mb-5 glass-card-static !bg-ng-warning/[0.05] !border-ng-warning/20 !p-4">
+  <div class="mb-5 glass-card-static !bg-ng-critical/[0.05] !border-ng-critical/20 !p-4">
     <div class="flex items-center gap-2 mb-3">
-      <svg class="w-4 h-4 text-ng-warning shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="w-4 h-4 text-ng-critical shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
       </svg>
-      <span class="text-ng-warning font-display font-normal text-sm tracking-wider">{{ anomalies|length }} ANOMAL{{ 'IES' if anomalies|length != 1 else 'Y' }}</span>
+      <span class="text-ng-critical font-display font-normal text-sm tracking-wider">{{ anomalies|length }} ANOMAL{{ 'IES' if anomalies|length != 1 else 'Y' }}</span>
+      <span class="text-[--ng-text-muted] text-[10px] font-mono ml-1">unusual deviation from baseline</span>
     </div>
     <div class="flex flex-wrap gap-2">
       {% for a in anomalies %}
       {% set a_link = a.get('host_id') or ping_host_map.get(a.name) %}
-      <div class="flex items-center gap-2 px-3 py-1.5 bg-ng-warning/[0.06] border border-ng-warning/15 rounded-lg">
+      <div class="flex items-center gap-2 px-3 py-1.5 bg-ng-critical/[0.06] border border-ng-critical/15 rounded-lg">
         {% if a_link %}
-        <a href="/ping/{{ a_link }}" class="text-[--ng-text-primary] text-xs font-medium hover:text-ng-warning transition-colors">{{ a.name }}</a>
+        <a href="/ping/{{ a_link }}" class="text-[--ng-text-primary] text-xs font-medium hover:text-ng-critical transition-colors">{{ a.name }}</a>
         {% else %}
         <span class="text-[--ng-text-primary] text-xs font-medium">{{ a.name }}</span>
         {% endif %}
@@ -123,9 +124,43 @@
           {% elif a.metric == 'RAM' %}bg-ng-accent/15 text-ng-accent
           {% elif a.metric == 'Latency' %}bg-ng-warning/15 text-ng-warning
           {% else %}bg-ng-critical/15 text-ng-critical{% endif %}">{{ a.metric }}</span>
-        <span class="text-ng-warning text-xs font-mono tabular-nums">
-          {{ a.current }}{% if a.metric == 'CPU' %}%{% elif a.metric == 'RAM' %} GB{% elif a.metric == 'Disk' %}%{% elif a.metric == 'Latency' %} ms{% endif %}
+        <span class="text-ng-critical text-xs font-mono tabular-nums">
+          {{ a.current }}{% if a.metric == 'CPU' %}%{% elif a.metric == 'RAM' %} GB{% elif a.metric == 'Latency' %} ms{% endif %}
         </span>
+        {% if a.factor %}
+        <span class="text-[--ng-text-muted] text-[10px] font-mono">{{ a.factor }}σ</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── THRESHOLD WARNINGS (persistent resource pressure) ──────────────── -->
+  {% if warnings %}
+  <div class="mb-5 glass-card-static !bg-ng-warning/[0.04] !border-ng-warning/15 !p-4">
+    <div class="flex items-center gap-2 mb-3">
+      <svg class="w-4 h-4 text-ng-warning shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <span class="text-ng-warning font-display font-normal text-sm tracking-wider">{{ warnings|length }} WARNING{{ 'S' if warnings|length != 1 else '' }}</span>
+      <span class="text-[--ng-text-muted] text-[10px] font-mono ml-1">above threshold</span>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      {% for w in warnings %}
+      {% set w_link = ping_host_map.get(w.name) %}
+      <div class="flex items-center gap-2 px-3 py-1.5 bg-ng-warning/[0.04] border border-ng-warning/10 rounded-lg">
+        {% if w_link %}
+        <a href="/ping/{{ w_link }}" class="text-[--ng-text-primary] text-xs font-medium hover:text-ng-warning transition-colors">{{ w.name }}</a>
+        {% else %}
+        <span class="text-[--ng-text-primary] text-xs font-medium">{{ w.name }}</span>
+        {% endif %}
+        <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium
+          {% if w.metric == 'CPU' %}bg-ng-primary/15 text-ng-primary
+          {% elif w.metric == 'RAM' %}bg-ng-accent/15 text-ng-accent
+          {% else %}bg-ng-critical/15 text-ng-critical{% endif %}">{{ w.metric }}</span>
+        <span class="text-ng-warning text-xs font-mono tabular-nums">{{ w.current }}%</span>
+        <span class="text-[--ng-text-muted] text-[10px] font-mono">≥{{ w.threshold }}%</span>
       </div>
       {% endfor %}
     </div>

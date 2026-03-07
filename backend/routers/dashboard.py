@@ -205,7 +205,8 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     anomaly_threshold = float(await get_setting(db, "anomaly_threshold", "2.0"))
 
     all_guests: list[dict] = []
-    anomalies:  list[dict] = []
+    anomalies:  list[dict] = []   # Statistical deviations (current >> historical mean)
+    warnings:   list[dict] = []   # Absolute threshold breaches (always above limit)
 
     if _use_new_px:
         px_snapshots = await snap_svc.get_latest_batch(db, "proxmox")
@@ -270,46 +271,54 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             mem_total = g.get("mem_total_gb", 0)
             cur_mem_pct = round(cur_mem / mem_total * 100, 1) if mem_total > 0 else 0
 
-            # Absolute threshold checks (from settings)
+            # ── Statistical anomalies (deviation from baseline) ──
+            if gid in hist and len(hist[gid]["cpu"]) >= 3:
+                mean_cpu = sum(hist[gid]["cpu"]) / len(hist[gid]["cpu"])
+                std_cpu = (sum((x - mean_cpu) ** 2 for x in hist[gid]["cpu"]) / len(hist[gid]["cpu"])) ** 0.5
+                # Anomaly: current significantly above mean + threshold × stddev
+                # Also require minimum absolute values to avoid noise
+                if cur_cpu > 10 and mean_cpu > 0 and std_cpu > 0:
+                    z_score = (cur_cpu - mean_cpu) / std_cpu
+                    if z_score >= anomaly_threshold:
+                        anomalies.append({
+                            "name": g["name"], "type": g["type"], "node": g["node"],
+                            "cluster_name": cluster.name, "metric": "CPU",
+                            "current": cur_cpu, "mean": round(mean_cpu, 1),
+                            "factor": round(z_score, 1),
+                        })
+
+            if gid in hist and len(hist[gid]["mem"]) >= 3:
+                mean_mem = sum(hist[gid]["mem"]) / len(hist[gid]["mem"])
+                std_mem = (sum((x - mean_mem) ** 2 for x in hist[gid]["mem"]) / len(hist[gid]["mem"])) ** 0.5
+                if cur_mem > 0.5 and mean_mem > 0 and std_mem > 0:
+                    z_score = (cur_mem - mean_mem) / std_mem
+                    if z_score >= anomaly_threshold:
+                        anomalies.append({
+                            "name": g["name"], "type": g["type"], "node": g["node"],
+                            "cluster_name": cluster.name, "metric": "RAM",
+                            "current": round(cur_mem, 2), "mean": round(mean_mem, 2),
+                            "factor": round(z_score, 1),
+                        })
+
+            # ── Absolute threshold warnings (persistent resource pressure) ──
             if cur_cpu >= px_cpu_threshold:
-                anomalies.append({
+                warnings.append({
                     "name": g["name"], "type": g["type"], "node": g["node"],
                     "cluster_name": cluster.name, "metric": "CPU",
-                    "current": cur_cpu, "mean": px_cpu_threshold, "factor": None,
+                    "current": cur_cpu, "threshold": px_cpu_threshold,
                 })
-            elif gid in hist and len(hist[gid]["cpu"]) >= 3:
-                mean_cpu = sum(hist[gid]["cpu"]) / len(hist[gid]["cpu"])
-                if cur_cpu > 15 and mean_cpu > 0 and cur_cpu > anomaly_threshold * mean_cpu:
-                    anomalies.append({
-                        "name": g["name"], "type": g["type"], "node": g["node"],
-                        "cluster_name": cluster.name, "metric": "CPU",
-                        "current": cur_cpu, "mean": round(mean_cpu, 1),
-                        "factor": round(cur_cpu / mean_cpu, 1),
-                    })
-
             if cur_mem_pct >= px_ram_pct_threshold:
-                anomalies.append({
+                warnings.append({
                     "name": g["name"], "type": g["type"], "node": g["node"],
                     "cluster_name": cluster.name, "metric": "RAM",
-                    "current": round(cur_mem, 2), "mean": None,
-                    "factor": f"{cur_mem_pct}%",
+                    "current": cur_mem_pct, "threshold": px_ram_pct_threshold,
                 })
-            elif gid in hist and len(hist[gid]["mem"]) >= 3:
-                mean_mem = sum(hist[gid]["mem"]) / len(hist[gid]["mem"])
-                if cur_mem > 0.5 and mean_mem > 0 and cur_mem > anomaly_threshold * mean_mem:
-                    anomalies.append({
-                        "name": g["name"], "type": g["type"], "node": g["node"],
-                        "cluster_name": cluster.name, "metric": "RAM",
-                        "current": round(cur_mem, 2), "mean": round(mean_mem, 2),
-                        "factor": round(cur_mem / mean_mem, 1),
-                    })
-
             disk_pct = g.get("disk_pct", 0)
             if disk_pct >= px_disk_threshold:
-                anomalies.append({
+                warnings.append({
                     "name": g["name"], "type": g["type"], "node": g["node"],
                     "cluster_name": cluster.name, "metric": "Disk",
-                    "current": disk_pct, "mean": None, "factor": None,
+                    "current": disk_pct, "threshold": px_disk_threshold,
                 })
 
     # Merge ping alarms into anomalies list
@@ -439,6 +448,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         "top_disk": top_disk,
         "ping_host_map": ping_host_map,
         "anomalies": anomalies,
+        "warnings": warnings,
         "integration_health": integration_health,
         "active_incidents": active_incidents,
         "active_page": "dashboard",
