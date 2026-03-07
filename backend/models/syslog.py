@@ -1,8 +1,9 @@
-"""SyslogMessage model – stores parsed syslog messages with PostgreSQL FTS."""
+"""SyslogMessage + SyslogView models – PostgreSQL FTS + saved filter views."""
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, DateTime, ForeignKey, Index, Integer, SmallInteger, String, Text,
+    Boolean, Column, DateTime, ForeignKey, Index, Integer, SmallInteger,
+    String, Text,
 )
 from sqlalchemy.dialects.postgresql import TSVECTOR
 
@@ -40,6 +41,18 @@ FACILITY_LABELS = {
     20: "local4", 21: "local5", 22: "local6", 23: "local7",
 }
 
+# Smart retention: severity -> days to keep
+RETENTION_DAYS = {
+    7: 1,    # Debug: 1 day
+    6: 3,    # Informational: 3 days
+    5: 7,    # Notice: 7 days
+    4: 30,   # Warning: 30 days
+    3: 90,   # Error: 90 days
+    2: 90,   # Critical: 90 days
+    1: 90,   # Alert: 90 days
+    0: 90,   # Emergency: 90 days
+}
+
 
 class SyslogMessage(Base):
     __tablename__ = "syslog_messages"
@@ -65,3 +78,13 @@ class SyslogMessage(Base):
         Index("ix_syslog_source_ip", "source_ip"),
         Index("ix_syslog_fts", "search_vector", postgresql_using="gin"),
     )
+
+
+class SyslogView(Base):
+    """Saved syslog filter views."""
+    __tablename__ = "syslog_views"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(128), nullable=False)
+    filters_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(DateTime, default=datetime.utcnow)

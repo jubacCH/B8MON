@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Syslog – {{ request.state.site_name }}{% endblock %}
 
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="p-8">
 
@@ -14,30 +18,64 @@
       </p>
     </div>
 
-    {# Severity summary pills #}
-    <div class="flex items-center gap-1.5 flex-wrap">
-      {% for sev, label in [(0,'Emerg'),(1,'Alert'),(2,'Crit'),(3,'Err'),(4,'Warn'),(5,'Notice'),(6,'Info'),(7,'Debug')] %}
-        {% set cnt = severity_counts.get(sev, 0) %}
-        {% if cnt > 0 %}
-        <a href="?severity={{ sev }}&hours={{ f_hours }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&sort={{ f_sort }}&order={{ f_order }}"
-           class="px-2 py-0.5 rounded text-[10px] font-semibold tabular-nums cursor-pointer transition-all
-             {% if sev <= 2 %}bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25
-             {% elif sev == 3 %}bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25
-             {% elif sev == 4 %}bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/25
-             {% elif sev <= 6 %}bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20
-             {% else %}bg-slate-500/10 text-slate-500 border border-slate-500/20 hover:bg-slate-500/20{% endif %}
-             {% if f_severity == sev %}ring-1 ring-white/30 scale-105{% endif %}">
-          {{ label }} {{ cnt }}
+    <div class="flex items-center gap-3">
+      {# Severity spike alert #}
+      {% if alert_spike %}
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium animate-pulse">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+        </svg>
+        Error spike: {{ alert_spike.recent }} errors in 5min ({{ alert_spike.ratio }}x normal)
+      </div>
+      {% endif %}
+
+      {# Live tail toggle #}
+      <button id="live-toggle" type="button" onclick="toggleLive()"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
+                     border-slate-600/30 text-slate-400 hover:text-white hover:border-slate-500/50">
+        <span class="w-2 h-2 rounded-full bg-slate-500" id="live-dot"></span>
+        <span id="live-label">Live</span>
+      </button>
+
+      {# Severity summary pills #}
+      <div class="flex items-center gap-1.5 flex-wrap">
+        {% for sev, label in [(0,'Emerg'),(1,'Alert'),(2,'Crit'),(3,'Err'),(4,'Warn'),(5,'Notice'),(6,'Info'),(7,'Debug')] %}
+          {% set cnt = severity_counts.get(sev, 0) %}
+          {% if cnt > 0 %}
+          <a href="?severity={{ sev }}&hours={{ f_hours }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&sort={{ f_sort }}&order={{ f_order }}"
+             class="px-2 py-0.5 rounded text-[10px] font-semibold tabular-nums cursor-pointer transition-all
+               {% if sev <= 2 %}bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25
+               {% elif sev == 3 %}bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25
+               {% elif sev == 4 %}bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/25
+               {% elif sev <= 6 %}bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20
+               {% else %}bg-slate-500/10 text-slate-500 border border-slate-500/20 hover:bg-slate-500/20{% endif %}
+               {% if f_severity == sev %}ring-1 ring-white/30 scale-105{% endif %}">
+            {{ label }} {{ cnt }}
+          </a>
+          {% endif %}
+        {% endfor %}
+        {% if f_severity is not none %}
+        <a href="?hours={{ f_hours }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&sort={{ f_sort }}&order={{ f_order }}"
+           class="px-2 py-0.5 rounded text-[10px] text-slate-500 hover:text-white border border-slate-600/30 hover:border-slate-500/50 transition-colors ml-1">
+          Clear
         </a>
         {% endif %}
-      {% endfor %}
-      {% if f_severity is not none %}
-      <a href="?hours={{ f_hours }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&sort={{ f_sort }}&order={{ f_order }}"
-         class="px-2 py-0.5 rounded text-[10px] text-slate-500 hover:text-white border border-slate-600/30 hover:border-slate-500/50 transition-colors ml-1">
-        ✕ Clear
-      </a>
-      {% endif %}
+      </div>
     </div>
+  </div>
+
+  {# ── Log-rate chart ──────────────────────────────────────────────────── #}
+  <div class="glass-card !rounded-xl !p-3 mb-4">
+    <div class="flex items-center justify-between mb-1">
+      <span class="text-[10px] text-[--ng-text-muted] uppercase tracking-wider font-medium">Message Rate</span>
+      <div class="flex items-center gap-3 text-[10px]">
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-red-400 inline-block"></span>Errors</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-yellow-400 inline-block"></span>Warnings</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-blue-400 inline-block"></span>Info</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-slate-500 inline-block"></span>Debug</span>
+      </div>
+    </div>
+    <canvas id="rateChart" height="45"></canvas>
   </div>
 
   {# ── Filter bar ────────────────────────────────────────────────────── #}
@@ -79,7 +117,6 @@
       {% endfor %}
     </select>
 
-    {# Facility #}
     {% if f_facility is not none %}
     <input type="hidden" name="facility" value="{{ f_facility }}">
     {% endif %}
@@ -93,24 +130,89 @@
       {% endfor %}
     </select>
 
-    {# Preserve sort #}
     <input type="hidden" name="sort" value="{{ f_sort }}">
     <input type="hidden" name="order" value="{{ f_order }}">
 
-    {# Submit / Clear #}
     <button type="submit" class="ng-btn ng-btn-primary text-sm !py-1.5 !px-4">Search</button>
     {% if f_q or f_host or f_app or f_severity is not none or f_facility is not none or f_hours != 24 %}
     <a href="/syslog" class="text-[10px] text-[--ng-text-muted] hover:text-white transition-colors">Reset all</a>
     {% endif %}
 
-    {# Auto-refresh indicator #}
-    <div class="ml-auto flex items-center gap-2 text-[10px] text-[--ng-text-muted]">
-      <span id="syslog-refresh-label">Auto-refresh: 10s</span>
-      <div class="w-16 h-1 rounded-full bg-white/5 overflow-hidden">
-        <div id="syslog-refresh-bar" class="h-full bg-[--ng-primary] rounded-full transition-all" style="width:0%"></div>
+    {# Saved views dropdown #}
+    <div class="ml-auto flex items-center gap-2">
+      {% if saved_views %}
+      <select class="ng-input text-xs py-1 w-[130px]" onchange="if(this.value)window.location=this.value">
+        <option value="">Saved views</option>
+        {% for v in saved_views %}
+        <option value="/syslog?{{ v.filters_json | replace('{','') | replace('}','') | replace('\"','') | replace(': ','=') | replace(', ','&') }}">{{ v.name }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+
+      {# Save current view #}
+      <button type="button" onclick="document.getElementById('save-view-modal').classList.toggle('hidden')"
+              class="text-[10px] text-[--ng-text-muted] hover:text-white transition-colors" title="Save current filters">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+        </svg>
+      </button>
+
+      {# Auto-refresh indicator (hidden when live) #}
+      <div id="refresh-wrap" class="flex items-center gap-2 text-[10px] text-[--ng-text-muted]">
+        <span id="syslog-refresh-label">Auto-refresh: 10s</span>
+        <div class="w-16 h-1 rounded-full bg-white/5 overflow-hidden">
+          <div id="syslog-refresh-bar" class="h-full bg-[--ng-primary] rounded-full transition-all" style="width:0%"></div>
+        </div>
       </div>
     </div>
   </form>
+
+  {# ── Save view modal ─────────────────────────────────────────────── #}
+  <div id="save-view-modal" class="hidden glass-card !rounded-xl !p-4 mb-4 flex items-center gap-3">
+    <form method="post" action="/syslog/views" class="flex items-center gap-2 flex-1">
+      <input type="text" name="view_name" placeholder="View name..." class="ng-input text-sm py-1.5 flex-1" required>
+      <input type="hidden" name="severity" value="{{ f_severity if f_severity is not none else '' }}">
+      <input type="hidden" name="facility" value="{{ f_facility if f_facility is not none else '' }}">
+      <input type="hidden" name="host" value="{{ f_host }}">
+      <input type="hidden" name="app" value="{{ f_app }}">
+      <input type="hidden" name="q" value="{{ f_q }}">
+      <input type="hidden" name="hours" value="{{ f_hours }}">
+      <button type="submit" class="ng-btn ng-btn-primary text-sm !py-1.5 !px-4">Save</button>
+      <button type="button" onclick="document.getElementById('save-view-modal').classList.add('hidden')"
+              class="text-xs text-slate-500 hover:text-white">Cancel</button>
+    </form>
+    {% if saved_views %}
+    <div class="border-l border-white/10 pl-3 flex gap-1 flex-wrap">
+      {% for v in saved_views %}
+      <form method="post" action="/syslog/views/{{ v.id }}/delete" class="inline">
+        <button type="submit" class="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors" title="Delete {{ v.name }}">
+          {{ v.name }} &times;
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Retention info ──────────────────────────────────────────────── #}
+  <div class="text-[10px] text-[--ng-text-muted]/50 mb-3 font-mono">
+    Retention: Debug {{ retention_days[7] }}d | Info {{ retention_days[6] }}d | Notice {{ retention_days[5] }}d | Warn {{ retention_days[4] }}d | Error+ {{ retention_days[3] }}d
+  </div>
+
+  {# ── Live tail container (hidden by default) ────────────────────── #}
+  <div id="live-container" class="hidden glass-card !rounded-xl overflow-hidden mb-4">
+    <div class="flex items-center justify-between px-4 py-2 border-b border-white/[0.08]">
+      <span class="text-xs font-medium text-emerald-400 flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Live Stream
+      </span>
+      <span class="text-[10px] text-[--ng-text-muted]" id="live-count">0 messages</span>
+    </div>
+    <div class="overflow-y-auto max-h-[300px]" id="live-body">
+      <table class="w-full text-sm">
+        <tbody id="live-rows" class="divide-y divide-white/[0.04]"></tbody>
+      </table>
+    </div>
+  </div>
 
   {% if not messages %}
   {# ── Empty state ──────────────────────────────────────────────────── #}
@@ -144,10 +246,6 @@
                 <svg class="w-3 h-3 {% if f_order == 'asc' %}rotate-180{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
-                {% else %}
-                <svg class="w-3 h-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
-                </svg>
                 {% endif %}
               </a>
             </th>
@@ -162,10 +260,12 @@
         </thead>
         <tbody class="divide-y divide-white/[0.04]" id="syslog-body">
           {% for msg in messages %}
-          <tr class="hover:bg-white/[0.03] transition-colors group
+          {% set dedup = msg._dedup_count if msg._dedup_count is defined else 1 %}
+          <tr class="hover:bg-white/[0.03] transition-colors group cursor-pointer
             {% if msg.severity is not none and msg.severity <= 2 %}bg-red-500/[0.04]
             {% elif msg.severity == 3 %}bg-orange-500/[0.03]
-            {% elif msg.severity == 4 %}bg-yellow-500/[0.02]{% endif %}">
+            {% elif msg.severity == 4 %}bg-yellow-500/[0.02]{% endif %}"
+            {% if msg._fields %}onclick="this.nextElementSibling?.classList.toggle('hidden')"{% endif %}>
             <td class="px-4 py-2 text-[--ng-text-muted] text-xs tabular-nums whitespace-nowrap font-mono">
               {{ msg.timestamp.strftime("%m-%d %H:%M:%S") }}
             </td>
@@ -184,14 +284,14 @@
             {% set resolved_id = msg.host_id or ip_to_host_id.get(msg.source_ip) or (ip_to_host_id.get((msg.hostname or '').lower())) %}
             <td class="px-4 py-2 text-xs truncate max-w-[150px]">
               {% if resolved_id %}
-              <a href="/ping/{{ resolved_id }}?tab=syslog" class="text-[--ng-text-secondary] hover:text-white transition-colors underline decoration-dotted underline-offset-2">{{ msg.hostname or '—' }}</a>
+              <a href="/ping/{{ resolved_id }}?tab=syslog" class="text-[--ng-text-secondary] hover:text-white transition-colors underline decoration-dotted underline-offset-2" onclick="event.stopPropagation()">{{ msg.hostname or '...' }}</a>
               {% else %}
-              <span class="text-[--ng-text-secondary]">{{ msg.hostname or '—' }}</span>
+              <span class="text-[--ng-text-secondary]">{{ msg.hostname or '...' }}</span>
               {% endif %}
             </td>
             <td class="px-4 py-2 text-xs truncate max-w-[120px] font-mono">
               {% if resolved_id %}
-              <a href="/ping/{{ resolved_id }}?tab=syslog" class="text-[--ng-text-muted] hover:text-white transition-colors">{{ msg.source_ip }}</a>
+              <a href="/ping/{{ resolved_id }}?tab=syslog" class="text-[--ng-text-muted] hover:text-white transition-colors" onclick="event.stopPropagation()">{{ msg.source_ip }}</a>
               {% else %}
               <span class="text-[--ng-text-muted]">{{ msg.source_ip }}</span>
               {% endif %}
@@ -202,9 +302,36 @@
               {% endif %}
             </td>
             <td class="px-4 py-2 text-[--ng-text-primary] text-xs font-mono break-all">
-              <span class="line-clamp-2" title="{{ msg.message }}">{{ msg.message[:500] }}</span>
+              <div class="flex items-center gap-2">
+                <span class="line-clamp-2 flex-1" title="{{ msg.message }}">{{ msg.message[:500] }}</span>
+                {% if dedup > 1 %}
+                <span class="shrink-0 px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-400 text-[10px] font-bold tabular-nums" title="Repeated {{ dedup }} times">
+                  x{{ dedup }}
+                </span>
+                {% endif %}
+                {% if msg._fields %}
+                <svg class="w-3.5 h-3.5 text-slate-600 shrink-0 group-hover:text-slate-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+                {% endif %}
+              </div>
             </td>
           </tr>
+          {# ── Expandable structured fields row ──────────────────── #}
+          {% if msg._fields %}
+          <tr class="hidden bg-white/[0.02]">
+            <td colspan="6" class="px-4 py-3">
+              <div class="flex flex-wrap gap-2">
+                {% for key, val in msg._fields.items() %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/[0.04] text-[11px]">
+                  <span class="text-slate-500">{{ key }}:</span>
+                  <span class="text-[--ng-text-secondary] font-mono">{{ val[:80] }}</span>
+                </span>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+          {% endif %}
           {% endfor %}
         </tbody>
       </table>
@@ -221,23 +348,19 @@
     <div class="flex items-center gap-1">
       {% set qs = "severity=" ~ (f_severity if f_severity is not none else '') ~ "&facility=" ~ (f_facility if f_facility is not none else '') ~ "&host=" ~ f_host ~ "&app=" ~ f_app ~ "&q=" ~ f_q ~ "&hours=" ~ f_hours ~ "&sort=" ~ f_sort ~ "&order=" ~ f_order %}
       {% if page > 1 %}
-      <a href="?page=1&{{ qs }}"
-         class="px-2.5 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
-        ««
+      <a href="?page=1&{{ qs }}" class="px-2.5 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
+        &laquo;&laquo;
       </a>
-      <a href="?page={{ page - 1 }}&{{ qs }}"
-         class="px-3 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
-        ‹ Prev
+      <a href="?page={{ page - 1 }}&{{ qs }}" class="px-3 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
+        &lsaquo; Prev
       </a>
       {% endif %}
       {% if page < total_pages %}
-      <a href="?page={{ page + 1 }}&{{ qs }}"
-         class="px-3 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
-        Next ›
+      <a href="?page={{ page + 1 }}&{{ qs }}" class="px-3 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
+        Next &rsaquo;
       </a>
-      <a href="?page={{ total_pages }}&{{ qs }}"
-         class="px-2.5 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
-        »»
+      <a href="?page={{ total_pages }}&{{ qs }}" class="px-2.5 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
+        &raquo;&raquo;
       </a>
       {% endif %}
     </div>
@@ -251,33 +374,163 @@
 
 {% block scripts %}
 <script>
-  // Auto-refresh every 10s
+  if (!window._pageIntervals) window._pageIntervals = [];
+
+  // ── Rate chart ───────────────────────────────────────────────────────
+  const rateData = {{ rate_chart | safe }};
+  const rateCtx = document.getElementById('rateChart');
+  if (rateCtx && rateData.labels && rateData.labels.length > 0) {
+    new Chart(rateCtx.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: rateData.labels,
+        datasets: [
+          { label: 'Errors', data: rateData.err, backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 2 },
+          { label: 'Warnings', data: rateData.warn, backgroundColor: 'rgba(234,179,8,0.5)', borderRadius: 2 },
+          { label: 'Info', data: rateData.info, backgroundColor: 'rgba(59,130,246,0.35)', borderRadius: 2 },
+          { label: 'Debug', data: rateData.debug, backgroundColor: 'rgba(100,116,139,0.2)', borderRadius: 2 },
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false,
+          backgroundColor: 'rgba(15,20,35,0.95)', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+          titleColor: '#94a3b8', bodyColor: '#e2e8f0' }
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: '#475569', maxTicksLimit: 20, font: { size: 10 } }, grid: { display: false } },
+          y: { stacked: true, ticks: { color: '#475569', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
+        },
+        animation: false,
+      }
+    });
+  }
+
+  // ── Auto-refresh (paused during live mode) ───────────────────────────
   const REFRESH = 10;
-  let left = REFRESH;
+  let refreshLeft = REFRESH;
+  let refreshPaused = false;
   const bar = document.getElementById('syslog-refresh-bar');
   if (bar) {
-    if (!window._pageIntervals) window._pageIntervals = [];
     window._pageIntervals.push(setInterval(() => {
-      left--;
-      bar.style.width = ((REFRESH - left) / REFRESH * 100) + '%';
-      if (left <= 0) { left = REFRESH; location.reload(); }
+      if (refreshPaused) return;
+      refreshLeft--;
+      bar.style.width = ((REFRESH - refreshLeft) / REFRESH * 100) + '%';
+      if (refreshLeft <= 0) { refreshLeft = REFRESH; location.reload(); }
     }, 1000));
   }
 
-  // Submit search on Enter
+  // ── Live tail ────────────────────────────────────────────────────────
+  let liveActive = false;
+  let eventSource = null;
+  let liveCount = 0;
+
+  const SEV_COLORS = {
+    0:'bg-red-500/20 text-red-400', 1:'bg-red-500/20 text-red-400', 2:'bg-red-500/20 text-red-400',
+    3:'bg-orange-500/20 text-orange-400', 4:'bg-yellow-500/20 text-yellow-400',
+    5:'bg-blue-500/15 text-blue-400', 6:'bg-blue-500/15 text-blue-400',
+    7:'bg-slate-500/15 text-slate-500'
+  };
+  const SEV_ROW = {
+    0:'bg-red-500/[0.04]', 1:'bg-red-500/[0.04]', 2:'bg-red-500/[0.04]',
+    3:'bg-orange-500/[0.03]', 4:'bg-yellow-500/[0.02]'
+  };
+
+  function toggleLive() {
+    liveActive = !liveActive;
+    const btn = document.getElementById('live-toggle');
+    const dot = document.getElementById('live-dot');
+    const label = document.getElementById('live-label');
+    const container = document.getElementById('live-container');
+    const refreshWrap = document.getElementById('refresh-wrap');
+
+    if (liveActive) {
+      btn.classList.replace('border-slate-600/30', 'border-emerald-500/30');
+      btn.classList.replace('text-slate-400', 'text-emerald-400');
+      dot.classList.replace('bg-slate-500', 'bg-emerald-400');
+      dot.classList.add('animate-pulse');
+      label.textContent = 'Live';
+      container.classList.remove('hidden');
+      refreshWrap.classList.add('hidden');
+      refreshPaused = true;
+
+      // Build SSE URL with current filters
+      const params = new URLSearchParams();
+      const sev = document.querySelector('[name="severity"]')?.value;
+      const host = document.querySelector('[name="host"]')?.value;
+      const app = document.querySelector('[name="app"]')?.value;
+      if (sev) params.set('severity', sev);
+      if (host) params.set('host', host);
+      if (app) params.set('app', app);
+
+      eventSource = new EventSource('/syslog/stream?' + params.toString());
+      eventSource.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        liveCount++;
+        document.getElementById('live-count').textContent = liveCount + ' messages';
+
+        const sev = msg.severity ?? 6;
+        const rowClass = SEV_ROW[sev] || '';
+        const sevClass = SEV_COLORS[sev] || 'bg-slate-500/15 text-slate-500';
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-white/[0.03] transition-colors ' + rowClass;
+        tr.innerHTML = `
+          <td class="px-4 py-2 text-[--ng-text-muted] text-xs tabular-nums whitespace-nowrap font-mono w-[150px]">${msg.timestamp}</td>
+          <td class="px-4 py-2 w-[80px]"><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${sevClass}">${msg.severity_label}</span></td>
+          <td class="px-4 py-2 text-[--ng-text-secondary] text-xs truncate max-w-[150px]">${msg.hostname || '...'}</td>
+          <td class="px-4 py-2 text-[--ng-text-muted] text-xs font-mono truncate max-w-[120px]">${msg.source_ip}</td>
+          <td class="px-4 py-2 text-[--ng-text-muted] text-xs truncate max-w-[100px]">${msg.app_name ? '<span class="px-1.5 py-0.5 rounded bg-white/5 text-[--ng-text-secondary]">'+msg.app_name+'</span>' : ''}</td>
+          <td class="px-4 py-2 text-[--ng-text-primary] text-xs font-mono break-all"><span class="line-clamp-2">${msg.message}</span></td>
+        `;
+        const tbody = document.getElementById('live-rows');
+        tbody.insertBefore(tr, tbody.firstChild);
+        // Keep max 200 rows
+        while (tbody.children.length > 200) tbody.lastChild.remove();
+      };
+      eventSource.onerror = () => {
+        if (liveActive) {
+          // Reconnect after brief delay
+          setTimeout(() => { if (liveActive) toggleLive(); toggleLive(); }, 2000);
+        }
+      };
+    } else {
+      btn.classList.replace('border-emerald-500/30', 'border-slate-600/30');
+      btn.classList.replace('text-emerald-400', 'text-slate-400');
+      dot.classList.replace('bg-emerald-400', 'bg-slate-500');
+      dot.classList.remove('animate-pulse');
+      label.textContent = 'Live';
+      container.classList.add('hidden');
+      refreshWrap.classList.remove('hidden');
+      refreshPaused = false;
+      refreshLeft = REFRESH;
+
+      if (eventSource) { eventSource.close(); eventSource = null; }
+    }
+  }
+
+  // ── Search keyboard shortcut ─────────────────────────────────────────
   const searchInput = document.getElementById('syslog-search');
   if (searchInput) {
     searchInput.addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); document.getElementById('syslog-filter').submit(); }
     });
   }
-
-  // Keyboard shortcut: / to focus search
   document.addEventListener('keydown', e => {
     if (e.key === '/' && !['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) {
       e.preventDefault();
       if (searchInput) searchInput.focus();
     }
+    // L to toggle live
+    if (e.key === 'l' && !['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) {
+      e.preventDefault();
+      toggleLive();
+    }
+  });
+
+  // Cleanup on SPA navigation
+  window.addEventListener('beforeunload', () => {
+    if (eventSource) eventSource.close();
   });
 </script>
 {% endblock %}

@@ -216,13 +216,26 @@ async def cleanup_old_results():
         await db.execute(delete(PingResult).where(PingResult.timestamp < ping_cutoff))
         # Integration snapshots
         await snap_svc.cleanup_all(db, int_ret)
-        # Syslog messages (use integration retention)
-        from models.syslog import SyslogMessage
-        syslog_cutoff = datetime.utcnow() - timedelta(days=int_ret)
-        await db.execute(delete(SyslogMessage).where(SyslogMessage.timestamp < syslog_cutoff))
+        # Syslog messages – smart retention by severity
+        from models.syslog import SyslogMessage, RETENTION_DAYS
+        total_deleted = 0
+        for sev, days in RETENTION_DAYS.items():
+            cutoff = datetime.utcnow() - timedelta(days=days)
+            r = await db.execute(
+                delete(SyslogMessage)
+                .where(SyslogMessage.severity == sev, SyslogMessage.timestamp < cutoff)
+            )
+            total_deleted += r.rowcount
+        # Also clean messages with NULL severity older than 7 days
+        null_cutoff = datetime.utcnow() - timedelta(days=7)
+        r = await db.execute(
+            delete(SyslogMessage)
+            .where(SyslogMessage.severity.is_(None), SyslogMessage.timestamp < null_cutoff)
+        )
+        total_deleted += r.rowcount
         await db.commit()
 
-    logger.info("Cleanup done (ping: %dd, integrations: %dd)", ping_ret, int_ret)
+    logger.info("Cleanup done (ping: %dd, integrations: %dd, syslog: %d msgs)", ping_ret, int_ret, total_deleted)
 
 
 # ── Speedtest (old-style, not yet migrated to generic) ───────────────────────

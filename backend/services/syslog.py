@@ -268,6 +268,24 @@ async def _rdns_resolve_loop():
                 _rdns_cache[ip] = None
 
 
+# ── Live tail broadcast ────────────────────────────────────────────────────
+
+_subscribers: list[asyncio.Queue] = []
+
+
+def subscribe() -> asyncio.Queue:
+    """Subscribe to live syslog stream. Returns an asyncio.Queue."""
+    q: asyncio.Queue = asyncio.Queue(maxsize=200)
+    _subscribers.append(q)
+    return q
+
+
+def unsubscribe(q: asyncio.Queue):
+    """Unsubscribe from live syslog stream."""
+    if q in _subscribers:
+        _subscribers.remove(q)
+
+
 # ── Write buffer ────────────────────────────────────────────────────────────
 
 _buffer: list[dict] = []
@@ -277,6 +295,12 @@ _FLUSH_INTERVAL = 2.0  # seconds
 
 
 async def _enqueue(parsed: dict):
+    # Broadcast to live tail subscribers
+    for q in _subscribers[:]:
+        try:
+            q.put_nowait(parsed)
+        except asyncio.QueueFull:
+            pass
     async with _buffer_lock:
         _buffer.append(parsed)
         if len(_buffer) >= _BUFFER_SIZE:
