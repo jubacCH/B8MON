@@ -4,64 +4,88 @@
 {% block content %}
 <div class="p-8">
 
-  <!-- Header -->
-  <div class="flex items-center justify-between mb-6">
+  {# ── Header ─────────────────────────────────────────────────────────── #}
+  <div class="flex items-center justify-between mb-5">
     <div>
       <h1 class="ng-heading text-2xl text-[--ng-text-primary]">Syslog</h1>
-      <p class="text-slate-500 text-sm mt-0.5">{{ total }} messages in the last {{ f_hours }}h</p>
+      <p class="text-[--ng-text-muted] text-sm mt-0.5 font-mono">
+        {{ "{:,}".format(total) }} messages in the last
+        {% if f_hours < 24 %}{{ f_hours }}h{% elif f_hours == 24 %}24h{% elif f_hours == 48 %}2d{% else %}7d{% endif %}
+      </p>
     </div>
 
-    <!-- Severity summary pills -->
-    <div class="flex items-center gap-2 flex-wrap">
-      {% for sev, label in [(0, 'Emerg'), (1, 'Alert'), (2, 'Crit'), (3, 'Error'), (4, 'Warn'), (5, 'Notice'), (6, 'Info'), (7, 'Debug')] %}
+    {# Severity summary pills #}
+    <div class="flex items-center gap-1.5 flex-wrap">
+      {% for sev, label in [(0,'Emerg'),(1,'Alert'),(2,'Crit'),(3,'Err'),(4,'Warn'),(5,'Notice'),(6,'Info'),(7,'Debug')] %}
         {% set cnt = severity_counts.get(sev, 0) %}
         {% if cnt > 0 %}
-        <a href="?severity={{ sev }}&hours={{ f_hours }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}"
-           class="px-2 py-0.5 rounded text-[10px] font-medium tabular-nums
-             {% if sev <= 2 %}bg-red-500/15 text-red-400 border border-red-500/20
-             {% elif sev == 3 %}bg-orange-500/15 text-orange-400 border border-orange-500/20
-             {% elif sev == 4 %}bg-yellow-500/15 text-yellow-400 border border-yellow-500/20
-             {% elif sev <= 6 %}bg-blue-500/10 text-blue-400 border border-blue-500/20
-             {% else %}bg-slate-500/10 text-slate-500 border border-slate-500/20{% endif %}
-             {% if f_severity == sev %}ring-1 ring-white/20{% endif %}">
-          {{ label }}: {{ cnt }}
+        <a href="?severity={{ sev }}&hours={{ f_hours }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&sort={{ f_sort }}&order={{ f_order }}"
+           class="px-2 py-0.5 rounded text-[10px] font-semibold tabular-nums cursor-pointer transition-all
+             {% if sev <= 2 %}bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25
+             {% elif sev == 3 %}bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25
+             {% elif sev == 4 %}bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/25
+             {% elif sev <= 6 %}bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20
+             {% else %}bg-slate-500/10 text-slate-500 border border-slate-500/20 hover:bg-slate-500/20{% endif %}
+             {% if f_severity == sev %}ring-1 ring-white/30 scale-105{% endif %}">
+          {{ label }} {{ cnt }}
         </a>
         {% endif %}
       {% endfor %}
       {% if f_severity is not none %}
-      <a href="?hours={{ f_hours }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}"
-         class="px-2 py-0.5 rounded text-[10px] text-slate-500 hover:text-white border border-slate-600/30 hover:border-slate-500/50 transition-colors">
-        Clear filter
+      <a href="?hours={{ f_hours }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&sort={{ f_sort }}&order={{ f_order }}"
+         class="px-2 py-0.5 rounded text-[10px] text-slate-500 hover:text-white border border-slate-600/30 hover:border-slate-500/50 transition-colors ml-1">
+        ✕ Clear
       </a>
       {% endif %}
     </div>
   </div>
 
-  <!-- Filter bar -->
-  <form method="get" action="/syslog" class="flex items-center gap-3 mb-4">
-    <!-- Search -->
-    <div class="relative flex-1 max-w-sm">
-      <svg class="w-4 h-4 text-slate-600 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  {# ── Filter bar ────────────────────────────────────────────────────── #}
+  <form method="get" action="/syslog" id="syslog-filter"
+        class="glass-card !rounded-xl !p-3 flex flex-wrap items-center gap-2.5 mb-4">
+
+    {# Search #}
+    <div class="relative flex-1 min-w-[200px]">
+      <svg class="w-4 h-4 text-[--ng-text-muted] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
       </svg>
-      <input type="text" name="q" value="{{ f_q }}" placeholder="Full-text search..."
-             class="w-full pl-9 pr-3 py-2 ng-input">
+      <input type="text" name="q" value="{{ f_q }}" placeholder="Search messages..."
+             class="w-full pl-9 pr-3 py-1.5 ng-input text-sm" id="syslog-search">
     </div>
 
-    <!-- Host filter -->
-    <select name="host" class="ng-input max-w-[180px]">
+    {# Severity #}
+    <select name="severity" class="ng-input text-sm py-1.5 w-[120px]" onchange="this.form.submit()">
+      <option value="">All levels</option>
+      {% for sev in range(8) %}
+      <option value="{{ sev }}" {% if f_severity == sev %}selected{% endif %}>
+        {{ severity_labels.get(sev, '?') }}
+      </option>
+      {% endfor %}
+    </select>
+
+    {# Host #}
+    <select name="host" class="ng-input text-sm py-1.5 w-[160px]" onchange="this.form.submit()">
       <option value="">All hosts</option>
       {% for ip, hostname in known_hosts %}
       <option value="{{ ip }}" {% if f_host == ip %}selected{% endif %}>{{ hostname or ip }}</option>
       {% endfor %}
     </select>
 
-    <!-- App filter -->
-    <input type="text" name="app" value="{{ f_app }}" placeholder="App name..."
-           class="ng-input w-32">
+    {# App #}
+    <select name="app" class="ng-input text-sm py-1.5 w-[130px]" onchange="this.form.submit()">
+      <option value="">All apps</option>
+      {% for a in known_apps %}
+      <option value="{{ a }}" {% if f_app == a %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
 
-    <!-- Time range -->
-    <select name="hours" class="ng-input">
+    {# Facility #}
+    {% if f_facility is not none %}
+    <input type="hidden" name="facility" value="{{ f_facility }}">
+    {% endif %}
+
+    {# Time range #}
+    <select name="hours" class="ng-input text-sm py-1.5 w-[80px]" onchange="this.form.submit()">
       {% for h in [1, 6, 12, 24, 48, 168] %}
       <option value="{{ h }}" {% if f_hours == h %}selected{% endif %}>
         {% if h < 24 %}{{ h }}h{% elif h == 24 %}24h{% elif h == 48 %}2d{% else %}7d{% endif %}
@@ -69,70 +93,107 @@
       {% endfor %}
     </select>
 
-    {% if f_severity is not none %}
-    <input type="hidden" name="severity" value="{{ f_severity }}">
+    {# Preserve sort #}
+    <input type="hidden" name="sort" value="{{ f_sort }}">
+    <input type="hidden" name="order" value="{{ f_order }}">
+
+    {# Submit / Clear #}
+    <button type="submit" class="ng-btn ng-btn-primary text-sm !py-1.5 !px-4">Search</button>
+    {% if f_q or f_host or f_app or f_severity is not none or f_facility is not none or f_hours != 24 %}
+    <a href="/syslog" class="text-[10px] text-[--ng-text-muted] hover:text-white transition-colors">Reset all</a>
     {% endif %}
 
-    <button type="submit"
-            class="ng-btn ng-btn-primary">
-      Filter
-    </button>
+    {# Auto-refresh indicator #}
+    <div class="ml-auto flex items-center gap-2 text-[10px] text-[--ng-text-muted]">
+      <span id="syslog-refresh-label">Auto-refresh: 10s</span>
+      <div class="w-16 h-1 rounded-full bg-white/5 overflow-hidden">
+        <div id="syslog-refresh-bar" class="h-full bg-[--ng-primary] rounded-full transition-all" style="width:0%"></div>
+      </div>
+    </div>
   </form>
 
   {% if not messages %}
-  <!-- Empty state -->
-  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl p-12 text-center">
+  {# ── Empty state ──────────────────────────────────────────────────── #}
+  <div class="glass-card !rounded-xl p-12 text-center">
     <div class="w-12 h-12 rounded-full bg-slate-500/10 flex items-center justify-center mx-auto mb-4">
       <svg class="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
       </svg>
     </div>
-    <p class="text-slate-400 font-semibold">No syslog messages</p>
-    <p class="text-slate-600 text-sm mt-1">No messages match the current filters, or no syslog data has been received yet.</p>
+    <p class="text-[--ng-text-primary] font-semibold">No syslog messages</p>
+    <p class="text-[--ng-text-muted] text-sm mt-1">No messages match the current filters, or no syslog data has been received yet.</p>
+    <p class="text-[--ng-text-muted] text-xs mt-3 font-mono">Configure your devices to send syslog to <span class="text-[--ng-primary]">{{ request.url.hostname }}:514</span> (UDP)</p>
   </div>
 
   {% else %}
 
-  <!-- Log table -->
-  <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] backdrop-blur-2xl rounded-xl overflow-hidden">
+  {# ── Log table ────────────────────────────────────────────────────── #}
+  <div class="glass-card !rounded-xl overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="w-full text-sm">
+      <table class="w-full text-sm" id="syslog-table">
         <thead>
           <tr class="border-b border-white/[0.08] text-left">
-            <th class="px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider w-[140px]">Time</th>
-            <th class="px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider w-[60px]">Sev</th>
-            <th class="px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider w-[140px]">Host</th>
-            <th class="px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider w-[100px]">App</th>
-            <th class="px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Message</th>
+            {% macro sort_header(col, label, width) %}
+            {% set is_active = f_sort == col %}
+            {% set next_order = 'asc' if (is_active and f_order == 'desc') else 'desc' %}
+            <th class="px-4 py-2.5 text-[--ng-text-muted] font-medium text-[10px] uppercase tracking-wider {{ width }}">
+              <a href="?sort={{ col }}&order={{ next_order }}&severity={{ f_severity if f_severity is not none else '' }}&facility={{ f_facility if f_facility is not none else '' }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&hours={{ f_hours }}&page={{ page }}"
+                 class="flex items-center gap-1 hover:text-[--ng-text-primary] transition-colors {% if is_active %}text-[--ng-primary]{% endif %}">
+                {{ label }}
+                {% if is_active %}
+                <svg class="w-3 h-3 {% if f_order == 'asc' %}rotate-180{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+                {% else %}
+                <svg class="w-3 h-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+                </svg>
+                {% endif %}
+              </a>
+            </th>
+            {% endmacro %}
+            {{ sort_header("time", "Time", "w-[150px]") }}
+            {{ sort_header("severity", "Severity", "w-[80px]") }}
+            {{ sort_header("host", "Host", "w-[150px]") }}
+            {{ sort_header("source", "Source IP", "w-[120px]") }}
+            {{ sort_header("app", "App", "w-[100px]") }}
+            <th class="px-4 py-2.5 text-[--ng-text-muted] font-medium text-[10px] uppercase tracking-wider">Message</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-white/[0.08]">
+        <tbody class="divide-y divide-white/[0.04]" id="syslog-body">
           {% for msg in messages %}
-          <tr class="hover:bg-white/[0.02] transition-colors
-            {% if msg.severity is not none and msg.severity <= 2 %}bg-red-500/[0.03]
-            {% elif msg.severity == 3 %}bg-orange-500/[0.02]
+          <tr class="hover:bg-white/[0.03] transition-colors group
+            {% if msg.severity is not none and msg.severity <= 2 %}bg-red-500/[0.04]
+            {% elif msg.severity == 3 %}bg-orange-500/[0.03]
             {% elif msg.severity == 4 %}bg-yellow-500/[0.02]{% endif %}">
-            <td class="px-4 py-2.5 text-slate-500 text-xs tabular-nums whitespace-nowrap">
+            <td class="px-4 py-2 text-[--ng-text-muted] text-xs tabular-nums whitespace-nowrap font-mono">
               {{ msg.timestamp.strftime("%m-%d %H:%M:%S") }}
             </td>
-            <td class="px-4 py-2.5">
+            <td class="px-4 py-2">
               {% if msg.severity is not none %}
-              <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold
                 {% if msg.severity <= 2 %}bg-red-500/20 text-red-400
                 {% elif msg.severity == 3 %}bg-orange-500/20 text-orange-400
                 {% elif msg.severity == 4 %}bg-yellow-500/20 text-yellow-400
                 {% elif msg.severity <= 6 %}bg-blue-500/15 text-blue-400
                 {% else %}bg-slate-500/15 text-slate-500{% endif %}">
-                {{ severity_labels.get(msg.severity, '?')[:4] }}
+                {{ severity_labels.get(msg.severity, '?') }}
               </span>
               {% endif %}
             </td>
-            <td class="px-4 py-2.5 text-slate-400 text-xs truncate max-w-[140px]" title="{{ msg.source_ip }}">
-              {{ msg.hostname or msg.source_ip }}
+            <td class="px-4 py-2 text-[--ng-text-secondary] text-xs truncate max-w-[150px]">
+              {{ msg.hostname or '—' }}
             </td>
-            <td class="px-4 py-2.5 text-slate-500 text-xs truncate max-w-[100px]">{{ msg.app_name or '' }}</td>
-            <td class="px-4 py-2.5 text-slate-300 text-xs font-mono truncate max-w-[600px]" title="{{ msg.message }}">
-              {{ msg.message[:300] }}
+            <td class="px-4 py-2 text-[--ng-text-muted] text-xs truncate max-w-[120px] font-mono">
+              {{ msg.source_ip }}
+            </td>
+            <td class="px-4 py-2 text-[--ng-text-muted] text-xs truncate max-w-[100px]">
+              {% if msg.app_name %}
+              <span class="px-1.5 py-0.5 rounded bg-white/5 text-[--ng-text-secondary]">{{ msg.app_name }}</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-2 text-[--ng-text-primary] text-xs font-mono break-all">
+              <span class="line-clamp-2" title="{{ msg.message }}">{{ msg.message[:500] }}</span>
             </td>
           </tr>
           {% endfor %}
@@ -141,21 +202,33 @@
     </div>
   </div>
 
-  <!-- Pagination -->
+  {# ── Pagination ───────────────────────────────────────────────────── #}
   {% if total_pages > 1 %}
   <div class="flex items-center justify-between mt-4">
-    <p class="text-slate-600 text-xs">Page {{ page }} of {{ total_pages }} ({{ total }} messages)</p>
+    <p class="text-[--ng-text-muted] text-xs font-mono">
+      Page {{ page }} / {{ total_pages }}
+      <span class="text-[--ng-text-muted]/50 ml-2">({{ "{:,}".format(total) }} total)</span>
+    </p>
     <div class="flex items-center gap-1">
+      {% set qs = "severity=" ~ (f_severity if f_severity is not none else '') ~ "&facility=" ~ (f_facility if f_facility is not none else '') ~ "&host=" ~ f_host ~ "&app=" ~ f_app ~ "&q=" ~ f_q ~ "&hours=" ~ f_hours ~ "&sort=" ~ f_sort ~ "&order=" ~ f_order %}
       {% if page > 1 %}
-      <a href="?page={{ page - 1 }}&severity={{ f_severity if f_severity is not none else '' }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&hours={{ f_hours }}"
-         class="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white bg-[--ng-glass-bg] border border-[--ng-glass-border] hover:border-slate-600 transition-colors">
-        Prev
+      <a href="?page=1&{{ qs }}"
+         class="px-2.5 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
+        ««
+      </a>
+      <a href="?page={{ page - 1 }}&{{ qs }}"
+         class="px-3 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
+        ‹ Prev
       </a>
       {% endif %}
       {% if page < total_pages %}
-      <a href="?page={{ page + 1 }}&severity={{ f_severity if f_severity is not none else '' }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&hours={{ f_hours }}"
-         class="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white bg-[--ng-glass-bg] border border-[--ng-glass-border] hover:border-slate-600 transition-colors">
-        Next
+      <a href="?page={{ page + 1 }}&{{ qs }}"
+         class="px-3 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
+        Next ›
+      </a>
+      <a href="?page={{ total_pages }}&{{ qs }}"
+         class="px-2.5 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
+        »»
       </a>
       {% endif %}
     </div>
@@ -165,4 +238,37 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Auto-refresh every 10s
+  const REFRESH = 10;
+  let left = REFRESH;
+  const bar = document.getElementById('syslog-refresh-bar');
+  if (bar) {
+    if (!window._pageIntervals) window._pageIntervals = [];
+    window._pageIntervals.push(setInterval(() => {
+      left--;
+      bar.style.width = ((REFRESH - left) / REFRESH * 100) + '%';
+      if (left <= 0) { left = REFRESH; location.reload(); }
+    }, 1000));
+  }
+
+  // Submit search on Enter
+  const searchInput = document.getElementById('syslog-search');
+  if (searchInput) {
+    searchInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('syslog-filter').submit(); }
+    });
+  }
+
+  // Keyboard shortcut: / to focus search
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) {
+      e.preventDefault();
+      if (searchInput) searchInput.focus();
+    }
+  });
+</script>
 {% endblock %}

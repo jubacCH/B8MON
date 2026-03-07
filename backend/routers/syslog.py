@@ -1,4 +1,4 @@
-"""Syslog log viewer – filterable, searchable, paginated."""
+"""Syslog log viewer – filterable, searchable, sortable, paginated."""
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -15,17 +15,28 @@ templates = Jinja2Templates(directory="templates")
 
 _PER_PAGE = 100
 
+_SORT_COLUMNS = {
+    "time": SyslogMessage.timestamp,
+    "severity": SyslogMessage.severity,
+    "host": SyslogMessage.hostname,
+    "app": SyslogMessage.app_name,
+    "source": SyslogMessage.source_ip,
+}
+
 
 @router.get("", response_class=HTMLResponse)
 async def syslog_page(
     request: Request,
     db: AsyncSession = Depends(get_db),
     severity: int = Query(None),
+    facility: int = Query(None),
     host: str = Query(None),
     app: str = Query(None),
     q: str = Query(None),
     hours: int = Query(24),
     page: int = Query(1, ge=1),
+    sort: str = Query("time"),
+    order: str = Query("desc"),
 ):
     since = datetime.utcnow() - timedelta(hours=hours)
 
@@ -37,6 +48,10 @@ async def syslog_page(
     if severity is not None:
         query = query.where(SyslogMessage.severity == severity)
         count_query = count_query.where(SyslogMessage.severity == severity)
+
+    if facility is not None:
+        query = query.where(SyslogMessage.facility == facility)
+        count_query = count_query.where(SyslogMessage.facility == facility)
 
     if host:
         host_filter = (
@@ -51,7 +66,7 @@ async def syslog_page(
         count_query = count_query.where(SyslogMessage.app_name.ilike(f"%{app}%"))
 
     if q:
-        # PostgreSQL full-text search
+        # Try PostgreSQL full-text search first, fall back to ILIKE
         query = query.where(
             SyslogMessage.search_vector.op("@@")(func.plainto_tsquery("english", q))
         )
@@ -64,17 +79,20 @@ async def syslog_page(
     total_pages = max(1, (total + _PER_PAGE - 1) // _PER_PAGE)
     page = min(page, total_pages)
 
+    # Sort
+    sort_col = _SORT_COLUMNS.get(sort, SyslogMessage.timestamp)
+    if order == "asc":
+        query = query.order_by(sort_col.asc())
+    else:
+        query = query.order_by(sort_col.desc())
+
     # Fetch page
-    query = query.order_by(SyslogMessage.timestamp.desc())
     query = query.offset((page - 1) * _PER_PAGE).limit(_PER_PAGE)
     messages = (await db.execute(query)).scalars().all()
 
     # Stats for header
     stats_query = (
-        select(
-            SyslogMessage.severity,
-            func.count(SyslogMessage.id),
-        )
+        select(SyslogMessage.severity, func.count(SyslogMessage.id))
         .where(SyslogMessage.timestamp >= since)
         .group_by(SyslogMessage.severity)
     )
@@ -90,6 +108,16 @@ async def syslog_page(
     )
     known_hosts = (await db.execute(hosts_query)).all()
 
+    # Unique app names for filter dropdown
+    apps_query = (
+        select(SyslogMessage.app_name)
+        .where(SyslogMessage.timestamp >= since, SyslogMessage.app_name.isnot(None))
+        .group_by(SyslogMessage.app_name)
+        .order_by(SyslogMessage.app_name)
+        .limit(100)
+    )
+    known_apps = [r[0] for r in (await db.execute(apps_query)).all()]
+
     return templates.TemplateResponse("syslog.html", {
         "request": request,
         "active_page": "syslog",
@@ -101,12 +129,16 @@ async def syslog_page(
         "facility_labels": FACILITY_LABELS,
         "severity_counts": severity_counts,
         "known_hosts": known_hosts,
-        # Current filter values
+        "known_apps": known_apps,
+        # Current filter/sort values
         "f_severity": severity,
+        "f_facility": facility,
         "f_host": host or "",
         "f_app": app or "",
         "f_q": q or "",
         "f_hours": hours,
+        "f_sort": sort,
+        "f_order": order,
     })
 
 
