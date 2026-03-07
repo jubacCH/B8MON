@@ -20,12 +20,12 @@ async def setup_page(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.post("/complete")
 async def complete_setup(
-    site_name: str = Form("Vigil"),
+    site_name: str = Form("NODEGLOW"),
     username: str = Form("admin"),
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
-    await set_setting(db, "site_name", site_name.strip() or "Vigil")
+    await set_setting(db, "site_name", site_name.strip() or "NODEGLOW")
     await set_setting(db, "setup_complete", "true")
     await set_setting(db, "ping_interval", "60")
 

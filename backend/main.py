@@ -86,8 +86,14 @@ async def inject_globals(request: Request, call_next):
 
     PUBLIC_PATHS = {"/login", "/logout"}
     is_public = request.url.path in PUBLIC_PATHS or request.url.path.startswith("/setup")
+
+    # Redirect to setup wizard when no setup has been completed yet
     if not is_public:
-        from database import get_current_user, AsyncSessionLocal as _ASL
+        from database import is_setup_complete as _is_setup, get_current_user, AsyncSessionLocal as _ASL
+        async with _ASL() as check_db:
+            if not await _is_setup(check_db):
+                from fastapi.responses import RedirectResponse as _RR
+                return _RR(url="/setup", status_code=302)
         async with _ASL() as auth_db:
             user = await get_current_user(request, auth_db)
         if user is None:
