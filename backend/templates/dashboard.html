@@ -377,16 +377,6 @@
       time += 0.016;
       ctx.clearRect(0, 0, W, H);
 
-      // Concentric orbit rings (elliptical)
-      ctx.strokeStyle = 'rgba(100,120,255,0.035)';
-      ctx.lineWidth = 0.5;
-      for (let i = 1; i <= 5; i++) {
-        const rr = maxR * (i / 5);
-        ctx.beginPath();
-        ctx.ellipse(CX, CY, rr, rr * (CY / CX), 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
       // Core glow
       const cg = ctx.createRadialGradient(CX, CY, 0, CX, CY, maxR * 0.18);
       cg.addColorStop(0, 'rgba(120,100,255,0.12)');
