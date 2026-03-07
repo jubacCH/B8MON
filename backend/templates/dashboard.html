@@ -273,28 +273,39 @@
   </div>
   {% endif %}
 
-  <!-- ── NODE-BUBBLE MAP ─────────────────────────────────────────────────── -->
+  <!-- ── CONSTELLATION MAP ───────────────────────────────────────────────── -->
   {% if host_stats %}
   <div class="mb-5 glass-card-static !p-0 overflow-hidden">
     <div class="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between cursor-pointer section-header" data-section="nodemap">
-      <h2 class="metric-label !text-[10px]">Node Map</h2>
+      <h2 class="metric-label !text-[10px]">Constellation</h2>
       <div class="flex items-center gap-3">
-        <span class="text-[--ng-text-muted] text-[10px] font-mono">{{ host_stats|length }} nodes</span>
+        <span class="text-[--ng-text-muted] text-[10px] font-mono">{{ host_stats|length }} stars</span>
         <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
       </div>
     </div>
     <div class="section-body" id="nodemap-body">
-      <!-- Desktop: SVG map -->
-      <div class="p-4 hidden md:block relative" id="node-map-wrap">
+      <!-- Desktop: Constellation Map -->
+      <div class="hidden md:block relative overflow-hidden rounded-lg" id="node-map-wrap"
+           style="padding:16px;background:
+             radial-gradient(ellipse at 20% 30%, rgba(99,102,241,0.06) 0%, transparent 60%),
+             radial-gradient(ellipse at 80% 70%, rgba(139,92,246,0.04) 0%, transparent 55%),
+             radial-gradient(ellipse at 50% 50%, rgba(6,10,23,0.5) 0%, transparent 100%)">
         <svg id="node-map" viewBox="0 0 1200 700" class="w-full">
           <defs>
-            <filter id="glow-sm"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            <filter id="glow-md"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            <filter id="glow-lg"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="cst-blur"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="cst-glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <style>
+              .cst-twinkle { animation: cstTwinkle var(--dur,4s) ease-in-out infinite; }
+              .cst-pulse   { animation: cstPulse 1.5s ease-in-out infinite; }
+              .cst-pulse-slow { animation: cstPulse 2.5s ease-in-out infinite; }
+              @keyframes cstTwinkle { 0%,100%{opacity:1} 50%{opacity:0.45} }
+              @keyframes cstPulse   { 0%,100%{opacity:1} 50%{opacity:0.15} }
+            </style>
           </defs>
         </svg>
         <!-- Rich tooltip overlay -->
-        <div id="node-tooltip" class="hidden absolute pointer-events-none z-20 glass-elevated !rounded-lg !p-3 min-w-[180px] text-xs" style="backdrop-filter:blur(20px)">
+        <div id="node-tooltip" class="hidden absolute pointer-events-none z-20 !rounded-lg min-w-[190px] text-xs"
+             style="backdrop-filter:blur(24px);background:rgba(10,12,28,0.88);border:1px solid rgba(255,255,255,0.08);padding:12px">
           <div class="flex items-center gap-2 mb-2">
             <span id="tt-dot" class="w-2 h-2 rounded-full shrink-0"></span>
             <span id="tt-name" class="text-[--ng-text-primary] font-semibold text-sm truncate"></span>
@@ -638,43 +649,28 @@
     const svg = document.getElementById('node-map');
     const wrap = document.getElementById('node-map-wrap');
     if (!svg || !wrap || hosts.length === 0) return;
-
-    // Skip if container is hidden/collapsed (clientWidth = 0)
     if (wrap.clientWidth < 100) return;
 
-    // Clear previous render — keep only <defs>
     Array.from(svg.children).forEach(ch => {
       if (ch.tagName.toLowerCase() !== 'defs') ch.remove();
     });
     nodePositions.clear();
 
-    // Read actual container width for scaling
-    const containerW = wrap.clientWidth - 32; // minus padding
-    const scale = Math.max(0.5, Math.min(1.6, containerW / 1000));
+    const W = wrap.clientWidth - 32;
+    const PAD = 30;
 
-    // Scale all dimensions proportionally
-    const W = containerW;
-    const padX = Math.round(30 * scale);
-    const padY = Math.round(28 * scale);
-    const parentR = Math.round(18 * scale);
-    const childR = Math.round(11 * scale);
-    const grandR = Math.round(9 * scale);
-    const sR = Math.round(9 * scale);
-    const parentFont = Math.round(11 * scale);
-    const childFont = Math.round(9 * scale);
-    const grandFont = Math.round(8 * scale);
-    const standaloneFont = Math.round(9 * scale);
-    const tierGap = Math.round(110 * scale);
-    const rowHeight = Math.round(44 * scale);
-
-    function getNodeColor(h) {
-      if (h.maintenance) return { fill: '#FBBF24', opacity: 0.6 };
-      if (h.online === true)  return { fill: '#34D399', opacity: 0.7 };
-      if (h.online === false) return { fill: '#FB7185', opacity: 0.85 };
-      return { fill: '#475569', opacity: 0.3 };
+    // Seeded random for consistent star placement across renders
+    function makeRng(seed) {
+      let s = Math.abs(seed) || 1;
+      return () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    }
+    function nameHash(n) {
+      let h = 5381;
+      for (let i = 0; i < n.length; i++) h = ((h << 5) + h + n.charCodeAt(i)) & 0x7fffffff;
+      return h;
     }
 
-    // Build tree
+    // ── Build tree ────────────────────────────────────────────────────────
     const byId = new Map(hosts.map(h => [h.id, h]));
     const childrenOf = new Map();
     const roots = [];
@@ -687,138 +683,185 @@
       }
     });
 
-    const infraRoots = roots.filter(r => childrenOf.has(r.id));
-    const standaloneRoots = roots.filter(r => !childrenOf.has(r.id));
+    const clusters = roots.filter(r => childrenOf.has(r.id))
+      .sort((a, b) => (childrenOf.get(b.id)||[]).length - (childrenOf.get(a.id)||[]).length);
+    const standalone = roots.filter(r => !childrenOf.has(r.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
-    let html = '';
-    const availW = W - padX * 2;
+    // ── Star visual properties ────────────────────────────────────────────
+    function starColor(h) {
+      if (h.online === false) return { fill: '#FF4060', glow: '#FF2050' };
+      if (h.maintenance)      return { fill: '#FBBF24', glow: '#F59E0B' };
+      if (h.online === null)  return { fill: '#475569', glow: '#334155' };
+      const l = h.latency;
+      if (l !== null && l > 100) return { fill: '#FFCFA0', glow: '#FF9F43' };
+      if (l !== null && l > 40)  return { fill: '#FFF0D0', glow: '#EAB308' };
+      return { fill: '#D4E0FF', glow: '#6C8EFF' };
+    }
+    function starRadius(h, role) {
+      if (role === 'root') return 7 + Math.min(4, (childrenOf.get(h.id)||[]).length * 0.5);
+      if (role === 'child') return 4.5;
+      if (role === 'grandchild') return 3;
+      return 3.5;
+    }
+    function starBrightness(h) {
+      if (h.online === false) return 0.95;
+      if (h.uptimePct !== null) return 0.3 + (h.uptimePct / 100) * 0.65;
+      return 0.5;
+    }
 
-    // ── Infrastructure trees (centered, generous spacing) ──
-    // Calculate infra leaf count separately from standalone
-    let infraLeaves = 0;
-    infraRoots.forEach(r => {
-      const kids = childrenOf.get(r.id) || [];
-      kids.forEach(k => { infraLeaves += Math.max(1, (childrenOf.get(k.id) || []).length); });
-      if (kids.length === 0) infraLeaves++;
-      else infraLeaves = Math.max(infraLeaves, kids.length);
-    });
-    infraRoots.forEach(r => { infraLeaves = Math.max(infraLeaves, (childrenOf.get(r.id) || []).length); });
+    // ── Render helpers ────────────────────────────────────────────────────
+    let linesHtml = '';
+    let starsHtml = '';
 
-    const infraSpacing = infraLeaves > 0 ? Math.min(Math.round(80 * scale), availW / Math.max(1, infraLeaves)) : Math.round(80 * scale);
-    const groupGap = Math.round(60 * scale);
+    function addStar(x, y, h, role) {
+      const r = starRadius(h, role);
+      const c = starColor(h);
+      const b = starBrightness(h);
+      const delay = (nameHash(h.name) % 7000) / 1000;
+      const dur = 3 + (nameHash(h.name) % 4000) / 1000;
+      const anim = h.online === false ? 'cst-pulse' : h.maintenance ? 'cst-pulse-slow' : 'cst-twinkle';
 
-    const parentY = padY + Math.round(30 * scale);
-    const childY = parentY + tierGap;
-    let maxInfraY = childY;
+      // Animated group: outer glow + star body + core
+      starsHtml += `<g class="${anim}" style="--dur:${dur}s;animation-delay:${delay}s;animation-duration:${dur}s">`;
+      starsHtml += `<circle cx="${x}" cy="${y}" r="${r*4}" fill="${c.glow}" opacity="${b*0.06}"/>`;
+      if (role === 'root') {
+        starsHtml += `<circle cx="${x}" cy="${y}" r="${r*2.5}" fill="${c.glow}" opacity="${b*0.12}" filter="url(#cst-glow)"/>`;
+      } else {
+        starsHtml += `<circle cx="${x}" cy="${y}" r="${r*2}" fill="${c.glow}" opacity="${b*0.1}" filter="url(#cst-blur)"/>`;
+      }
+      starsHtml += `<circle cx="${x}" cy="${y}" r="${r}" fill="${c.fill}" opacity="${b}"/>`;
+      if (r > 3.5) starsHtml += `<circle cx="${x}" cy="${y}" r="${r*0.25}" fill="#fff" opacity="${b*0.7}" style="pointer-events:none"/>`;
+      starsHtml += `</g>`;
 
-    infraRoots.sort((a, b) => (childrenOf.get(b.id) || []).length - (childrenOf.get(a.id) || []).length);
+      // Hit area + label (outside animated group)
+      starsHtml += `<circle cx="${x}" cy="${y}" r="${Math.max(r+10,14)}" fill="transparent" class="node-hit cursor-pointer" data-host-id="${h.id}"/>`;
+      const maxL = role === 'root' ? 16 : role === 'child' ? 12 : 10;
+      const lbl = h.name.length > maxL ? h.name.slice(0, maxL-1) + '..' : h.name;
+      const fs = role === 'root' ? 10 : role === 'child' ? 8 : 7.5;
+      const lo = role === 'root' ? 0.7 : role === 'child' ? 0.4 : 0.3;
+      starsHtml += `<text x="${x}" y="${y + r + 13}" text-anchor="middle" fill="var(--ng-text-secondary)" font-family="'JetBrains Mono',monospace" font-size="${fs}" opacity="${lo}" style="pointer-events:none">${lbl}</text>`;
 
-    // First pass: calculate total infra width for centering
-    let totalInfraW = 0;
-    infraRoots.forEach((r, i) => {
-      const kids = childrenOf.get(r.id) || [];
-      totalInfraW += Math.max(1, kids.length) * infraSpacing;
-      if (i < infraRoots.length - 1) totalInfraW += groupGap;
-    });
-    let curX = Math.max(padX, (W - totalInfraW) / 2);
+      nodePositions.set(h.id, {x, y});
+    }
 
-    infraRoots.forEach(parent => {
-      const kids = (childrenOf.get(parent.id) || []).sort((a, b) => a.name.localeCompare(b.name));
-      const groupW = Math.max(1, kids.length) * infraSpacing;
-      const px = curX + groupW / 2;
-      const py = parentY;
-      const c = getNodeColor(parent);
-      nodePositions.set(parent.id, {x: px, y: py});
+    function addLine(x1, y1, x2, y2, color, op) {
+      linesHtml += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="0.5" opacity="${op||0.1}" stroke-dasharray="4,6"/>`;
+    }
 
-      html += `<circle cx="${px}" cy="${py}" r="${parentR * 2.5}" fill="${c.fill}" opacity="0.05"/>`;
-      const pFilter = parent.online === false ? 'url(#glow-lg)' : 'url(#glow-md)';
-      const pAnim = parent.online === false ? ' class="node-critical"' : '';
-      html += `<circle cx="${px}" cy="${py}" r="${parentR}" fill="${c.fill}" opacity="${c.opacity}" filter="${pFilter}"${pAnim} data-host-id="${parent.id}"/>`;
-      html += `<circle cx="${px - parentR * 0.22}" cy="${py - parentR * 0.22}" r="${parentR * 0.25}" fill="white" opacity="0.18" style="pointer-events:none"/>`;
-      const plbl = parent.name.length > 16 ? parent.name.slice(0, 15) + '..' : parent.name;
-      html += `<text x="${px}" y="${py - parentR - Math.round(6 * scale)}" text-anchor="middle" fill="var(--ng-text-primary)" font-family="'JetBrains Mono', monospace" font-size="${parentFont}" font-weight="600" opacity="0.8" style="pointer-events:none">${plbl}</text>`;
-      html += `<circle cx="${px}" cy="${py}" r="${parentR + 6}" fill="transparent" class="node-hit cursor-pointer" data-host-id="${parent.id}"/>`;
+    // ── Background star dust ──────────────────────────────────────────────
+    let bgHtml = '';
+    const bgRng = makeRng(42);
 
-      kids.forEach((kid, i) => {
-        const kx = curX + i * infraSpacing + infraSpacing / 2;
-        const ky = childY;
-        const kc = getNodeColor(kid);
-        nodePositions.set(kid.id, {x: kx, y: ky});
+    // ── Layout: Constellation clusters ────────────────────────────────────
+    let maxY = PAD;
 
-        html += `<line x1="${px}" y1="${py + parentR}" x2="${kx}" y2="${ky - childR}" stroke="${kc.fill}" stroke-width="${Math.max(1, 1.5 * scale)}" opacity="0.2"/>`;
-        html += `<circle cx="${kx}" cy="${ky}" r="${childR * 2}" fill="${kc.fill}" opacity="0.04"/>`;
-        const kFilter = kid.online === false ? 'url(#glow-lg)' : (kid.online ? 'url(#glow-sm)' : '');
-        const kAnim = kid.online === false ? ' class="node-critical"' : (kid.maintenance ? ' class="node-warning"' : '');
-        html += `<circle cx="${kx}" cy="${ky}" r="${childR}" fill="${kc.fill}" opacity="${kc.opacity}" ${kFilter ? `filter="${kFilter}"` : ''}${kAnim} data-host-id="${kid.id}"/>`;
-        html += `<circle cx="${kx - childR * 0.22}" cy="${ky - childR * 0.22}" r="${childR * 0.25}" fill="white" opacity="0.15" style="pointer-events:none"/>`;
-        const klbl = kid.name.length > 12 ? kid.name.slice(0, 11) + '..' : kid.name;
-        html += `<text x="${kx}" y="${ky + childR + Math.round(12 * scale)}" text-anchor="middle" fill="var(--ng-text-secondary)" font-family="'JetBrains Mono', monospace" font-size="${childFont}" opacity="0.55" style="pointer-events:none">${klbl}</text>`;
-        html += `<circle cx="${kx}" cy="${ky}" r="${childR + 5}" fill="transparent" class="node-hit cursor-pointer" data-host-id="${kid.id}"/>`;
-
-        const grandkids = childrenOf.get(kid.id);
-        if (grandkids) {
-          grandkids.sort((a, b) => a.name.localeCompare(b.name));
-          const gSpacing = Math.min(infraSpacing, groupW / Math.max(1, grandkids.length));
-          const gy = childY + Math.round(90 * scale);
-          if (gy + grandR + Math.round(20 * scale) > maxInfraY) maxInfraY = gy + grandR + Math.round(20 * scale);
-          grandkids.forEach((gk, gi) => {
-            const gx = kx - (grandkids.length - 1) * gSpacing / 2 + gi * gSpacing;
-            const gc = getNodeColor(gk);
-            nodePositions.set(gk.id, {x: gx, y: gy});
-            html += `<line x1="${kx}" y1="${ky + childR}" x2="${gx}" y2="${gy - grandR}" stroke="${gc.fill}" stroke-width="${Math.max(0.8, scale)}" opacity="0.12"/>`;
-            html += `<circle cx="${gx}" cy="${gy}" r="${grandR}" fill="${gc.fill}" opacity="${gc.opacity}" data-host-id="${gk.id}"/>`;
-            const glbl = gk.name.length > 11 ? gk.name.slice(0, 10) + '..' : gk.name;
-            html += `<text x="${gx}" y="${gy + grandR + Math.round(9 * scale)}" text-anchor="middle" fill="var(--ng-text-secondary)" font-family="'JetBrains Mono', monospace" font-size="${grandFont}" opacity="0.45" style="pointer-events:none">${glbl}</text>`;
-            html += `<circle cx="${gx}" cy="${gy}" r="${grandR + 5}" fill="transparent" class="node-hit cursor-pointer" data-host-id="${gk.id}"/>`;
-          });
-        }
+    if (clusters.length > 0) {
+      const clusterData = clusters.map(root => {
+        const kids = (childrenOf.get(root.id) || []).sort((a,b) => a.name.localeCompare(b.name));
+        let gkCount = 0;
+        kids.forEach(k => gkCount += (childrenOf.get(k.id)||[]).length);
+        const orbitR = 55 + kids.length * 18;
+        return { root, kids, orbitR, gkCount };
       });
 
-      curX += groupW + groupGap;
-    });
-
-    if (infraRoots.length > 0) maxInfraY = Math.max(maxInfraY, childY + childR + Math.round(20 * scale));
-
-    // ── Standalone hosts — wrapped grid (max ~10 cols) ──
-    const standaloneStartY = (infraRoots.length > 0 ? maxInfraY + Math.round(30 * scale) : padY + Math.round(30 * scale));
-    let H = standaloneStartY + 40;
-    if (standaloneRoots.length > 0) {
-      standaloneRoots.sort((a, b) => a.name.localeCompare(b.name));
-      const maxCols = Math.min(10, standaloneRoots.length);
-      const sCols = Math.min(maxCols, Math.max(1, Math.floor(availW / Math.round(100 * scale))));
-      const sSpacing = availW / sCols;
-
-      if (infraRoots.length > 0) {
-        html += `<line x1="${padX}" y1="${standaloneStartY - Math.round(14 * scale)}" x2="${W - padX}" y2="${standaloneStartY - Math.round(14 * scale)}" stroke="var(--ng-text-muted)" stroke-width="0.5" opacity="0.15"/>`;
-        html += `<text x="${W / 2}" y="${standaloneStartY - Math.round(20 * scale)}" text-anchor="middle" fill="var(--ng-text-muted)" font-family="'JetBrains Mono', monospace" font-size="${Math.round(10 * scale)}" opacity="0.4" style="pointer-events:none">Standalone</text>`;
+      // Scale orbits if they'd exceed canvas width
+      const clusterGap = 80;
+      let totalW = clusterData.reduce((s, c) => s + c.orbitR * 2, 0)
+        + Math.max(0, clusterData.length - 1) * clusterGap;
+      if (totalW > W - PAD * 2) {
+        const sc = (W - PAD * 2) / totalW;
+        clusterData.forEach(c => c.orbitR = Math.max(40, Math.round(c.orbitR * sc)));
+        totalW = clusterData.reduce((s, c) => s + c.orbitR * 2, 0)
+          + Math.max(0, clusterData.length - 1) * clusterGap;
       }
 
-      standaloneRoots.forEach((h, i) => {
-        const col = i % sCols;
-        const row = Math.floor(i / sCols);
-        const hcOffset = (row % 2 === 1) ? sSpacing * 0.5 : 0;
-        const sx = padX + sSpacing * 0.5 + col * sSpacing + hcOffset;
-        const sy = standaloneStartY + row * rowHeight;
-        const sc = getNodeColor(h);
+      const clusterCenterY = PAD + 30 + Math.max(...clusterData.map(c => c.orbitR));
+      let cx = Math.max(PAD, (W - totalW) / 2);
 
-        nodePositions.set(h.id, {x: sx, y: sy});
-        html += `<circle cx="${sx}" cy="${sy}" r="${sR * 1.8}" fill="${sc.fill}" opacity="0.04"/>`;
-        const sFilter = h.online === false ? 'url(#glow-lg)' : (h.online ? 'url(#glow-sm)' : '');
-        const sAnim = h.online === false ? ' class="node-critical"' : (h.maintenance ? ' class="node-warning"' : '');
-        html += `<circle cx="${sx}" cy="${sy}" r="${sR}" fill="${sc.fill}" opacity="${sc.opacity}" ${sFilter ? `filter="${sFilter}"` : ''}${sAnim} data-host-id="${h.id}"/>`;
-        const slbl = h.name.length > 13 ? h.name.slice(0, 12) + '..' : h.name;
-        html += `<text x="${sx}" y="${sy + sR + Math.round(11 * scale)}" text-anchor="middle" fill="var(--ng-text-secondary)" font-family="'JetBrains Mono', monospace" font-size="${standaloneFont}" opacity="0.5" style="pointer-events:none">${slbl}</text>`;
-        html += `<circle cx="${sx}" cy="${sy}" r="${sR + 6}" fill="transparent" class="node-hit cursor-pointer" data-host-id="${h.id}"/>`;
+      clusterData.forEach(cd => {
+        const rootX = cx + cd.orbitR;
+        const rootY = clusterCenterY;
+
+        // Root star
+        addStar(rootX, rootY, cd.root, 'root');
+
+        // Children in orbit
+        cd.kids.forEach((kid, i) => {
+          const angle = (i / cd.kids.length) * Math.PI * 2 - Math.PI / 2;
+          const kx = rootX + Math.cos(angle) * cd.orbitR;
+          const ky = rootY + Math.sin(angle) * cd.orbitR;
+
+          // Constellation line: parent → child
+          addLine(rootX, rootY, kx, ky, starColor(kid).glow, 0.1);
+          addStar(kx, ky, kid, 'child');
+
+          // Grandchildren in smaller orbit
+          const gkids = (childrenOf.get(kid.id) || []).sort((a,b) => a.name.localeCompare(b.name));
+          if (gkids.length > 0) {
+            const gOrbit = 24 + gkids.length * 7;
+            gkids.forEach((gk, gi) => {
+              const ga = (gi / gkids.length) * Math.PI * 2 - Math.PI / 2;
+              const gx = kx + Math.cos(ga) * gOrbit;
+              const gy = ky + Math.sin(ga) * gOrbit;
+              addLine(kx, ky, gx, gy, starColor(gk).glow, 0.06);
+              addStar(gx, gy, gk, 'grandchild');
+              maxY = Math.max(maxY, gy + 22);
+            });
+          }
+          maxY = Math.max(maxY, ky + 22);
+        });
+
+        cx += cd.orbitR * 2 + clusterGap;
+        maxY = Math.max(maxY, rootY + cd.orbitR + 45);
       });
+    }
 
-      const sRows = Math.ceil(standaloneRoots.length / sCols);
-      H = standaloneStartY + sRows * rowHeight + Math.round(30 * scale);
+    // ── Layout: Standalone star field ─────────────────────────────────────
+    if (standalone.length > 0) {
+      const startY = maxY + (clusters.length > 0 ? 50 : 10);
+      const cols = Math.min(12, Math.max(4, Math.floor((W - PAD*2) / 85)));
+      const spacingX = (W - PAD*2) / cols;
+      const rowH = 42;
+
+      standalone.forEach((h, i) => {
+        const rng = makeRng(nameHash(h.name));
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        // Jitter for organic star-field feel
+        const jx = (rng() - 0.5) * spacingX * 0.3;
+        const jy = (rng() - 0.5) * 14;
+        const sx = PAD + spacingX * 0.5 + col * spacingX + jx;
+        const sy = startY + row * rowH + jy;
+        addStar(sx, sy, h, 'standalone');
+        maxY = Math.max(maxY, sy + 22);
+      });
+      maxY += 20;
+    }
+
+    const H = Math.max(200, maxY);
+
+    // Generate background dust after knowing dimensions
+    for (let i = 0; i < 140; i++) {
+      const bx = bgRng() * W;
+      const by = bgRng() * H;
+      const br = 0.2 + bgRng() * 0.8;
+      const bo = 0.03 + bgRng() * 0.12;
+      bgHtml += `<circle cx="${bx}" cy="${by}" r="${br}" fill="#C8D6FF" opacity="${bo}"/>`;
+    }
+    // A few brighter "distant stars"
+    for (let i = 0; i < 15; i++) {
+      const bx = bgRng() * W;
+      const by = bgRng() * H;
+      const br = 0.4 + bgRng() * 0.5;
+      bgHtml += `<circle cx="${bx}" cy="${by}" r="${br}" fill="#E8EEFF" opacity="${0.15 + bgRng() * 0.15}"/>`;
     }
 
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
 
+    // Render order: bg dust → constellation lines → stars (on top)
     const tmp = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    tmp.innerHTML = html;
+    tmp.innerHTML = bgHtml + linesHtml + starsHtml;
     while (tmp.firstChild) svg.appendChild(tmp.firstChild);
   }
 
