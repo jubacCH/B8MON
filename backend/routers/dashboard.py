@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,7 @@ from database import (
     NutInstance, NutSnapshot,
     RedfishServer, RedfishSnapshot,
     SpeedtestConfig, SpeedtestResult,
-    get_db, get_setting, is_setup_complete, decrypt_value,
+    get_db, get_setting, set_setting, is_setup_complete, decrypt_value,
 )
 from models.integration import IntegrationConfig, Snapshot
 from services import integration as int_svc
@@ -32,6 +32,17 @@ from services import snapshot as snap_svc
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
+
+# ── Default dashboard widget layout ──────────────────────────────────────────
+DEFAULT_LAYOUT = [
+    {"id": "integrations", "size": "half"},
+    {"id": "syslog",       "size": "half"},
+    {"id": "gravity",      "size": "full"},
+    {"id": "offline",      "size": "full"},
+    {"id": "hosts",        "size": "full"},
+    {"id": "proxmox",      "size": "full"},
+    {"id": "top10",        "size": "full"},
+]
 
 
 # ── Helper: build integration_health from new generic tables ─────────────────
@@ -602,6 +613,13 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass  # syslog table may not exist yet
 
+    # Dashboard widget layout
+    layout_json = await get_setting(db, "dashboard_layout")
+    try:
+        layout = json.loads(layout_json) if layout_json else DEFAULT_LAYOUT
+    except (json.JSONDecodeError, TypeError):
+        layout = DEFAULT_LAYOUT
+
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "host_stats": host_stats,
@@ -621,5 +639,27 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         "active_incidents": active_incidents,
         "syslog_stats": syslog_stats,
         "topology": topology,
+        "layout": layout,
         "active_page": "dashboard",
     })
+
+
+@router.post("/api/dashboard-layout")
+async def save_dashboard_layout(request: Request, db: AsyncSession = Depends(get_db)):
+    body = await request.json()
+    widgets = body.get("layout")
+    if not isinstance(widgets, list):
+        return JSONResponse({"ok": False, "error": "Invalid layout"}, status_code=400)
+    valid_ids = {w["id"] for w in DEFAULT_LAYOUT}
+    cleaned = []
+    for w in widgets:
+        wid = w.get("id")
+        if wid not in valid_ids:
+            continue
+        size = w.get("size", "full")
+        if size not in ("full", "half"):
+            size = "full"
+        cleaned.append({"id": wid, "size": size})
+    await set_setting(db, "dashboard_layout", json.dumps(cleaned))
+    await db.commit()
+    return JSONResponse({"ok": True})
