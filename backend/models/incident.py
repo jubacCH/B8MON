@@ -27,6 +27,7 @@ class Incident(Base):
     __table_args__ = (
         Index("ix_incident_status", "status"),
         Index("ix_incident_rule_hash", "rule", "host_ids_hash"),
+        Index("ix_incident_updated", "updated_at"),
     )
 
 

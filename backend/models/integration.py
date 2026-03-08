@@ -38,4 +38,5 @@ class Snapshot(Base):
     __table_args__ = (
         Index("ix_snap_type_entity_ts", "entity_type", "entity_id", timestamp.desc()),
         Index("ix_snap_entity_id", "entity_id"),
+        Index("ix_snap_type_ts", "entity_type", "timestamp"),
     )

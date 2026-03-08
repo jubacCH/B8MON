@@ -81,6 +81,8 @@ class SyslogMessage(Base):
         Index("ix_syslog_host_ts", "host_id", timestamp.desc()),
         Index("ix_syslog_severity_ts", "severity", timestamp.desc()),
         Index("ix_syslog_source_ip", "source_ip"),
+        Index("ix_syslog_app_name", "app_name"),
+        Index("ix_syslog_hostname", "hostname"),
         Index("ix_syslog_fts", "search_vector", postgresql_using="gin"),
     )
 

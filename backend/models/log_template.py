@@ -20,9 +20,13 @@ class LogTemplate(Base):
     count = Column(Integer, default=1)               # Total occurrences
     first_seen = Column(DateTime, default=datetime.utcnow)
     last_seen = Column(DateTime, default=datetime.utcnow)
-    noise_score = Column(SmallInteger, default=50)   # 0=very interesting, 100=total noise
+    noise_score = Column(SmallInteger, default=50, index=True)  # 0=very interesting, 100=total noise
     tags = Column(String(256), default="")           # comma-separated auto-tags
     avg_rate_per_hour = Column(Float, default=0.0)   # learned average rate
+
+    __table_args__ = (
+        Index("ix_log_tpl_first_seen", "first_seen"),
+    )
 
 
 class HostBaseline(Base):
