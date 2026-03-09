@@ -25,21 +25,19 @@ VALID_WIDGET_IDS = {
     "uptime", "clock", "quickstats",
 }
 DEFAULT_LAYOUT = [
-    # Row 0 – Gravity Well hero (full width, big impact)
-    {"id": "gravity",       "x": 0, "y": 0,  "w": 12, "h": 12},
-    # Row 1 – Key status (6+6)
-    {"id": "integrations",  "x": 0, "y": 12, "w": 6,  "h": 5},
-    {"id": "syslog",        "x": 6, "y": 12, "w": 6,  "h": 5},
-    # Row 2 – Offline + Alerts (6+6)
-    {"id": "offline",       "x": 0, "y": 17, "w": 6,  "h": 5},
-    {"id": "alerts",        "x": 6, "y": 17, "w": 6,  "h": 5},
-    # Row 3 – All hosts grid (full width)
-    {"id": "hosts",         "x": 0, "y": 22, "w": 12, "h": 8},
-    # Row 4 – Analytics (6+6)
-    {"id": "heatmap",       "x": 0, "y": 30, "w": 6,  "h": 7},
-    {"id": "uptime",        "x": 6, "y": 30, "w": 6,  "h": 7},
-    # Row 5 – Top 10 resource tables (full width)
-    {"id": "top10",         "x": 0, "y": 37, "w": 12, "h": 10},
+    # Row 0 – Gravity Well + sidebar (6+6)
+    {"id": "gravity",       "x": 0, "y": 0,  "w": 6,  "h": 12},
+    {"id": "integrations",  "x": 6, "y": 0,  "w": 6,  "h": 5},
+    {"id": "syslog",        "x": 6, "y": 5,  "w": 6,  "h": 5},
+    {"id": "alerts",        "x": 6, "y": 10, "w": 6,  "h": 5},
+    # Row 1 – Offline + Hosts (6+6 / 12)
+    {"id": "offline",       "x": 0, "y": 15, "w": 6,  "h": 5},
+    {"id": "hosts",         "x": 6, "y": 15, "w": 6,  "h": 8},
+    # Row 2 – Analytics (6+6)
+    {"id": "heatmap",       "x": 0, "y": 23, "w": 6,  "h": 7},
+    {"id": "uptime",        "x": 6, "y": 23, "w": 6,  "h": 7},
+    # Row 3 – Top 10 resource tables (full width)
+    {"id": "top10",         "x": 0, "y": 30, "w": 12, "h": 10},
 ]
 
 
