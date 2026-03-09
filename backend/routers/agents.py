@@ -315,9 +315,14 @@ async def agents_list(request: Request):
                 "online": online,
             })
 
+        agent_server_url = await get_setting(db, "agent_server_url", "")
+        enrollment_key = await get_setting(db, "agent_enrollment_key", "")
+
     return templates.TemplateResponse("agents.html", {
         "request": request,
         "agents": agent_data,
+        "agent_server_url": agent_server_url,
+        "enrollment_key": enrollment_key,
         "active_page": "agents",
     })
 
@@ -452,13 +457,31 @@ async def agent_save_settings(request: Request, agent_id: int):
     return RedirectResponse(f"/agents/{agent_id}", status_code=302)
 
 
+# ── Agent global settings ────────────────────────────────────────────────────
+
+@router.post("/agents/settings")
+async def agent_global_settings(request: Request):
+    """Save global agent settings (server URL, enrollment key)."""
+    form = await request.form()
+    url = form.get("agent_server_url", "").strip().rstrip("/")
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, "agent_server_url", url)
+        await db.commit()
+    return RedirectResponse("/agents", status_code=302)
+
+
 # ── Install scripts (universal one-liner endpoints) ──────────────────────────
 
 @router.get("/install/linux")
 async def install_linux(request: Request):
     """Universal Linux installer. Usage: curl -sSL <url>/install/linux | sudo bash"""
-    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-    server_url = f"{scheme}://{request.url.netloc}"
+    async with AsyncSessionLocal() as db:
+        custom_url = await get_setting(db, "agent_server_url", "")
+    if custom_url:
+        server_url = custom_url
+    else:
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        server_url = f"{scheme}://{request.url.netloc}"
     enrollment_key = await _get_enrollment_key()
 
     script = f'''#!/bin/bash
@@ -577,8 +600,13 @@ echo ""
 @router.get("/install/windows")
 async def install_windows(request: Request):
     """Universal Windows installer. Usage: irm <url>/install/windows | iex"""
-    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-    server_url = f"{scheme}://{request.url.netloc}"
+    async with AsyncSessionLocal() as db:
+        custom_url = await get_setting(db, "agent_server_url", "")
+    if custom_url:
+        server_url = custom_url
+    else:
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        server_url = f"{scheme}://{request.url.netloc}"
     enrollment_key = await _get_enrollment_key()
 
     script = f'''# ── Nodeglow Agent Installer for Windows ─────────────────────────────────────

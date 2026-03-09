@@ -19,6 +19,35 @@
     </div>
 </div>
 
+<!-- Agent Settings -->
+<div class="glass-card p-4 mb-6">
+    <div class="flex items-center gap-2 mb-3">
+        <svg class="w-4 h-4 text-[--ng-text-muted]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        <span class="text-sm font-medium text-[--ng-text-primary]">Agent Settings</span>
+    </div>
+    <form method="post" action="/agents/settings" class="flex flex-col sm:flex-row gap-3 items-end">
+        <div class="flex-1">
+            <label class="block text-[10px] font-mono text-[--ng-text-muted] mb-1">Agent Server URL</label>
+            <input type="text" name="agent_server_url" value="{{ agent_server_url or '' }}"
+                   placeholder="e.g. http://10.0.0.100:8000 (empty = auto-detect from request)"
+                   class="ng-input w-full text-xs font-mono" />
+            <p class="text-[9px] text-[--ng-text-muted] mt-1">Internal URL that agents use to report. Set this to bypass Cloudflare or reverse proxies.</p>
+        </div>
+        <div class="shrink-0">
+            <label class="block text-[10px] font-mono text-[--ng-text-muted] mb-1">Enrollment Key</label>
+            <div class="flex items-center gap-1.5">
+                <code class="ng-input text-xs font-mono text-[--ng-text-secondary] bg-white/[0.02] cursor-default max-w-[180px] truncate" title="{{ enrollment_key }}">{{ enrollment_key or 'not set' }}</code>
+                <button type="button" onclick="navigator.clipboard.writeText('{{ enrollment_key }}').then(()=>showToast('Key copied!','success'))"
+                        class="ng-btn ng-btn-ghost !px-2 !py-1.5 !text-[10px]">Copy</button>
+            </div>
+        </div>
+        <button type="submit" class="ng-btn ng-btn-primary !text-xs shrink-0">Save</button>
+    </form>
+</div>
+
 {% if not agents %}
 <div class="text-center py-16 text-[--ng-text-secondary]">
     <svg class="w-12 h-12 mx-auto mb-4 text-[--ng-text-muted]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -33,7 +62,7 @@
                 <span class="text-xs text-[--ng-text-primary] font-medium">Linux</span>
             </div>
             <div class="relative group">
-                <code id="empty-linux-cmd" class="block bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 pr-16 text-[11px] font-mono text-ng-success overflow-x-auto whitespace-nowrap">curl -sSL {{ request.url.scheme }}://{{ request.url.netloc }}/install/linux | sudo bash</code>
+                <code id="empty-linux-cmd" class="block bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 pr-16 text-[11px] font-mono text-ng-success overflow-x-auto whitespace-nowrap">curl -sSL {{ agent_server_url or (request.url.scheme ~ '://' ~ request.url.netloc) }}/install/linux | sudo bash</code>
                 <button onclick="navigator.clipboard.writeText(document.getElementById('empty-linux-cmd').textContent.trim()).then(()=>showToast('Copied!','success'))"
                         class="absolute right-2 top-1/2 -translate-y-1/2 ng-btn ng-btn-ghost !px-2 !py-1 !text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">Copy</button>
             </div>
@@ -45,7 +74,7 @@
                 <span class="text-[9px] text-[--ng-text-muted] font-mono">PowerShell as Admin</span>
             </div>
             <div class="relative group">
-                <code id="empty-win-cmd" class="block bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 pr-16 text-[11px] font-mono text-[#58a6ff] overflow-x-auto whitespace-nowrap">irm {{ request.url.scheme }}://{{ request.url.netloc }}/install/windows | iex</code>
+                <code id="empty-win-cmd" class="block bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 pr-16 text-[11px] font-mono text-[#58a6ff] overflow-x-auto whitespace-nowrap">irm {{ agent_server_url or (request.url.scheme ~ '://' ~ request.url.netloc) }}/install/windows | iex</code>
                 <button onclick="navigator.clipboard.writeText(document.getElementById('empty-win-cmd').textContent.trim()).then(()=>showToast('Copied!','success'))"
                         class="absolute right-2 top-1/2 -translate-y-1/2 ng-btn ng-btn-ghost !px-2 !py-1 !text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">Copy</button>
             </div>
@@ -109,7 +138,7 @@
                     <span class="text-[9px] text-[--ng-text-muted] font-mono">requires: curl, python3, root</span>
                 </div>
                 <div class="relative group">
-                    <code id="modal-linux-cmd" class="block bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 pr-16 text-[11px] font-mono text-ng-success overflow-x-auto whitespace-nowrap">curl -sSL {{ request.url.scheme }}://{{ request.url.netloc }}/install/linux | sudo bash</code>
+                    <code id="modal-linux-cmd" class="block bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 pr-16 text-[11px] font-mono text-ng-success overflow-x-auto whitespace-nowrap">curl -sSL {{ agent_server_url or (request.url.scheme ~ '://' ~ request.url.netloc) }}/install/linux | sudo bash</code>
                     <button onclick="navigator.clipboard.writeText(document.getElementById('modal-linux-cmd').textContent.trim()).then(()=>showToast('Copied!','success'))"
                             class="absolute right-2 top-1/2 -translate-y-1/2 ng-btn ng-btn-ghost !px-2 !py-1 !text-[10px]">Copy</button>
                 </div>
@@ -121,7 +150,7 @@
                     <span class="text-[9px] text-[--ng-text-muted] font-mono">run PowerShell as Administrator</span>
                 </div>
                 <div class="relative group">
-                    <code id="modal-win-cmd" class="block bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 pr-16 text-[11px] font-mono text-[#58a6ff] overflow-x-auto whitespace-nowrap">irm {{ request.url.scheme }}://{{ request.url.netloc }}/install/windows | iex</code>
+                    <code id="modal-win-cmd" class="block bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 pr-16 text-[11px] font-mono text-[#58a6ff] overflow-x-auto whitespace-nowrap">irm {{ agent_server_url or (request.url.scheme ~ '://' ~ request.url.netloc) }}/install/windows | iex</code>
                     <button onclick="navigator.clipboard.writeText(document.getElementById('modal-win-cmd').textContent.trim()).then(()=>showToast('Copied!','success'))"
                             class="absolute right-2 top-1/2 -translate-y-1/2 ng-btn ng-btn-ghost !px-2 !py-1 !text-[10px]">Copy</button>
                 </div>
