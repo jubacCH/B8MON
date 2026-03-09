@@ -355,6 +355,48 @@
       </div>
     </div>
 
+    <!-- Background -->
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+      <div class="px-5 py-4 border-b border-white/[0.08]">
+        <h2 class="ng-heading text-sm text-[--ng-text-primary]">Background</h2>
+        <p class="text-xs text-slate-600 mt-0.5">Choose the page background theme</p>
+      </div>
+      <div class="px-5 py-4">
+        <div class="grid grid-cols-5 gap-3" id="bg-picker">
+          {% for name, grad in [
+            ('Midnight',   'linear-gradient(160deg, #0B1120 0%, #111827 40%, #0F172A 100%)'),
+            ('Deep Space',  'linear-gradient(160deg, #030712 0%, #0a0f1a 40%, #060a14 100%)'),
+            ('Charcoal',   'linear-gradient(160deg, #18181b 0%, #1c1c22 40%, #111114 100%)'),
+            ('Navy',       'linear-gradient(160deg, #0c1445 0%, #0f1b4d 40%, #091236 100%)'),
+            ('Forest',     'linear-gradient(160deg, #052e16 0%, #064e3b 40%, #022c22 100%)'),
+            ('Wine',       'linear-gradient(160deg, #1a0505 0%, #2d0a0a 40%, #1c0606 100%)'),
+            ('Plum',       'linear-gradient(160deg, #1a0a2e 0%, #1e1145 40%, #140830 100%)'),
+            ('Storm',      'linear-gradient(160deg, #1e293b 0%, #1e3a5f 40%, #172033 100%)'),
+            ('Onyx',       '#09090b'),
+            ('Slate',      'linear-gradient(160deg, #0f172a 0%, #1e293b 40%, #0f172a 100%)'),
+          ] %}
+          <button type="button" onclick="setBackground('{{ grad|e }}')"
+                  class="bg-swatch group flex flex-col items-center gap-1.5" data-bg="{{ grad|e }}">
+            <div class="w-full h-12 rounded-lg border-2 border-transparent group-hover:border-white/30 transition-all"
+                 style="background: {{ grad }}; --swatch-bg-border: transparent; border-color: var(--swatch-bg-border)">
+            </div>
+            <span class="text-[10px] font-mono text-[--ng-text-muted]">{{ name }}</span>
+          </button>
+          {% endfor %}
+        </div>
+        <div class="mt-4 flex items-center gap-3">
+          <label class="text-xs text-[--ng-text-muted] font-mono">Custom:</label>
+          <input type="color" id="custom-bg" value="#0B1120"
+                 onchange="setBackground(this.value)"
+                 class="w-8 h-8 rounded-lg border border-white/[0.08] bg-transparent cursor-pointer">
+          <button type="button" onclick="setBackground('default')"
+                  class="text-xs text-[--ng-text-muted] hover:text-[--ng-text-secondary] transition-colors font-mono">
+            Reset to default
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Layout -->
     <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
       <div class="px-5 py-4 border-b border-white/[0.08]">
@@ -775,6 +817,35 @@ window.setAccentColor = function(hex) {
   if (saved) window.setAccentColor(saved);
 })();
 
+// ── Background Picker ────────────────────────────────────────────────
+const DEFAULT_BG = 'linear-gradient(160deg, #0B1120 0%, #111827 40%, #0F172A 100%)';
+window.setBackground = function(value) {
+  if (value === 'default') {
+    localStorage.removeItem('ng-background');
+    document.body.style.background = DEFAULT_BG;
+  } else {
+    localStorage.setItem('ng-background', value);
+    document.body.style.background = value;
+  }
+  // Highlight active swatch
+  const current = localStorage.getItem('ng-background') || DEFAULT_BG;
+  document.querySelectorAll('.bg-swatch').forEach(s => {
+    const div = s.querySelector('div');
+    if (div) div.style.setProperty('--swatch-bg-border', s.dataset.bg === current ? 'rgba(255,255,255,0.5)' : 'transparent');
+  });
+};
+(function() {
+  const saved = localStorage.getItem('ng-background');
+  if (saved) window.setBackground(saved);
+  else {
+    // Highlight default swatch
+    document.querySelectorAll('.bg-swatch').forEach(s => {
+      const div = s.querySelector('div');
+      if (div) div.style.setProperty('--swatch-bg-border', s.dataset.bg === DEFAULT_BG ? 'rgba(255,255,255,0.5)' : 'transparent');
+    });
+  }
+})();
+
 // ── Appearance Options ───────────────────────────────────────────────
 const APPEARANCE_DEFAULTS = {
   'sidebar-position': 'left',
@@ -871,6 +942,7 @@ window.resetAllAppearance = function() {
   });
   localStorage.removeItem('ng-accent-color');
   window.setAccentColor('#38BDF8');
+  window.setBackground('default');
   highlightAppearanceOptions();
 };
 
