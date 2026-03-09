@@ -457,7 +457,8 @@ async def agent_save_settings(request: Request, agent_id: int):
 @router.get("/install/linux")
 async def install_linux(request: Request):
     """Universal Linux installer. Usage: curl -sSL <url>/install/linux | sudo bash"""
-    server_url = f"{request.url.scheme}://{request.url.netloc}"
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    server_url = f"{scheme}://{request.url.netloc}"
     enrollment_key = await _get_enrollment_key()
 
     script = f'''#!/bin/bash
@@ -576,7 +577,8 @@ echo ""
 @router.get("/install/windows")
 async def install_windows(request: Request):
     """Universal Windows installer. Usage: irm <url>/install/windows | iex"""
-    server_url = f"{request.url.scheme}://{request.url.netloc}"
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    server_url = f"{scheme}://{request.url.netloc}"
     enrollment_key = await _get_enrollment_key()
 
     script = f'''# ── Nodeglow Agent Installer for Windows ─────────────────────────────────────
