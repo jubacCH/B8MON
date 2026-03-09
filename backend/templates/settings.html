@@ -726,6 +726,20 @@
         <span id="test-result" class="text-sm"></span>
       </div>
     </form>
+
+    <!-- Notification History -->
+    <div class="mt-6 bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+      <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">
+        <div>
+          <h3 class="ng-heading text-sm text-[--ng-text-primary]">Notification History</h3>
+          <p class="text-xs text-slate-600 mt-0.5">Last 50 notifications sent</p>
+        </div>
+        <button onclick="loadNotificationHistory()" class="px-3 py-1.5 text-xs ng-btn ng-btn-ghost">Refresh</button>
+      </div>
+      <div id="notif-history" class="max-h-80 overflow-y-auto">
+        <p class="text-center text-slate-600 text-sm py-6">Loading...</p>
+      </div>
+    </div>
   </div>
 
   <!-- ── API Keys Tab ──────────────────────────────────────────────────── -->
@@ -990,6 +1004,39 @@ window.resetAllAppearance = function() {
   highlightAppearanceOptions();
 })();
 
+window.loadNotificationHistory = async function() {
+  const container = document.getElementById('notif-history');
+  try {
+    const resp = await fetch('/settings/notifications/history');
+    const logs = await resp.json();
+    if (!logs.length) {
+      container.innerHTML = '<p class="text-center text-slate-600 text-sm py-6">No notifications sent yet.</p>';
+      return;
+    }
+    const channelIcons = {telegram:'T',discord:'D',webhook:'W',email:'E'};
+    const channelColors = {telegram:'bg-sky-500/15 text-sky-400',discord:'bg-indigo-500/15 text-indigo-400',webhook:'bg-orange-500/15 text-orange-400',email:'bg-emerald-500/15 text-emerald-400'};
+    const sevColors = {critical:'text-red-400',warning:'text-yellow-400',info:'text-blue-400'};
+    container.innerHTML = '<table class="w-full text-xs"><thead><tr class="border-b border-white/[0.06] text-[--ng-text-muted] text-[10px] uppercase">'
+      + '<th class="px-4 py-2 text-left font-medium">Time</th>'
+      + '<th class="px-4 py-2 text-left font-medium">Channel</th>'
+      + '<th class="px-4 py-2 text-left font-medium">Title</th>'
+      + '<th class="px-4 py-2 text-left font-medium">Status</th>'
+      + '</tr></thead><tbody>'
+      + logs.map(n => {
+        const t = n.timestamp ? new Date(n.timestamp).toLocaleString() : '—';
+        const ch = `<span class="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold ${channelColors[n.channel]||'bg-white/10 text-white'}">${channelIcons[n.channel]||'?'}</span>`;
+        const sev = `<span class="${sevColors[n.severity]||'text-slate-400'}">●</span>`;
+        const st = n.status === 'sent'
+          ? '<span class="text-emerald-400 text-[10px]">sent</span>'
+          : `<span class="text-red-400 text-[10px]" title="${(n.error||'').replace(/"/g,'&quot;')}">failed</span>`;
+        return `<tr class="border-b border-white/[0.03] hover:bg-white/[0.02]"><td class="px-4 py-2 text-[--ng-text-muted] font-mono whitespace-nowrap">${t}</td><td class="px-4 py-2">${ch} <span class="capitalize">${n.channel}</span></td><td class="px-4 py-2 text-[--ng-text-secondary] truncate max-w-[200px]">${sev} ${n.title}</td><td class="px-4 py-2">${st}</td></tr>`;
+      }).join('')
+      + '</tbody></table>';
+  } catch(e) {
+    container.innerHTML = '<p class="text-center text-red-400 text-sm py-4">Failed to load history</p>';
+  }
+}
+
 window.testNotification = async function(channel) {
   const result = document.getElementById('test-result');
   result.textContent = 'Sending…';
@@ -1113,6 +1160,7 @@ const _origSwitch = window.switchTab;
 window.switchTab = function(id) {
   _origSwitch(id);
   if (id === 'api') loadApiKeys();
+  if (id === 'notifications') loadNotificationHistory();
 };
 </script>
 {% endblock %}

@@ -313,7 +313,10 @@ async def save_notifications(
 
 @router.post("/notifications/test")
 async def test_notification(channel: str = Form(""), db: AsyncSession = Depends(get_db)):
-    from notifications import _send_telegram, _send_discord, _send_webhook, _send_email
+    from notifications import (
+        _send_telegram, _send_discord, _send_webhook, _send_email,
+        _build_html_email, _log_notification,
+    )
     from database import decrypt_value, get_setting
     try:
         if channel == "telegram":
@@ -334,11 +337,41 @@ async def test_notification(channel: str = Form(""), db: AsyncSession = Depends(
             pw    = decrypt_value(await get_setting(db, "smtp_password", ""))
             frm   = await get_setting(db, "smtp_from", "") or user
             to    = await get_setting(db, "smtp_to", "")
-            await _send_email(host, port, user, pw, frm, to, "Nodeglow Test", "Notifications are working ✓")
+            html  = _build_html_email("Nodeglow Test", "Notifications are working ✓", "info")
+            await _send_email(host, port, user, pw, frm, to,
+                              "[Nodeglow] Test", "Nodeglow Test\nNotifications are working ✓", html)
+        await _log_notification(channel, "Test Notification", "Manual test", "info", "sent")
         return JSONResponse({"ok": True, "message": "Test notification sent"})
     except Exception as e:
         log.error("Test notification failed: %s", e)
+        await _log_notification(channel, "Test Notification", "Manual test", "info", "failed", str(e))
         return JSONResponse({"ok": False, "message": "Notification failed. Check server logs."}, status_code=500)
+
+
+# ── Notification History ─────────────────────────────────────────────────────
+
+@router.get("/notifications/history")
+async def notification_history(db: AsyncSession = Depends(get_db)):
+    """Return last 50 notification log entries."""
+    from models.notification import NotificationLog
+    result = await db.execute(
+        select(NotificationLog)
+        .order_by(NotificationLog.timestamp.desc())
+        .limit(50)
+    )
+    logs = result.scalars().all()
+    return JSONResponse([
+        {
+            "id": n.id,
+            "timestamp": n.timestamp.isoformat() if n.timestamp else None,
+            "channel": n.channel,
+            "title": n.title,
+            "severity": n.severity,
+            "status": n.status,
+            "error": n.error,
+        }
+        for n in logs
+    ])
 
 
 # ── API Keys (web UI management) ────────────────────────────────────────────

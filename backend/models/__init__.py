@@ -32,6 +32,7 @@ from models.scanner import SubnetScanSchedule, SubnetScanLog
 from models.credential import Credential
 from models.snmp import SnmpMib, SnmpOid, SnmpHostConfig, SnmpResult
 from models.api_key import ApiKey
+from models.notification import NotificationLog
 
 
 async def init_db():
@@ -81,5 +82,6 @@ __all__ = [
     "Credential",
     "SnmpMib", "SnmpOid", "SnmpHostConfig", "SnmpResult",
     "ApiKey",
+    "NotificationLog",
     "init_db",
 ]

@@ -43,6 +43,17 @@
   };
 })();
 
+// ── Appearance Initialization ─────────────────────────────────────────────
+(function() {
+  // Sidebar position (left/right)
+  var pos = localStorage.getItem('ng-sidebar-position');
+  if (pos === 'right') {
+    var w = document.querySelector('.flex.h-screen');
+    var s = document.getElementById('sidebar');
+    if (w && s) { w.style.flexDirection='row-reverse'; s.style.borderRight='none'; s.style.borderLeft='1px solid var(--ng-glass-border)'; }
+  }
+})();
+
 // ── Sidebar & Integrations Toggle ─────────────────────────────────────────
 function toggleIntegrations() {
   document.getElementById('integrations-submenu').classList.toggle('hidden');

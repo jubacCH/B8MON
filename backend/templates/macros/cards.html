@@ -2,7 +2,7 @@
   Reusable UI component macros for Nodeglow templates.
 
   Usage:
-    {% from "macros/cards.html" import metric_card, metric_bar, alert_msg, info_row, delete_btn %}
+    {% from "macros/cards.html" import metric_card, metric_bar, alert_msg, info_row, delete_btn, modal, form_field, page_header %}
 #}
 
 {# Centered metric card with optional color thresholds #}
@@ -101,4 +101,86 @@
     {{ label }}
   </button>
 </form>
+{% endmacro %}
+
+{# Modal dialog #}
+{% macro modal(id, title, subtitle="", max_w="max-w-lg") %}
+<div id="{{ id }}" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+     onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="glass-elevated rounded-xl p-6 w-full {{ max_w }}">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="ng-heading text-lg text-[--ng-text-primary]">{{ title }}</h2>
+        {% if subtitle %}
+        <p class="text-xs text-[--ng-text-muted] font-mono mt-0.5">{{ subtitle }}</p>
+        {% endif %}
+      </div>
+      <button onclick="document.getElementById('{{ id }}').classList.add('hidden')"
+              class="p-1.5 rounded-lg text-[--ng-text-muted] hover:text-[--ng-text-primary] hover:bg-white/5 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    {{ caller() }}
+  </div>
+</div>
+{% endmacro %}
+
+{# Form field with label #}
+{% macro form_field(name, label, type="text", value="", required=false, placeholder="", help="", encrypted=false) %}
+<div>
+  <label class="block text-xs text-[--ng-text-muted] font-mono mb-1.5">{{ label }}</label>
+  {% if type == "textarea" %}
+  <textarea name="{{ name }}" {% if required %}required{% endif %}
+            placeholder="{{ placeholder }}"
+            class="ng-input min-h-[80px]">{{ value }}</textarea>
+  {% elif type == "select" %}
+  {{ caller() }}
+  {% elif type == "toggle" %}
+  <label class="inline-flex items-center gap-3 cursor-pointer">
+    <input type="checkbox" name="{{ name }}" value="1" {% if value == "1" or value == true %}checked{% endif %}
+           class="sr-only peer">
+    <div class="relative w-9 h-5 bg-white/10 rounded-full peer-checked:bg-ng-primary/30 transition-colors
+                after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4
+                after:rounded-full after:bg-white/50 after:transition-all peer-checked:after:translate-x-4
+                peer-checked:after:bg-ng-primary"></div>
+  </label>
+  {% else %}
+  <input type="{{ type }}" name="{{ name }}" value="{{ value }}"
+         {% if required %}required{% endif %}
+         {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+         {% if type == "password" and encrypted %}autocomplete="new-password"{% endif %}
+         class="ng-input">
+  {% endif %}
+  {% if help %}
+  <p class="text-[10px] text-[--ng-text-muted] mt-1">{{ help }}</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Page header with back button, title, and optional actions #}
+{% macro page_header(title, back_url="", subtitle="") %}
+<div class="flex items-center justify-between mb-6">
+  <div class="flex items-center gap-3">
+    {% if back_url %}
+    <a href="{{ back_url }}" title="Back" class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/[0.06] transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+    </a>
+    {% endif %}
+    <div>
+      <h1 class="ng-heading text-2xl text-[--ng-text-primary]">{{ title }}</h1>
+      {% if subtitle %}
+      <p class="text-sm text-[--ng-text-muted] mt-0.5">{{ subtitle }}</p>
+      {% endif %}
+    </div>
+  </div>
+  {% if caller is defined %}
+  <div class="flex items-center gap-2">
+    {{ caller() }}
+  </div>
+  {% endif %}
+</div>
 {% endmacro %}
