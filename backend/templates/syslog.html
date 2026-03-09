@@ -457,9 +457,10 @@
   if (!window._pageIntervals) window._pageIntervals = [];
 
   // ── Rate chart ───────────────────────────────────────────────────────
-  const rateData = {{ rate_chart | safe }};
-  const rateCtx = document.getElementById('rateChart');
-  if (rateCtx && rateData.labels && rateData.labels.length > 0) {
+  function _initRateChart() {
+    const rateData = {{ rate_chart | safe }};
+    const rateCtx = document.getElementById('rateChart');
+    if (!rateCtx || !rateData.labels || rateData.labels.length === 0) return;
     new Chart(rateCtx.getContext('2d'), {
       type: 'bar',
       data: {
@@ -484,6 +485,15 @@
         animation: false,
       }
     });
+  }
+  // Load Chart.js on demand for SPA navigation
+  if (typeof Chart !== 'undefined') {
+    _initRateChart();
+  } else {
+    const cs = document.createElement('script');
+    cs.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+    cs.onload = _initRateChart;
+    document.head.appendChild(cs);
   }
 
   // ── Auto-refresh (paused during live mode) ───────────────────────────
