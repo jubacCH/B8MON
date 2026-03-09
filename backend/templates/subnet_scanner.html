@@ -67,30 +67,41 @@
         </div>
     </div>
 
-    <!-- Action bar -->
-    <div id="actionBar" class="hidden mb-4">
-        <div class="flex items-center gap-3">
-            <button onclick="_addSelected()" class="ng-btn ng-btn-primary flex items-center gap-1.5 text-sm">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
-                Add Selected to Hosts
-            </button>
-            <button onclick="_selectAllUnmonitored()" class="ng-btn ng-btn-ghost text-sm">Select All Unmonitored</button>
-            <span class="text-[--ng-text-muted] text-xs font-mono" id="selectedCount">0 selected</span>
+    <!-- IP Heatmap -->
+    <div class="glass-card p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-medium text-[--ng-text-secondary]">IP Address Map</h2>
+            <div class="flex items-center gap-4 text-[10px] text-[--ng-text-muted]">
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-ng-success/70"></span> Alive & Monitored</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-ng-warning/70"></span> Alive & Unmonitored</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-ng-critical/50"></span> Offline & Monitored</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-white/[0.06]"></span> Offline</span>
+            </div>
+        </div>
+        <div id="ipGrid"></div>
+    </div>
+
+    <!-- Action bar + Filters -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div class="flex items-center gap-2">
+            <button onclick="_setFilter('alive')" class="filter-btn text-xs px-3 py-1.5 rounded-lg transition-all" data-filter="alive">Alive <span class="filter-count"></span></button>
+            <button onclick="_setFilter('unmonitored')" class="filter-btn text-xs px-3 py-1.5 rounded-lg transition-all" data-filter="unmonitored">Unmonitored <span class="filter-count"></span></button>
+            <button onclick="_setFilter('dead')" class="filter-btn text-xs px-3 py-1.5 rounded-lg transition-all" data-filter="dead">Offline <span class="filter-count"></span></button>
+            <button onclick="_setFilter('all')" class="filter-btn text-xs px-3 py-1.5 rounded-lg transition-all" data-filter="all">All <span class="filter-count"></span></button>
+        </div>
+        <div id="actionBar" class="hidden">
+            <div class="flex items-center gap-3">
+                <span class="text-[--ng-text-muted] text-xs font-mono" id="selectedCount">0 selected</span>
+                <button onclick="_selectAllUnmonitored()" class="ng-btn ng-btn-ghost text-xs py-1">Select All</button>
+                <button onclick="_addSelected()" class="ng-btn ng-btn-primary flex items-center gap-1.5 text-xs py-1">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add to Hosts
+                </button>
+            </div>
         </div>
     </div>
-
-    <!-- Filter -->
-    <div class="flex gap-2 mb-4">
-        <button onclick="_setFilter('all')" class="filter-btn ng-btn ng-btn-ghost text-xs active" data-filter="all">All</button>
-        <button onclick="_setFilter('alive')" class="filter-btn ng-btn ng-btn-ghost text-xs" data-filter="alive">Alive</button>
-        <button onclick="_setFilter('dead')" class="filter-btn ng-btn ng-btn-ghost text-xs" data-filter="dead">Offline</button>
-        <button onclick="_setFilter('unmonitored')" class="filter-btn ng-btn ng-btn-ghost text-xs" data-filter="unmonitored">Unmonitored</button>
-    </div>
-
-    <!-- IP Grid -->
-    <div id="ipGrid" class="grid grid-cols-8 sm:grid-cols-12 md:grid-cols-16 lg:grid-cols-16 gap-1 mb-6"></div>
 
     <!-- Detail Table -->
     <div class="glass-card overflow-hidden">
@@ -103,12 +114,13 @@
                     <th class="px-3 py-2.5 text-left font-medium">IP Address</th>
                     <th class="px-3 py-2.5 text-left font-medium">Status</th>
                     <th class="px-3 py-2.5 text-right font-medium">Latency</th>
-                    <th class="px-3 py-2.5 text-left font-medium">Monitored</th>
+                    <th class="px-3 py-2.5 text-left font-medium">Monitoring</th>
                     <th class="px-3 py-2.5 text-left font-medium">Host</th>
                 </tr>
             </thead>
             <tbody id="resultTable"></tbody>
         </table>
+        <div id="tableEmpty" class="hidden py-8 text-center text-[--ng-text-muted] text-sm">No hosts match this filter</div>
     </div>
 
     <p class="text-[--ng-text-muted] text-xs font-mono mt-3" id="scannedAt"></p>
@@ -117,7 +129,7 @@
 <script>
 (function() {
   let _results = [];
-  let _filter = 'all';
+  let _filter = 'alive';
   let _selected = new Set();
 
   window._startScan = async function() {
@@ -141,7 +153,7 @@
 
       _results = data.results;
       _selected.clear();
-      _filter = 'all';
+      _filter = 'alive';
 
       document.getElementById('statTotal').textContent = data.total;
       document.getElementById('statAlive').textContent = data.alive;
@@ -154,7 +166,7 @@
       document.getElementById('scannedAt').textContent = `Scanned at ${data.scanned_at}`;
       document.getElementById('actionBar').classList.toggle('hidden', data.unmonitored_alive === 0);
 
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+      _updateFilterButtons();
       _renderGrid();
       _renderTable();
 
@@ -168,6 +180,25 @@
     }
   };
 
+  function _counts() {
+    return {
+      all: _results.length,
+      alive: _results.filter(r => r.alive).length,
+      dead: _results.filter(r => !r.alive).length,
+      unmonitored: _results.filter(r => r.alive && !r.monitored).length
+    };
+  }
+
+  function _updateFilterButtons() {
+    const c = _counts();
+    document.querySelectorAll('.filter-btn').forEach(b => {
+      const f = b.dataset.filter;
+      b.classList.toggle('active', f === _filter);
+      const span = b.querySelector('.filter-count');
+      if (span) span.textContent = c[f] !== undefined ? `(${c[f]})` : '';
+    });
+  }
+
   function _filtered() {
     if (_filter === 'all') return _results;
     if (_filter === 'alive') return _results.filter(r => r.alive);
@@ -178,28 +209,43 @@
 
   function _renderGrid() {
     const grid = document.getElementById('ipGrid');
+    // Parse the base IP to show last octet labels
+    const firstIp = _results.length ? _results[0].ip : '';
+    const baseParts = firstIp.split('.');
+    const basePrefix = baseParts.slice(0, 3).join('.') + '.';
+
     grid.innerHTML = _results.map(r => {
-      let cls = 'w-full aspect-square rounded-sm cursor-pointer transition-all ';
-      if (r.alive && r.monitored) cls += 'bg-ng-success/60 hover:bg-ng-success/80';
-      else if (r.alive && !r.monitored) cls += 'bg-ng-warning/60 hover:bg-ng-warning/80';
-      else if (!r.alive && r.monitored) cls += 'bg-ng-critical/40 hover:bg-ng-critical/60';
-      else cls += 'bg-white/[0.04] hover:bg-white/[0.08]';
-      return `<div class="${cls}" title="${r.ip}${r.host_name ? ' ('+r.host_name+')' : ''} – ${r.alive ? r.latency_ms+'ms' : 'offline'}${r.monitored ? ' [monitored]' : ''}" onclick="_scrollToIp('${r.ip}')"></div>`;
+      const lastOctet = r.ip.split('.').pop();
+      let bg, ring = '';
+      if (r.alive && r.monitored) { bg = 'bg-ng-success/60 hover:bg-ng-success/80'; }
+      else if (r.alive && !r.monitored) { bg = 'bg-ng-warning/60 hover:bg-ng-warning/80'; }
+      else if (!r.alive && r.monitored) { bg = 'bg-ng-critical/40 hover:bg-ng-critical/60'; }
+      else { bg = 'bg-white/[0.04] hover:bg-white/[0.08]'; }
+      if (_selected.has(r.ip)) ring = 'ring-2 ring-ng-primary ring-offset-1 ring-offset-[--ng-bg]';
+      const title = `${r.ip}${r.host_name ? ' (' + r.host_name + ')' : ''} – ${r.alive ? r.latency_ms + 'ms' : 'offline'}${r.monitored ? ' [monitored]' : ''}`;
+      return `<div class="ip-cell ${bg} ${ring}" title="${title}" onclick="_scrollToIp('${r.ip}')">
+        <span class="ip-cell-label">${lastOctet}</span>
+      </div>`;
     }).join('');
   }
 
   function _renderTable() {
     const rows = _filtered();
     const tbody = document.getElementById('resultTable');
+    document.getElementById('tableEmpty').classList.toggle('hidden', rows.length > 0);
+
     tbody.innerHTML = rows.map(r => {
       const checked = _selected.has(r.ip) ? 'checked' : '';
       const showCb = !r.monitored && r.alive;
+      const lastOctet = r.ip.split('.').pop();
       return `<tr class="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors" id="row-${r.ip.replace(/\./g,'-')}">
         <td class="px-3 py-2">${showCb ? `<input type="checkbox" ${checked} onchange="_toggleSelect('${r.ip}')" class="rounded bg-white/[0.03] border-[--ng-glass-border] accent-[--ng-primary]">` : ''}</td>
-        <td class="px-3 py-2 font-mono text-xs text-[--ng-text-primary]">${r.ip}</td>
+        <td class="px-3 py-2 font-mono text-xs">
+          <span class="text-[--ng-text-muted]">${r.ip.substring(0, r.ip.lastIndexOf('.') + 1)}</span><span class="text-[--ng-text-primary] font-semibold">${lastOctet}</span>
+        </td>
         <td class="px-3 py-2">
           <span class="inline-flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full ${r.alive ? 'bg-ng-success' : 'bg-white/10'}"></span>
+            <span class="w-2 h-2 rounded-full ${r.alive ? 'bg-ng-success animate-pulse' : 'bg-white/10'}"></span>
             <span class="text-xs ${r.alive ? 'text-ng-success' : 'text-[--ng-text-muted]'}">${r.alive ? 'Online' : 'Offline'}</span>
           </span>
         </td>
@@ -208,14 +254,14 @@
           ${r.monitored
             ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-ng-primary/10 text-ng-primary">Monitored</span>`
             : r.alive
-              ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-ng-warning/10 text-ng-warning">Not monitored</span>`
+              ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-ng-warning/10 text-ng-warning">Unmonitored</span>`
               : ''}
         </td>
         <td class="px-3 py-2 text-xs">
           ${r.host_id
             ? `<a href="/ping/${r.host_id}" class="text-ng-primary hover:underline">${r.host_name || r.ip}</a>`
             : '<span class="text-[--ng-text-muted]">—</span>'}
-          ${r.source ? `<span class="text-[--ng-text-muted] text-[10px] ml-1">${r.source}</span>` : ''}
+          ${r.source ? `<span class="text-[--ng-text-muted] text-[10px] ml-1">(${r.source})</span>` : ''}
         </td>
       </tr>`;
     }).join('');
@@ -224,12 +270,13 @@
 
   window._setFilter = function(f) {
     _filter = f;
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === f));
+    _updateFilterButtons();
     _renderTable();
   };
 
   window._toggleSelect = function(ip) {
     if (_selected.has(ip)) _selected.delete(ip); else _selected.add(ip);
+    _renderGrid();
     _updateSelectedCount();
   };
 
@@ -238,12 +285,14 @@
     _filtered().filter(r => r.alive && !r.monitored).forEach(r => {
       if (all) _selected.add(r.ip); else _selected.delete(r.ip);
     });
+    _renderGrid();
     _renderTable();
     document.getElementById('selectAll').checked = all;
   };
 
   window._selectAllUnmonitored = function() {
     _results.filter(r => r.alive && !r.monitored).forEach(r => _selected.add(r.ip));
+    _renderGrid();
     _renderTable();
   };
 
@@ -262,7 +311,6 @@
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed');
-      // Mark as monitored in results
       ips.forEach(ip => {
         const r = _results.find(x => x.ip === ip);
         if (r) { r.monitored = true; r.source = 'scanner'; }
@@ -270,7 +318,7 @@
       _selected.clear();
       _renderGrid();
       _renderTable();
-      // Update stats
+      _updateFilterButtons();
       const mon = _results.filter(r => r.monitored).length;
       const unmon = _results.filter(r => r.alive && !r.monitored).length;
       document.getElementById('statMonitored').textContent = mon;
@@ -282,20 +330,78 @@
   };
 
   window._scrollToIp = function(ip) {
-    const row = document.getElementById('row-' + ip.replace(/\./g, '-'));
-    if (row) row.scrollIntoView({behavior: 'smooth', block: 'center'});
+    // Switch to a filter that includes this IP
+    const r = _results.find(x => x.ip === ip);
+    if (r) {
+      if (_filter === 'alive' && !r.alive) _setFilter('all');
+      else if (_filter === 'dead' && r.alive) _setFilter('all');
+      else if (_filter === 'unmonitored' && (r.monitored || !r.alive)) _setFilter('all');
+    }
+    setTimeout(() => {
+      const row = document.getElementById('row-' + ip.replace(/\./g, '-'));
+      if (row) {
+        row.scrollIntoView({behavior: 'smooth', block: 'center'});
+        row.classList.add('highlight-row');
+        setTimeout(() => row.classList.remove('highlight-row'), 2000);
+      }
+    }, 50);
   };
 
-  // Enter key triggers scan
   document.getElementById('cidrInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') _startScan();
   });
 })();
 </script>
 <style>
-  .filter-btn.active { background: rgba(56,189,248,0.1); color: var(--ng-primary); border-color: rgba(56,189,248,0.2); }
-  #ipGrid { grid-template-columns: repeat(16, 1fr); }
-  @media (max-width: 768px) { #ipGrid { grid-template-columns: repeat(8, 1fr); } }
+  .filter-btn {
+    background: rgba(255,255,255,0.03);
+    color: var(--ng-text-muted);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .filter-btn:hover { background: rgba(255,255,255,0.06); color: var(--ng-text-secondary); }
+  .filter-btn.active {
+    background: rgba(56,189,248,0.1);
+    color: var(--ng-primary);
+    border-color: rgba(56,189,248,0.25);
+  }
+  .filter-count { opacity: 0.6; font-variant-numeric: tabular-nums; }
+
+  #ipGrid {
+    display: grid;
+    grid-template-columns: repeat(16, 1fr);
+    gap: 3px;
+  }
+  @media (max-width: 1024px) { #ipGrid { grid-template-columns: repeat(16, 1fr); gap: 2px; } }
+  @media (max-width: 768px) { #ipGrid { grid-template-columns: repeat(8, 1fr); gap: 2px; } }
+
+  .ip-cell {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    min-width: 0;
+  }
+  .ip-cell:hover { transform: scale(1.15); z-index: 10; }
+  .ip-cell-label {
+    font-size: 9px;
+    font-family: ui-monospace, monospace;
+    color: rgba(255,255,255,0.7);
+    line-height: 1;
+    pointer-events: none;
+  }
+  @media (max-width: 768px) { .ip-cell-label { font-size: 7px; } }
+
+  .highlight-row {
+    animation: row-flash 2s ease-out;
+  }
+  @keyframes row-flash {
+    0%, 20% { background: rgba(56,189,248,0.15); }
+    100% { background: transparent; }
+  }
 </style>
 
 </div>
