@@ -37,6 +37,16 @@ def _collect_system_info() -> dict:
     except Exception:
         pass
 
+    # Version from VERSION file
+    app_version = ""
+    for vpath in ["/opt/repo/VERSION", "/app/VERSION"]:
+        try:
+            with open(vpath) as f:
+                app_version = f.read().strip()
+                break
+        except Exception:
+            pass
+
     app_info = {
         "python_version": sys.version.split()[0],
         "platform": platform.platform(),
@@ -46,6 +56,7 @@ def _collect_system_info() -> dict:
         "uptime_human": _format_duration(uptime_seconds),
         "start_time": localtime(datetime.utcfromtimestamp(start_ts), "%Y-%m-%d %H:%M:%S") if start_ts else "—",
         "git_commit": git_commit,
+        "version": app_version,
     }
 
     # CPU + Memory + Disk

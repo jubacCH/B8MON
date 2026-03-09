@@ -17,12 +17,27 @@ REPO_PATH = "/opt/repo"
 COMPOSE_FILE = f"{REPO_PATH}/docker-compose.yml"
 
 
+def _get_version_string() -> str:
+    """Read VERSION file from mounted repo or fallback."""
+    for path in [f"{REPO_PATH}/VERSION", "/app/VERSION"]:
+        try:
+            with open(path) as f:
+                return f.read().strip()
+        except Exception:
+            pass
+    return ""
+
+
 def _get_local_version() -> dict:
     """Read the build-time version info."""
+    version = _get_version_string()
     # Try build-time embedded version first
     try:
         with open("/app/.build-version") as f:
-            return json.load(f)
+            info = json.load(f)
+            if version:
+                info["version"] = version
+            return info
     except Exception:
         pass
     # Fallback: try git in mounted repo
@@ -32,7 +47,10 @@ def _get_local_version() -> dict:
             capture_output=True, text=True, timeout=3, cwd=REPO_PATH,
         )
         if result.returncode == 0:
-            return {"commit": result.stdout.strip()[:7], "full_commit": result.stdout.strip()}
+            info = {"commit": result.stdout.strip()[:7], "full_commit": result.stdout.strip()}
+            if version:
+                info["version"] = version
+            return info
     except Exception:
         pass
     # Fallback: try git in /app
@@ -42,10 +60,13 @@ def _get_local_version() -> dict:
             capture_output=True, text=True, timeout=3, cwd="/app",
         )
         if result.returncode == 0:
-            return {"commit": result.stdout.strip()}
+            info = {"commit": result.stdout.strip()}
+            if version:
+                info["version"] = version
+            return info
     except Exception:
         pass
-    return {"commit": "unknown"}
+    return {"commit": "unknown", "version": version or "unknown"}
 
 
 def _get_local_full_commit() -> str:
@@ -111,6 +132,19 @@ async def check_for_updates():
     except Exception:
         remote_commit = "unknown"
 
+    # Get remote VERSION file content
+    remote_version = ""
+    if commits_behind > 0:
+        try:
+            result = subprocess.run(
+                ["git", "show", "origin/main:VERSION"],
+                capture_output=True, text=True, timeout=5, cwd=REPO_PATH,
+            )
+            if result.returncode == 0:
+                remote_version = result.stdout.strip()
+        except Exception:
+            pass
+
     # Get changelog (commit messages)
     changelog = []
     if commits_behind > 0:
@@ -133,6 +167,7 @@ async def check_for_updates():
     return JSONResponse({
         "local": local,
         "remote_commit": remote_commit,
+        "remote_version": remote_version or local.get("version", ""),
         "commits_behind": commits_behind,
         "update_available": commits_behind > 0,
         "changelog": changelog,

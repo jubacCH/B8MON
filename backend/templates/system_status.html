@@ -7,6 +7,9 @@
   <div class="flex items-center justify-between">
     <h1 class="ng-heading text-2xl text-[--ng-text-primary]">System Status</h1>
     <div class="flex items-center gap-3">
+      {% if app_info.version %}
+      <span class="px-2.5 py-1 rounded-md text-[10px] font-mono bg-white/[0.04] text-[--ng-text-primary] border border-white/[0.06]">v{{ app_info.version }}</span>
+      {% endif %}
       {% if app_info.git_commit != "—" %}
       <span class="px-2.5 py-1 rounded-md text-[10px] font-mono bg-white/[0.04] text-[--ng-text-muted] border border-white/[0.06]">{{ app_info.git_commit }}</span>
       {% endif %}
@@ -26,7 +29,9 @@
       </button>
     </div>
     <div id="update-status">
-      <p class="text-[--ng-text-muted] text-xs">Click "Check now" to check for updates.</p>
+      <p class="text-[--ng-text-muted] text-xs">
+        {% if app_info.version %}Current version: <span class="font-mono text-[--ng-text-secondary]">v{{ app_info.version }}</span> · {% endif %}Click "Check now" to check for updates.
+      </p>
     </div>
   </div>
 
@@ -40,16 +45,20 @@
     try {
       const resp = await fetch('/api/update/check');
       const d = await resp.json();
+      const localVer = d.local?.version ? `v${d.local.version}` : '';
+      const localLabel = localVer ? `${localVer} (${d.local?.commit || '?'})` : (d.local?.commit || '?');
       if (d.error) {
         status.innerHTML = `<p class="text-xs text-ng-warning">${d.error}</p>
           <div class="flex justify-between mt-2"><span class="text-[--ng-text-muted] text-xs">Local version</span>
-          <span class="text-[--ng-text-secondary] text-xs font-mono">${d.local?.commit || '?'}</span></div>`;
+          <span class="text-[--ng-text-secondary] text-xs font-mono">${localLabel}</span></div>`;
       } else if (d.update_available) {
+        const remoteVer = d.remote_version ? `v${d.remote_version}` : '';
+        const remoteLabel = remoteVer ? `${remoteVer} (${d.remote_commit})` : d.remote_commit;
         let html = `<div class="space-y-2.5">
           <div class="flex justify-between"><span class="text-[--ng-text-muted] text-xs">Current</span>
-          <span class="text-xs font-mono text-[--ng-text-secondary]">${d.local?.commit || '?'}</span></div>
+          <span class="text-xs font-mono text-[--ng-text-secondary]">${localLabel}</span></div>
           <div class="flex justify-between"><span class="text-[--ng-text-muted] text-xs">Latest</span>
-          <span class="text-xs font-mono text-ng-success">${d.remote_commit}</span></div>
+          <span class="text-xs font-mono text-ng-success">${remoteLabel}</span></div>
           <div class="flex justify-between"><span class="text-[--ng-text-muted] text-xs">Behind</span>
           <span class="text-xs font-mono text-ng-warning">${d.commits_behind} commit${d.commits_behind > 1 ? 's' : ''}</span></div>
         </div>`;
@@ -76,7 +85,7 @@
       } else {
         status.innerHTML = `<div class="space-y-2.5">
           <div class="flex justify-between"><span class="text-[--ng-text-muted] text-xs">Current</span>
-          <span class="text-xs font-mono text-[--ng-text-secondary]">${d.local?.commit || '?'}</span></div>
+          <span class="text-xs font-mono text-[--ng-text-secondary]">${localLabel}</span></div>
           <p class="text-xs text-ng-success mt-2">Up to date</p>
         </div>`;
       }
@@ -130,6 +139,7 @@
       <h2 class="metric-label !text-[10px] mb-4">Application</h2>
       <div class="space-y-2.5">
         {% for label, val in [
+          ("Version", ("v" ~ app_info.version) if app_info.version else "—"),
           ("Uptime", app_info.uptime_human),
           ("Started", app_info.start_time),
           ("Git Commit", app_info.git_commit),
