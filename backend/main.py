@@ -20,6 +20,7 @@ from routers import (
     credentials,
     snmp as snmp_router,
     ssl_monitor,
+    update,
     api_v1,
 )
 
@@ -217,4 +218,5 @@ app.include_router(subnet_scanner.router)
 app.include_router(credentials.router)
 app.include_router(snmp_router.router)
 app.include_router(ssl_monitor.router)
+app.include_router(update.router)
 app.include_router(api_v1.router)
