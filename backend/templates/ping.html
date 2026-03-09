@@ -62,18 +62,84 @@
     </form>
   </div>
 
-  <!-- Search -->
+  <!-- Search & Filters -->
   {% if host_data %}
-  <div class="mb-4">
-    <div class="relative max-w-sm">
-      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none"
-           fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
-      </svg>
-      <input type="text" id="host-search" placeholder="Search by name, hostname or IP…"
-             oninput="filterHosts(this.value)"
-             class="w-full pl-9 ng-input">
+  <div class="mb-4 flex flex-col gap-3">
+    <!-- Search + filter row -->
+    <div class="flex items-center gap-3 flex-wrap">
+      <div class="relative max-w-sm flex-1 min-w-[200px]">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+        </svg>
+        <input type="text" id="host-search" placeholder="Search by name, hostname or IP…"
+               oninput="applyFilters()"
+               class="w-full pl-9 ng-input">
+      </div>
+
+      <!-- Status filter -->
+      <div class="relative" id="filter-status-wrap">
+        <button onclick="toggleDropdown('filter-status')"
+                class="ng-btn ng-btn-ghost text-xs flex items-center gap-1.5" id="filter-status-btn">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+          </svg>
+          Status <span class="text-slate-500" id="filter-status-label">All</span>
+        </button>
+        <div id="filter-status" class="hidden absolute top-full left-0 mt-1 z-30 bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-lg shadow-xl py-1 min-w-[140px]">
+          {% for val, label in [("all","All"), ("online","Online"), ("offline","Offline"), ("maintenance","Maintenance"), ("disabled","Disabled"), ("nodata","No data")] %}
+          <button onclick="setFilter('status','{{ val }}','{{ label }}')"
+                  class="filter-opt w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-white/[0.06] transition-colors">{{ label }}</button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Source filter -->
+      <div class="relative" id="filter-source-wrap">
+        <button onclick="toggleDropdown('filter-source')"
+                class="ng-btn ng-btn-ghost text-xs flex items-center gap-1.5" id="filter-source-btn">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+          </svg>
+          Source <span class="text-slate-500" id="filter-source-label">All</span>
+        </button>
+        <div id="filter-source" class="hidden absolute top-full left-0 mt-1 z-30 bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-lg shadow-xl py-1 min-w-[140px]">
+          <button onclick="setFilter('source','all','All')"
+                  class="filter-opt w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-white/[0.06] transition-colors">All</button>
+          {% set sources = [] %}
+          {% for d in host_data %}
+            {% set src = d.host.source or 'manual' %}
+            {% if src not in sources %}{% if sources.append(src) %}{% endif %}{% endif %}
+          {% endfor %}
+          {% for src in sources | sort %}
+          <button onclick="setFilter('source','{{ src }}','{{ src }}')"
+                  class="filter-opt w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-white/[0.06] transition-colors">{{ src }}</button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Check type filter -->
+      <div class="relative" id="filter-type-wrap">
+        <button onclick="toggleDropdown('filter-type')"
+                class="ng-btn ng-btn-ghost text-xs flex items-center gap-1.5" id="filter-type-btn">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+          </svg>
+          Type <span class="text-slate-500" id="filter-type-label">All</span>
+        </button>
+        <div id="filter-type" class="hidden absolute top-full left-0 mt-1 z-30 bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-lg shadow-xl py-1 min-w-[140px]">
+          {% for val, label in [("all","All"), ("icmp","ICMP"), ("http","HTTP"), ("https","HTTPS"), ("tcp","TCP"), ("agent","Agent")] %}
+          <button onclick="setFilter('type','{{ val }}','{{ label }}')"
+                  class="filter-opt w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-white/[0.06] transition-colors">{{ label }}</button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Active filter count + reset -->
+      <span id="filter-count" class="hidden text-xs text-slate-500">
+        <button onclick="resetFilters()" class="hover:text-slate-300 transition-colors underline underline-offset-2">Reset filters</button>
+      </span>
     </div>
   </div>
   {% endif %}
@@ -84,20 +150,48 @@
     <table class="w-full text-sm">
       <thead>
         <tr class="border-b border-white/[0.08]">
-          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Host</th>
-          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Status</th>
-          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Latency</th>
-          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">24h</th>
-          <th class="text-left px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">7d</th>
-          <th class="text-left px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">30d</th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider cursor-pointer hover:text-slate-300 select-none transition-colors"
+              onclick="sortTable('name')">
+            Host <span class="sort-arrow" data-col="name"></span>
+          </th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider cursor-pointer hover:text-slate-300 select-none transition-colors"
+              onclick="sortTable('status')">
+            Status <span class="sort-arrow" data-col="status"></span>
+          </th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider cursor-pointer hover:text-slate-300 select-none transition-colors"
+              onclick="sortTable('latency')">
+            Latency <span class="sort-arrow" data-col="latency"></span>
+          </th>
+          <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider cursor-pointer hover:text-slate-300 select-none transition-colors"
+              onclick="sortTable('uptime24')">
+            24h <span class="sort-arrow" data-col="uptime24"></span>
+          </th>
+          <th class="text-left px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider cursor-pointer hover:text-slate-300 select-none transition-colors"
+              onclick="sortTable('uptime7')">
+            7d <span class="sort-arrow" data-col="uptime7"></span>
+          </th>
+          <th class="text-left px-4 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider cursor-pointer hover:text-slate-300 select-none transition-colors"
+              onclick="sortTable('uptime30')">
+            30d <span class="sort-arrow" data-col="uptime30"></span>
+          </th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">30-day history</th>
           <th class="text-left px-5 py-3 text-slate-500 font-medium text-xs uppercase tracking-wider">Enabled</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-white/[0.08]">
         {% for d in host_data %}
+        {% set _status = 'disabled' if not d.host.enabled else ('maintenance' if d.host.maintenance else ('nodata' if d.online is none else ('online' if d.online else 'offline'))) %}
         <tr class="host-row hover:bg-white/[0.03] transition-colors cursor-pointer {% if not d.host.enabled %}opacity-40{% endif %}"
             data-search="{{ d.host.name | lower }} {{ d.host.hostname | lower }}"
+            data-name="{{ d.host.name | lower }}"
+            data-status="{{ _status }}"
+            data-source="{{ d.host.source or 'manual' }}"
+            data-type="{{ 'agent' if d.host.source == 'agent' else (d.host.check_type or 'icmp') }}"
+            data-latency="{{ d.latency if d.latency is not none else -1 }}"
+            data-uptime24="{{ uptime_map.get(d.host.id, {}).get('h24', -1) }}"
+            data-uptime7="{{ uptime_map.get(d.host.id, {}).get('d7', -1) }}"
+            data-uptime30="{{ uptime_map.get(d.host.id, {}).get('d30', -1) }}"
+            data-enabled="{{ '1' if d.host.enabled else '0' }}"
             onclick="window.location='/ping/{{ d.host.id }}'">
           <td class="px-5 py-3.5">
             <div class="flex items-center gap-2 flex-wrap">
@@ -205,7 +299,7 @@
         </tr>
         {% endfor %}
         <tr id="search-empty" style="display:none">
-          <td colspan="8" class="px-5 py-8 text-center text-slate-600 text-sm">No hosts match your search.</td>
+          <td colspan="8" class="px-5 py-8 text-center text-slate-600 text-sm">No hosts match your filters.</td>
         </tr>
       </tbody>
     </table>
@@ -229,16 +323,119 @@
 
 {% block scripts %}
 <script>
-function filterHosts(q) {
-  const term = q.trim().toLowerCase();
+/* ── Filter state ──────────────────────────────────────────────────────── */
+const _filters = { status: 'all', source: 'all', type: 'all' };
+let _sortCol = null, _sortAsc = true;
+
+function toggleDropdown(id) {
+  const el = document.getElementById(id);
+  // Close all other dropdowns first
+  document.querySelectorAll('[id^="filter-"]:not([id$="-wrap"]):not([id$="-btn"]):not([id$="-label"])').forEach(d => {
+    if (d.id !== id) d.classList.add('hidden');
+  });
+  el.classList.toggle('hidden');
+}
+
+// Close dropdowns on outside click
+document.addEventListener('click', e => {
+  ['status', 'source', 'type'].forEach(f => {
+    const wrap = document.getElementById('filter-' + f + '-wrap');
+    if (wrap && !wrap.contains(e.target)) {
+      document.getElementById('filter-' + f).classList.add('hidden');
+    }
+  });
+});
+
+function setFilter(key, val, label) {
+  _filters[key] = val;
+  document.getElementById('filter-' + key + '-label').textContent = label;
+  document.getElementById('filter-' + key).classList.add('hidden');
+  applyFilters();
+}
+
+function resetFilters() {
+  _filters.status = 'all'; _filters.source = 'all'; _filters.type = 'all';
+  document.getElementById('filter-status-label').textContent = 'All';
+  document.getElementById('filter-source-label').textContent = 'All';
+  document.getElementById('filter-type-label').textContent = 'All';
+  document.getElementById('host-search').value = '';
+  applyFilters();
+}
+
+function applyFilters() {
+  const term = (document.getElementById('host-search')?.value || '').trim().toLowerCase();
   let visible = 0;
   document.querySelectorAll('.host-row').forEach(row => {
-    const match = !term || row.dataset.search.includes(term);
-    row.style.display = match ? '' : 'none';
-    if (match) visible++;
+    let show = true;
+    // Text search
+    if (term && !row.dataset.search.includes(term)) show = false;
+    // Status filter
+    if (show && _filters.status !== 'all' && row.dataset.status !== _filters.status) show = false;
+    // Source filter
+    if (show && _filters.source !== 'all' && row.dataset.source !== _filters.source) show = false;
+    // Type filter
+    if (show && _filters.type !== 'all') {
+      const types = row.dataset.type.split(',').map(t => t.trim());
+      if (!types.includes(_filters.type)) show = false;
+    }
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
   });
   const empty = document.getElementById('search-empty');
   if (empty) empty.style.display = visible === 0 ? '' : 'none';
+  // Show/hide filter count
+  const active = Object.values(_filters).filter(v => v !== 'all').length + (term ? 1 : 0);
+  const fc = document.getElementById('filter-count');
+  if (fc) fc.classList.toggle('hidden', active === 0);
+}
+
+/* ── Sorting ───────────────────────────────────────────────────────────── */
+const _statusOrder = { online: 0, maintenance: 1, nodata: 2, offline: 3, disabled: 4 };
+
+function sortTable(col) {
+  if (_sortCol === col) {
+    _sortAsc = !_sortAsc;
+  } else {
+    _sortCol = col;
+    _sortAsc = col === 'name' || col === 'status'; // name/status default asc, numbers desc
+    if (col !== 'name' && col !== 'status') _sortAsc = false;
+  }
+  // Update arrows
+  document.querySelectorAll('.sort-arrow').forEach(el => {
+    if (el.dataset.col === col) {
+      el.textContent = _sortAsc ? ' \u25B2' : ' \u25BC';
+    } else {
+      el.textContent = '';
+    }
+  });
+
+  const tbody = document.querySelector('table tbody');
+  const rows = [...tbody.querySelectorAll('.host-row')];
+  rows.sort((a, b) => {
+    let va, vb;
+    if (col === 'name') {
+      va = a.dataset.name; vb = b.dataset.name;
+      return _sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    if (col === 'status') {
+      va = _statusOrder[a.dataset.status] ?? 9;
+      vb = _statusOrder[b.dataset.status] ?? 9;
+    } else if (col === 'latency') {
+      va = parseFloat(a.dataset.latency); vb = parseFloat(b.dataset.latency);
+    } else if (col === 'uptime24') {
+      va = parseFloat(a.dataset.uptime24); vb = parseFloat(b.dataset.uptime24);
+    } else if (col === 'uptime7') {
+      va = parseFloat(a.dataset.uptime7); vb = parseFloat(b.dataset.uptime7);
+    } else if (col === 'uptime30') {
+      va = parseFloat(a.dataset.uptime30); vb = parseFloat(b.dataset.uptime30);
+    }
+    if (va === vb) return 0;
+    return _sortAsc ? va - vb : vb - va;
+  });
+  // Re-append in new order (search-empty row stays at bottom)
+  const emptyRow = document.getElementById('search-empty');
+  rows.forEach(r => tbody.appendChild(r));
+  if (emptyRow) tbody.appendChild(emptyRow);
 }
 
 function updateAddPort() {
