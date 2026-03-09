@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.alert_rule import AlertRule
 from models.base import get_db
 from services import rules as rules_svc
+from templating import templates
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -17,7 +18,6 @@ router = APIRouter()
 
 @router.get("/rules")
 async def rules_page(request: Request, db: AsyncSession = Depends(get_db)):
-    from main import templates
     all_rules = await rules_svc.get_all_rules(db)
     sources = await rules_svc.get_source_options(db)
     operators = [
