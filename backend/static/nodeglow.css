@@ -96,10 +96,9 @@ body {
 }
 
 .glass-elevated {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid var(--ng-glass-highlight);
-  /* backdrop-filter removed — causes stripe artifacts on some GPUs */
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  background: #1e293b;
+  border: 1px solid #334155;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
   border-radius: 12px;
 }
 

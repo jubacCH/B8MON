@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}NODEGLOW{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/nodeglow.css">
+  <link rel="stylesheet" href="/static/nodeglow.css?v=2">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -374,7 +374,7 @@
   <!-- ── Cmd+K Search Modal ───────────────────────────────────────────── -->
   <div id="cmdk-modal" class="hidden fixed inset-0 bg-black/60 flex items-start justify-center z-50 pt-[15vh]"
        onclick="if(event.target===this)closeCmdK()">
-    <div class="glass-elevated w-full max-w-lg overflow-hidden" style="">
+    <div class="glass-elevated w-full max-w-lg overflow-hidden">
       <div class="flex items-center gap-3 px-4 py-3 border-b border-white/[0.08]">
         <svg class="w-4 h-4 text-[--ng-text-muted] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -452,9 +452,9 @@
 
   <!-- ── Change Own Password Modal ───────────────────────────────────── -->
   {% if request.state.current_user %}
-  <div id="own-pw-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+  <div id="own-pw-modal" class="hidden fixed inset-0 bg-black/90 flex items-center justify-center z-[60] p-4"
        onclick="if(event.target===this)this.classList.add('hidden')">
-    <div class="glass-elevated p-6 w-full max-w-sm">
+    <div class="p-6 w-full max-w-sm rounded-xl" style="background:#1e293b; border:1px solid #334155; box-shadow:0 8px 32px rgba(0,0,0,0.7)">
       <div class="flex items-center justify-between mb-4">
         <div>
           <h2 class="text-[--ng-text-primary] ng-heading text-sm tracking-wider">Change Password</h2>
