@@ -105,11 +105,19 @@
                     </div>
                 </div>
             </div>
-            <button onclick="_deleteSchedule({{ s.id }})" class="text-[--ng-text-muted] hover:text-ng-critical transition-colors p-1" title="Delete">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                </svg>
-            </button>
+            <div class="flex items-center gap-1">
+                <button onclick="_runScheduleNow({{ s.id }}, this)" class="text-[--ng-text-muted] hover:text-ng-primary transition-colors p-1" title="Run Now" id="runBtn-{{ s.id }}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </button>
+                <button onclick="_deleteSchedule({{ s.id }})" class="text-[--ng-text-muted] hover:text-ng-critical transition-colors p-1" title="Delete">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                </button>
+            </div>
         </div>
         {% endfor %}
         {% else %}
@@ -557,6 +565,27 @@
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({enabled})
     });
+  };
+
+  window._runScheduleNow = async function(id, btn) {
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = '<div class="w-4 h-4 border-2 border-ng-primary border-t-transparent rounded-full animate-spin"></div>';
+    btn.disabled = true;
+    try {
+      const resp = await fetch(`/api/subnet-scanner/schedules/${id}/run`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Scan failed');
+      // Show brief result then reload to update logs
+      const msg = `${data.alive}/${data.total} alive` + (data.added ? `, +${data.added} added` : '');
+      btn.innerHTML = `<span class="text-[10px] text-ng-success whitespace-nowrap">${msg}</span>`;
+      setTimeout(() => location.reload(), 1500);
+    } catch(e) {
+      btn.innerHTML = `<span class="text-[10px] text-ng-critical">Failed</span>`;
+      setTimeout(() => { btn.innerHTML = origHtml; btn.disabled = false; }, 3000);
+    }
   };
 
   window._deleteSchedule = async function(id) {

@@ -324,6 +324,73 @@ async def api_delete_schedule(schedule_id: int, db: AsyncSession = Depends(get_d
     return JSONResponse({"ok": True})
 
 
+@router.post("/api/subnet-scanner/schedules/{schedule_id}/run")
+async def api_run_schedule_now(schedule_id: int, db: AsyncSession = Depends(get_db)):
+    """Manually trigger a scheduled scan immediately."""
+    import json
+
+    q = await db.execute(
+        select(SubnetScanSchedule).where(SubnetScanSchedule.id == schedule_id)
+    )
+    schedule = q.scalar_one_or_none()
+    if not schedule:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+
+    try:
+        scan_results = await scan_subnet(schedule.cidr)
+        alive = sum(1 for r in scan_results if r["alive"])
+        total = len(scan_results)
+        added = 0
+        added_names: list[str] = []
+
+        if schedule.auto_add:
+            added, added_names = await auto_add_hosts(db, scan_results)
+
+        # Update schedule stats
+        schedule.last_scan = datetime.utcnow()
+        schedule.last_alive = alive
+        schedule.last_total = total
+        schedule.last_added = added
+
+        # Write log entry
+        log = SubnetScanLog(
+            schedule_id=schedule.id,
+            timestamp=datetime.utcnow(),
+            cidr=schedule.cidr,
+            alive=alive,
+            total=total,
+            added=added,
+            hosts_added=json.dumps(added_names) if added_names else None,
+        )
+        db.add(log)
+        await db.commit()
+
+        logger.info(
+            "Manual scan [%s] %s: %d/%d alive, %d added",
+            schedule.name, schedule.cidr, alive, total, added,
+        )
+        return JSONResponse({
+            "ok": True,
+            "alive": alive,
+            "total": total,
+            "added": added,
+            "added_names": added_names,
+        })
+    except Exception as exc:
+        logger.error("Manual scan [%s] failed: %s", schedule.name, exc)
+        # Log the error
+        log = SubnetScanLog(
+            schedule_id=schedule.id,
+            timestamp=datetime.utcnow(),
+            cidr=schedule.cidr,
+            alive=0, total=0, added=0,
+            error=str(exc),
+        )
+        db.add(log)
+        await db.commit()
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 @router.patch("/api/subnet-scanner/schedules/{schedule_id}")
 async def api_toggle_schedule(schedule_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     """Toggle enabled/disabled or update fields."""
