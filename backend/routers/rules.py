@@ -38,6 +38,14 @@ async def rules_page(request: Request, db: AsyncSession = Depends(get_db)):
 @router.post("/rules/add")
 async def add_rule(request: Request, db: AsyncSession = Depends(get_db)):
     form = await request.form()
+    # Collect notify_channels from checkboxes (multi-value form field)
+    channels = form.getlist("notify_channels") if hasattr(form, "getlist") else []
+    if not channels:
+        # Fallback: try comma-separated single value
+        ch_val = str(form.get("notify_channels", ""))
+        channels = [c.strip() for c in ch_val.split(",") if c.strip()] if ch_val else []
+    notify_channels = ",".join(channels) if channels else None
+
     rule = AlertRule(
         name=str(form.get("name", "")).strip() or "Unnamed Rule",
         source_type=str(form.get("source_type", "")),
@@ -46,6 +54,7 @@ async def add_rule(request: Request, db: AsyncSession = Depends(get_db)):
         operator=str(form.get("operator", "gt")),
         threshold=str(form.get("threshold", "")) or None,
         severity=str(form.get("severity", "warning")),
+        notify_channels=notify_channels,
         message_template=str(form.get("message_template", "")).strip() or None,
         cooldown_minutes=int(form.get("cooldown_minutes", 5)),
         enabled=True,
@@ -85,6 +94,12 @@ async def edit_rule(request: Request, rule_id: int, db: AsyncSession = Depends(g
     rule.operator = str(form.get("operator", "")) or rule.operator
     rule.threshold = str(form.get("threshold", "")) or None
     rule.severity = str(form.get("severity", "")) or rule.severity
+    # Collect notify_channels from checkboxes
+    channels = form.getlist("notify_channels") if hasattr(form, "getlist") else []
+    if not channels:
+        ch_val = str(form.get("notify_channels", ""))
+        channels = [c.strip() for c in ch_val.split(",") if c.strip()] if ch_val else []
+    rule.notify_channels = ",".join(channels) if channels else None
     rule.message_template = str(form.get("message_template", "")).strip() or None
     rule.cooldown_minutes = int(form.get("cooldown_minutes", 5))
     await db.commit()

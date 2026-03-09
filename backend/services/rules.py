@@ -244,9 +244,12 @@ async def _fire_rule(db: AsyncSession, rule: AlertRule, value, now: datetime):
 
     title = f"Rule: {rule.name}"
 
-    # Send notification
+    # Send notification (to selected channels, or all if not specified)
     from notifications import notify
-    await notify(title, message, rule.severity)
+    channels = None
+    if rule.notify_channels:
+        channels = [c.strip() for c in rule.notify_channels.split(",") if c.strip()]
+    await notify(title, message, rule.severity, channels=channels)
 
     # Update last_triggered_at
     await db.execute(

@@ -24,6 +24,7 @@ class AlertRule(Base):
 
     # Action
     severity = Column(String(16), nullable=False, default="warning")  # critical, warning, info
+    notify_channels = Column(String(256), nullable=True)  # comma-separated: "telegram,discord,email,webhook" (null = all)
     message_template = Column(Text, nullable=True)      # custom message (supports {value}, {field}, {source})
 
     # Cooldown

@@ -146,8 +146,9 @@ async def _send_email(host: str, port: int, user: str, password: str,
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-async def notify(title: str, message: str, severity: str = "critical") -> None:
-    """Send notification to all configured channels. Fire-and-forget safe."""
+async def notify(title: str, message: str, severity: str = "critical",
+                 channels: list[str] | None = None) -> None:
+    """Send notification to configured channels. If channels is given, only send to those."""
     # Rate limit check
     if _is_rate_limited(title):
         logger.debug("Notification rate-limited: %s", title)
@@ -171,34 +172,40 @@ async def notify(title: str, message: str, severity: str = "critical") -> None:
         smtp_from   = await get_setting(db, "smtp_from", "")
         smtp_to     = await get_setting(db, "smtp_to", "")
 
-    channels = []  # (name, coroutine) pairs
+    channels_list = []  # (name, coroutine) pairs
     color = {"critical": 0xe74c3c, "warning": 0xf39c12, "info": 0x2ecc71}.get(severity, 0x2ecc71)
 
     if tg_token and tg_chat:
-        channels.append(("telegram", _send_telegram(tg_token, tg_chat, f"<b>{title}</b>\n{message}")))
+        channels_list.append(("telegram", _send_telegram(tg_token, tg_chat, f"<b>{title}</b>\n{message}")))
     if dc_webhook:
-        channels.append(("discord", _send_discord(dc_webhook, title, message, color)))
+        channels_list.append(("discord", _send_discord(dc_webhook, title, message, color)))
     if wh_url:
-        channels.append(("webhook", _send_webhook(wh_url, wh_secret, title, message, severity)))
+        channels_list.append(("webhook", _send_webhook(wh_url, wh_secret, title, message, severity)))
     if smtp_host and smtp_user and smtp_pw_enc and smtp_to:
         try:
             smtp_pw = decrypt_value(smtp_pw_enc)
         except Exception:
             smtp_pw = smtp_pw_enc
         html_body = _build_html_email(title, message, severity)
-        channels.append(("email", _send_email(
+        channels_list.append(("email", _send_email(
             smtp_host, int(smtp_port), smtp_user, smtp_pw,
             smtp_from or smtp_user, smtp_to,
             f"[Nodeglow] {title}", f"{title}\n{message}", html_body,
         )))
 
-    if not channels:
+    if not channels_list:
         return
 
-    results = await asyncio.gather(*[coro for _, coro in channels], return_exceptions=True)
+    # Filter to requested channels if specified
+    if channels:
+        channels_list = [(name, coro) for name, coro in channels_list if name in channels]
+    if not channels_list:
+        return
+
+    results = await asyncio.gather(*[coro for _, coro in channels_list], return_exceptions=True)
 
     # Log results to DB
-    for (ch_name, _), result in zip(channels, results):
+    for (ch_name, _), result in zip(channels_list, results):
         if isinstance(result, Exception):
             logger.warning("Notification %s failed: %s", ch_name, result)
             await _log_notification(ch_name, title, message, severity, "failed", str(result))

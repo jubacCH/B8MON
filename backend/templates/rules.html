@@ -42,14 +42,21 @@
                 <span class="text-[--ng-text-muted]">{{ rule.operator }}</span>
                 {% if rule.threshold %}<span class="text-[--ng-text-secondary]">{{ rule.threshold }}</span>{% endif %}
             </p>
-            {% if rule.last_triggered_at %}
-            <p class="text-[10px] text-[--ng-text-muted] mt-1">Last triggered: {{ rule.last_triggered_at|localtime }}</p>
-            {% endif %}
+            <div class="flex items-center gap-2 mt-1">
+                {% if rule.notify_channels %}
+                <span class="text-[10px] text-[--ng-text-muted]">→ {{ rule.notify_channels }}</span>
+                {% else %}
+                <span class="text-[10px] text-[--ng-text-muted]">→ all channels</span>
+                {% endif %}
+                {% if rule.last_triggered_at %}
+                <span class="text-[10px] text-[--ng-text-muted]">· Last: {{ rule.last_triggered_at|localtime }}</span>
+                {% endif %}
+            </div>
         </div>
 
         <!-- Actions -->
         <div class="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onclick="openEditModal({{ rule.id }}, '{{ rule.name|e }}', '{{ rule.source_type }}', '{{ rule.source_id or '' }}', '{{ rule.field_path }}', '{{ rule.operator }}', '{{ rule.threshold or '' }}', '{{ rule.severity }}', `{{ rule.message_template or '' }}`, {{ rule.cooldown_minutes }})"
+            <button onclick="openEditModal({{ rule.id }}, '{{ rule.name|e }}', '{{ rule.source_type }}', '{{ rule.source_id or '' }}', '{{ rule.field_path }}', '{{ rule.operator }}', '{{ rule.threshold or '' }}', '{{ rule.severity }}', `{{ rule.message_template or '' }}`, {{ rule.cooldown_minutes }}, '{{ rule.notify_channels or '' }}')"
                     class="ng-btn ng-btn-ghost text-[10px] px-2 py-1">Edit</button>
             <form method="post" action="/rules/{{ rule.id }}/toggle" class="inline">
                 <button type="submit" class="ng-btn ng-btn-ghost text-[10px] px-2 py-1">
@@ -110,11 +117,9 @@
         <!-- Field -->
         <div>
             <label class="block text-sm text-[--ng-text-secondary] mb-1">Field</label>
-            <div class="relative">
-                <input type="text" name="field_path" id="add_field_path" class="ng-input" placeholder="Select a source first..." required
-                       autocomplete="off" onfocus="showFieldSuggestions('add')" oninput="filterFieldSuggestions('add')">
-                <div id="add_field_suggestions" class="hidden absolute z-10 top-full left-0 right-0 mt-1 glass-elevated rounded-lg max-h-48 overflow-y-auto"></div>
-            </div>
+            <select name="field_path" id="add_field_path" class="ng-input" required>
+                <option value="">Select a source first...</option>
+            </select>
         </div>
 
         <!-- Condition -->
@@ -146,6 +151,25 @@
             <div>
                 <label class="block text-sm text-[--ng-text-secondary] mb-1">Cooldown (min)</label>
                 <input type="number" name="cooldown_minutes" value="5" min="1" max="1440" class="ng-input">
+            </div>
+        </div>
+
+        <!-- Notification Channels -->
+        <div>
+            <label class="block text-sm text-[--ng-text-secondary] mb-1">Notification Channels <span class="text-[--ng-text-muted]">(none = all)</span></label>
+            <div class="flex flex-wrap gap-3 mt-1">
+                <label class="flex items-center gap-1.5 text-xs text-[--ng-text-secondary] cursor-pointer">
+                    <input type="checkbox" name="notify_channels" value="telegram" class="accent-[--ng-accent]"> Telegram
+                </label>
+                <label class="flex items-center gap-1.5 text-xs text-[--ng-text-secondary] cursor-pointer">
+                    <input type="checkbox" name="notify_channels" value="discord" class="accent-[--ng-accent]"> Discord
+                </label>
+                <label class="flex items-center gap-1.5 text-xs text-[--ng-text-secondary] cursor-pointer">
+                    <input type="checkbox" name="notify_channels" value="email" class="accent-[--ng-accent]"> Email
+                </label>
+                <label class="flex items-center gap-1.5 text-xs text-[--ng-text-secondary] cursor-pointer">
+                    <input type="checkbox" name="notify_channels" value="webhook" class="accent-[--ng-accent]"> Webhook
+                </label>
             </div>
         </div>
 
@@ -194,11 +218,9 @@
 
         <div>
             <label class="block text-sm text-[--ng-text-secondary] mb-1">Field</label>
-            <div class="relative">
-                <input type="text" name="field_path" id="edit_field_path" class="ng-input" required
-                       autocomplete="off" onfocus="showFieldSuggestions('edit')" oninput="filterFieldSuggestions('edit')">
-                <div id="edit_field_suggestions" class="hidden absolute z-10 top-full left-0 right-0 mt-1 glass-elevated rounded-lg max-h-48 overflow-y-auto"></div>
-            </div>
+            <select name="field_path" id="edit_field_path" class="ng-input" required>
+                <option value="">Select a source first...</option>
+            </select>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
@@ -228,6 +250,25 @@
             <div>
                 <label class="block text-sm text-[--ng-text-secondary] mb-1">Cooldown (min)</label>
                 <input type="number" name="cooldown_minutes" id="edit_cooldown" min="1" max="1440" class="ng-input">
+            </div>
+        </div>
+
+        <!-- Notification Channels -->
+        <div>
+            <label class="block text-sm text-[--ng-text-secondary] mb-1">Notification Channels <span class="text-[--ng-text-muted]">(none = all)</span></label>
+            <div class="flex flex-wrap gap-3 mt-1" id="edit_channels_wrap">
+                <label class="flex items-center gap-1.5 text-xs text-[--ng-text-secondary] cursor-pointer">
+                    <input type="checkbox" name="notify_channels" value="telegram" class="accent-[--ng-accent]"> Telegram
+                </label>
+                <label class="flex items-center gap-1.5 text-xs text-[--ng-text-secondary] cursor-pointer">
+                    <input type="checkbox" name="notify_channels" value="discord" class="accent-[--ng-accent]"> Discord
+                </label>
+                <label class="flex items-center gap-1.5 text-xs text-[--ng-text-secondary] cursor-pointer">
+                    <input type="checkbox" name="notify_channels" value="email" class="accent-[--ng-accent]"> Email
+                </label>
+                <label class="flex items-center gap-1.5 text-xs text-[--ng-text-secondary] cursor-pointer">
+                    <input type="checkbox" name="notify_channels" value="webhook" class="accent-[--ng-accent]"> Webhook
+                </label>
             </div>
         </div>
 
@@ -271,84 +312,74 @@ function onSourceIdChange(prefix) {
     _loadFields(prefix);
 }
 
-async function _loadFields(prefix) {
+async function _loadFields(prefix, preselect) {
     const type = document.getElementById(prefix + '_source_type').value;
     const id = document.getElementById(prefix + '_source_id').value;
-    if (!type) return;
-
-    const key = type + ':' + (id || '');
-    if (_fieldCache[key]) return;
-
-    try {
-        const url = `/api/rules/fields?source_type=${encodeURIComponent(type)}` + (id ? `&source_id=${id}` : '');
-        const resp = await fetch(url);
-        if (resp.ok) {
-            _fieldCache[key] = await resp.json();
-        }
-    } catch(e) {}
-}
-
-function showFieldSuggestions(prefix) {
-    const type = document.getElementById(prefix + '_source_type').value;
-    const id = document.getElementById(prefix + '_source_id').value;
-    const key = type + ':' + (id || '');
-    const fields = _fieldCache[key];
-    if (!fields || !fields.length) return;
-
-    const container = document.getElementById(prefix + '_field_suggestions');
-    const input = document.getElementById(prefix + '_field_path');
-    const query = input.value.toLowerCase();
-
-    const filtered = fields.filter(f => !query || f.path.toLowerCase().includes(query));
-    if (!filtered.length) { container.classList.add('hidden'); return; }
-
-    container.innerHTML = filtered.map(f => {
-        const typeColor = f.type === 'number' ? 'text-ng-primary' : f.type === 'boolean' ? 'text-ng-warning' : 'text-[--ng-text-muted]';
-        const valStr = f.value !== null && f.value !== undefined ? String(f.value).substring(0, 40) : '';
-        return `<div class="px-3 py-2 hover:bg-white/[0.06] cursor-pointer flex justify-between gap-2 text-xs"
-                     onclick="selectField('${prefix}', '${f.path}')">
-            <span class="font-mono text-[--ng-text-primary]">${f.path}</span>
-            <span class="flex gap-2 shrink-0">
-                <span class="${typeColor} text-[10px]">${f.type}</span>
-                <span class="text-[--ng-text-muted] font-mono truncate max-w-[100px]">${valStr}</span>
-            </span>
-        </div>`;
-    }).join('');
-    container.classList.remove('hidden');
-}
-
-function filterFieldSuggestions(prefix) {
-    showFieldSuggestions(prefix);
-}
-
-function selectField(prefix, path) {
-    document.getElementById(prefix + '_field_path').value = path;
-    document.getElementById(prefix + '_field_suggestions').classList.add('hidden');
-}
-
-// Close suggestions on click outside
-document.addEventListener('click', e => {
-    if (!e.target.closest('[id$="_field_path"]') && !e.target.closest('[id$="_field_suggestions"]')) {
-        document.querySelectorAll('[id$="_field_suggestions"]').forEach(el => el.classList.add('hidden'));
+    const fieldSel = document.getElementById(prefix + '_field_path');
+    if (!type) {
+        fieldSel.innerHTML = '<option value="">Select a source first...</option>';
+        return;
     }
-});
 
-function openEditModal(id, name, sourceType, sourceId, fieldPath, operator, threshold, severity, message, cooldown) {
+    const key = type + ':' + (id || '');
+
+    // Show loading state
+    fieldSel.innerHTML = '<option value="">Loading fields...</option>';
+
+    if (!_fieldCache[key]) {
+        try {
+            const url = `/api/rules/fields?source_type=${encodeURIComponent(type)}` + (id ? `&source_id=${id}` : '');
+            const resp = await fetch(url);
+            if (resp.ok) {
+                _fieldCache[key] = await resp.json();
+            }
+        } catch(e) {}
+    }
+
+    const fields = _fieldCache[key] || [];
+    if (!fields.length) {
+        fieldSel.innerHTML = '<option value="">No fields available</option>';
+        return;
+    }
+
+    fieldSel.innerHTML = '<option value="">Select field...</option>' + fields.map(f => {
+        const typeLabel = f.type === 'number' ? ' (number)' : f.type === 'boolean' ? ' (bool)' : '';
+        const valStr = f.value !== null && f.value !== undefined ? ` = ${String(f.value).substring(0, 30)}` : '';
+        return `<option value="${f.path}">${f.path}${typeLabel}${valStr}</option>`;
+    }).join('');
+
+    if (preselect) {
+        fieldSel.value = preselect;
+        // If exact match not found, add it as option (field may no longer exist in latest snapshot)
+        if (!fieldSel.value && preselect) {
+            fieldSel.innerHTML += `<option value="${preselect}">${preselect} (saved)</option>`;
+            fieldSel.value = preselect;
+        }
+    }
+}
+
+function openEditModal(id, name, sourceType, sourceId, fieldPath, operator, threshold, severity, message, cooldown, channels) {
     document.getElementById('editForm').action = '/rules/' + id + '/edit';
     document.getElementById('edit_name').value = name;
     document.getElementById('edit_source_type').value = sourceType;
     onSourceTypeChange(document.getElementById('edit_source_type'), 'edit');
-    // Set source_id after options are populated
+    // Set source_id after options are populated, then load fields with preselect
     setTimeout(() => {
         document.getElementById('edit_source_id').value = sourceId;
-        _loadFields('edit');
+        _loadFields('edit', fieldPath);
     }, 50);
-    document.getElementById('edit_field_path').value = fieldPath;
     document.getElementById('edit_operator').value = operator;
     document.getElementById('edit_threshold').value = threshold;
     document.getElementById('edit_severity').value = severity;
     document.getElementById('edit_message').value = message;
     document.getElementById('edit_cooldown').value = cooldown;
+
+    // Set channel checkboxes
+    const channelList = channels ? channels.split(',') : [];
+    document.querySelectorAll('#edit_channels_wrap input[type="checkbox"]').forEach(cb => {
+        cb.checked = channelList.includes(cb.value);
+    });
+
     document.getElementById('editModal').classList.remove('hidden');
 }
 </script>
