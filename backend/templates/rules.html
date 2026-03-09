@@ -117,9 +117,10 @@
         <!-- Field -->
         <div>
             <label class="block text-sm text-[--ng-text-secondary] mb-1">Field</label>
-            <select name="field_path" id="add_field_path" class="ng-input" required>
+            <select name="field_path" id="add_field_path" class="ng-input" required onchange="updateFieldPreview('add')">
                 <option value="">Select a source first...</option>
             </select>
+            <div id="add_field_preview" class="hidden mt-1.5 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[11px] font-mono text-[--ng-text-muted]"></div>
         </div>
 
         <!-- Condition -->
@@ -218,9 +219,10 @@
 
         <div>
             <label class="block text-sm text-[--ng-text-secondary] mb-1">Field</label>
-            <select name="field_path" id="edit_field_path" class="ng-input" required>
+            <select name="field_path" id="edit_field_path" class="ng-input" required onchange="updateFieldPreview('edit')">
                 <option value="">Select a source first...</option>
             </select>
+            <div id="edit_field_preview" class="hidden mt-1.5 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[11px] font-mono text-[--ng-text-muted]"></div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
@@ -343,8 +345,7 @@ async function _loadFields(prefix, preselect) {
 
     fieldSel.innerHTML = '<option value="">Select field...</option>' + fields.map(f => {
         const typeLabel = f.type === 'number' ? ' (number)' : f.type === 'boolean' ? ' (bool)' : '';
-        const valStr = f.value !== null && f.value !== undefined ? ` = ${String(f.value).substring(0, 30)}` : '';
-        return `<option value="${f.path}">${f.path}${typeLabel}${valStr}</option>`;
+        return `<option value="${f.path}">${f.path}${typeLabel}</option>`;
     }).join('');
 
     if (preselect) {
@@ -354,6 +355,24 @@ async function _loadFields(prefix, preselect) {
             fieldSel.innerHTML += `<option value="${preselect}">${preselect} (saved)</option>`;
             fieldSel.value = preselect;
         }
+        updateFieldPreview(prefix);
+    }
+}
+
+function updateFieldPreview(prefix) {
+    const type = document.getElementById(prefix + '_source_type').value;
+    const id = document.getElementById(prefix + '_source_id').value;
+    const key = type + ':' + (id || '');
+    const fields = _fieldCache[key] || [];
+    const sel = document.getElementById(prefix + '_field_path');
+    const preview = document.getElementById(prefix + '_field_preview');
+    const selected = fields.find(f => f.path === sel.value);
+    if (selected && selected.value !== null && selected.value !== undefined) {
+        const valStr = String(selected.value).substring(0, 80);
+        preview.textContent = `Current value: ${valStr}`;
+        preview.classList.remove('hidden');
+    } else {
+        preview.classList.add('hidden');
     }
 }
 
