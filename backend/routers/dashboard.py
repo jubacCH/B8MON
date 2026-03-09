@@ -25,13 +25,23 @@ VALID_WIDGET_IDS = {
     "uptime", "clock", "quickstats",
 }
 DEFAULT_LAYOUT = [
-    {"id": "integrations", "x": 0, "y": 0,  "w": 6,  "h": 4},
-    {"id": "syslog",       "x": 6, "y": 0,  "w": 6,  "h": 4},
-    {"id": "gravity",      "x": 0, "y": 4,  "w": 12, "h": 12},
-    {"id": "offline",      "x": 0, "y": 16, "w": 12, "h": 6},
-    {"id": "hosts",        "x": 0, "y": 22, "w": 12, "h": 8},
-    {"id": "proxmox",      "x": 0, "y": 30, "w": 12, "h": 6},
-    {"id": "top10",        "x": 0, "y": 36, "w": 12, "h": 12},
+    # Row 0 – Overview bar (3+3+6)
+    {"id": "quickstats",    "x": 0, "y": 0,  "w": 3,  "h": 5},
+    {"id": "clock",         "x": 3, "y": 0,  "w": 3,  "h": 5},
+    {"id": "alerts",        "x": 6, "y": 0,  "w": 6,  "h": 5},
+    # Row 1 – Hero visualization + sidebar (8+4)
+    {"id": "gravity",       "x": 0, "y": 5,  "w": 8,  "h": 12},
+    {"id": "integrations",  "x": 8, "y": 5,  "w": 4,  "h": 6},
+    {"id": "syslog",        "x": 8, "y": 11, "w": 4,  "h": 6},
+    # Row 2 – Problem hosts + all hosts (12)
+    {"id": "offline",       "x": 0, "y": 17, "w": 12, "h": 5},
+    {"id": "hosts",         "x": 0, "y": 22, "w": 12, "h": 8},
+    # Row 3 – Analytics (5+4+3)
+    {"id": "heatmap",       "x": 0, "y": 30, "w": 5,  "h": 7},
+    {"id": "uptime",        "x": 5, "y": 30, "w": 4,  "h": 7},
+    {"id": "speedtest",     "x": 9, "y": 30, "w": 3,  "h": 7},
+    # Row 4 – Top 10 resource tables (12)
+    {"id": "top10",         "x": 0, "y": 37, "w": 12, "h": 10},
 ]
 
 
@@ -885,5 +895,12 @@ async def save_dashboard_layout(request: Request, db: AsyncSession = Depends(get
             "h": max(1, min(24, int(w.get("h", 4)))),
         })
     await set_setting(db, "dashboard_layout", json.dumps(cleaned))
+    await db.commit()
+    return JSONResponse({"ok": True})
+
+
+@router.post("/api/dashboard-layout/reset")
+async def reset_dashboard_layout(request: Request, db: AsyncSession = Depends(get_db)):
+    await set_setting(db, "dashboard_layout", json.dumps(DEFAULT_LAYOUT))
     await db.commit()
     return JSONResponse({"ok": True})

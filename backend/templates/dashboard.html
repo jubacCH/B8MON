@@ -858,10 +858,12 @@
         <button onclick="window._dashToggleLibrary()" class="ng-btn !py-1.5 !px-4 !text-xs border border-white/[0.1] text-[--ng-text-secondary] hover:text-ng-primary hover:border-ng-primary/30">
           <svg class="w-3.5 h-3.5 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>Add
         </button>
+        <button id="layout-reset" class="ng-btn !py-1.5 !px-4 !text-xs text-ng-warning hover:text-ng-warning/80 border border-ng-warning/20">Reset</button>
         <button id="layout-save" class="ng-btn ng-btn-primary !py-1.5 !px-4 !text-xs">Save</button>
         <button id="layout-cancel" class="ng-btn !py-1.5 !px-4 !text-xs text-[--ng-text-secondary] hover:text-[--ng-text-primary]">Cancel</button>
       `;
       document.body.appendChild(bar);
+      document.getElementById('layout-reset').addEventListener('click', resetLayout);
       document.getElementById('layout-save').addEventListener('click', saveLayout);
       document.getElementById('layout-cancel').addEventListener('click', exitEditMode);
     }
@@ -877,6 +879,22 @@
     document.getElementById('widget-library').classList.add('hidden');
     const bar = document.getElementById('layout-save-bar');
     if (bar) bar.remove();
+  }
+
+  async function resetLayout() {
+    if (!confirm('Reset dashboard to default layout?')) return;
+    try {
+      const res = await fetch('/api/dashboard-layout/reset', { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+        window.showToast && window.showToast('Layout reset — reloading…', 'success');
+        setTimeout(() => location.reload(), 500);
+      } else {
+        window.showToast && window.showToast('Reset failed', 'critical');
+      }
+    } catch (e) {
+      window.showToast && window.showToast('Reset failed', 'critical');
+    }
   }
 
   async function saveLayout() {
