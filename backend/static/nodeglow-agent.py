@@ -28,6 +28,21 @@ import urllib.request
 
 __version__ = "1.0.0"
 
+USER_AGENT = f"NodeglowAgent/{__version__} ({platform.system()}; {platform.machine()})"
+
+
+def _make_request(url, data=None, token=None, method=None):
+    """Create a urllib Request with proper headers for Cloudflare compatibility."""
+    headers = {"User-Agent": USER_AGENT}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+        if isinstance(data, dict):
+            data = json.dumps(data).encode("utf-8")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return urllib.request.Request(url, data=data, headers=headers, method=method)
+
+
 # ── Metric collectors ────────────────────────────────────────────────────────
 
 
@@ -352,17 +367,7 @@ def collect_all():
 def send_metrics(server: str, token: str, data: dict) -> bool:
     """POST metrics to Nodeglow server. Returns True on success."""
     url = f"{server.rstrip('/')}/api/agent/report"
-    payload = json.dumps(data).encode("utf-8")
-
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {token}",
-        },
-        method="POST",
-    )
+    req = _make_request(url, data=data, token=token, method="POST")
 
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:

@@ -35,6 +35,20 @@ import urllib.request
 
 __version__ = "1.5.0"
 
+USER_AGENT = f"NodeglowAgent/{__version__} ({platform.system()}; {platform.machine()})"
+
+
+def _make_request(url, data=None, token=None, method=None):
+    """Create a urllib Request with proper headers for Cloudflare compatibility."""
+    headers = {"User-Agent": USER_AGENT}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+        if isinstance(data, dict):
+            data = json.dumps(data).encode("utf-8")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return urllib.request.Request(url, data=data, headers=headers, method=method)
+
 
 # ── File logging ───────────────────────────────────────────────────────────
 
@@ -769,11 +783,7 @@ def send_logs(server, token, hostname, logs):
     if not logs:
         return True
     url = f"{server.rstrip('/')}/api/agent/logs"
-    payload = json.dumps({"hostname": hostname, "logs": logs}).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, headers={
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {token}",
-    }, method="POST")
+    req = _make_request(url, data={"hostname": hostname, "logs": logs}, token=token, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             return resp.status == 200
@@ -875,11 +885,7 @@ def collect_all():
 def send_metrics(server, token, data):
     """Send metrics to server. Returns (ok, server_config) tuple."""
     url = f"{server.rstrip('/')}/api/agent/report"
-    payload = json.dumps(data).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, headers={
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {token}",
-    }, method="POST")
+    req = _make_request(url, data=data, token=token, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             if resp.status == 200:
@@ -976,7 +982,7 @@ def check_and_update(server):
     """Check server for a newer agent version; download + replace + restart if found."""
     try:
         url = f"{server.rstrip('/')}/api/agent/version/windows"
-        req = urllib.request.Request(url, method="GET")
+        req = _make_request(url, method="GET")
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
         remote_hash = data.get("hash", "")
@@ -1005,7 +1011,10 @@ def check_and_update(server):
         os.close(tmp_fd)
 
         try:
-            urllib.request.urlretrieve(download_url, tmp_path)
+            dl_req = _make_request(download_url, method="GET")
+            with urllib.request.urlopen(dl_req, timeout=60) as dl_resp:
+                with open(tmp_path, "wb") as tmp_f:
+                    tmp_f.write(dl_resp.read())
 
             # Verify the download matches the expected hash
             with open(tmp_path, "rb") as f:
