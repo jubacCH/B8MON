@@ -299,6 +299,39 @@ select.ng-input option {
 a:hover .brand-icon { opacity: 0.85; }
 .ng-nav-active .brand-icon { opacity: 1; }
 
+/* ── Compact Mode ───────────────────────────────────────────────────────── */
+
+.ng-compact .glass-card,
+.ng-compact .glass-card-static {
+  padding: 12px 14px;
+  border-radius: 10px;
+}
+
+.ng-compact .metric-value {
+  font-size: 22px;
+}
+
+.ng-compact .metric-label {
+  font-size: 8px;
+  letter-spacing: 1.5px;
+}
+
+.ng-compact .ng-nav-item {
+  padding: 6px 10px;
+  font-size: 12px;
+  gap: 8px;
+}
+
+.ng-compact .ng-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+}
+
+.ng-compact .ng-input {
+  padding: 7px 11px;
+  font-size: 13px;
+}
+
 /* ── Mobile ──────────────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
