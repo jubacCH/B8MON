@@ -307,6 +307,15 @@ async def run_snmp_polls():
     await _run()
 
 
+async def run_alert_rules():
+    """Evaluate all user-defined alert rules."""
+    from services.rules import evaluate_rules
+    async with AsyncSessionLocal() as db:
+        triggered = await evaluate_rules(db)
+        if triggered:
+            logger.info("Alert rules: %d rule(s) triggered", triggered)
+
+
 async def start_scheduler():
     """Read intervals from DB, then register and start all jobs."""
     from database import get_setting
@@ -331,6 +340,8 @@ async def start_scheduler():
                       id="subnet_scans", replace_existing=True)
     scheduler.add_job(run_snmp_polls, "interval", seconds=30,
                       id="snmp_polls", replace_existing=True)
+    scheduler.add_job(run_alert_rules, "interval", seconds=60,
+                      id="alert_rules", replace_existing=True)
     scheduler.start()
 
     # Seed default SNMP OIDs

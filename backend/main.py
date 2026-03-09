@@ -23,6 +23,7 @@ from routers import (
     ssl_monitor,
     update,
     api_v1,
+    rules as rules_router,
 )
 
 
@@ -257,3 +258,4 @@ app.include_router(snmp_router.router)
 app.include_router(ssl_monitor.router)
 app.include_router(update.router)
 app.include_router(api_v1.router)
+app.include_router(rules_router.router)

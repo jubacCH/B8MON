@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block title %}Alert Rules{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="ng-heading text-xl text-[--ng-text-primary]">Alert Rules</h1>
+        <p class="text-xs text-[--ng-text-muted] mt-1">Custom triggers on any data field — get notified when conditions are met.</p>
+    </div>
+    <button onclick="document.getElementById('addModal').classList.remove('hidden')"
+            class="ng-btn ng-btn-primary text-xs">+ New Rule</button>
+</div>
+
+{% if request.query_params.get('saved') %}
+<script>window.showToast && showToast('Rule saved', 'success');</script>
+{% endif %}
+
+<!-- Rules List -->
+{% if rules %}
+<div class="space-y-3">
+    {% for rule in rules %}
+    <div class="glass-card p-4 flex items-center gap-4 group">
+        <!-- Status indicator -->
+        <div class="shrink-0">
+            <span class="block w-2.5 h-2.5 rounded-full {% if rule.enabled %}bg-ng-success{% else %}bg-white/20{% endif %}"></span>
+        </div>
+
+        <!-- Rule info -->
+        <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="text-[--ng-text-primary] font-medium text-sm">{{ rule.name }}</span>
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-mono
+                    {% if rule.severity == 'critical' %}bg-ng-critical/15 text-ng-critical
+                    {% elif rule.severity == 'warning' %}bg-ng-warning/15 text-ng-warning
+                    {% else %}bg-ng-primary/15 text-ng-primary{% endif %}">{{ rule.severity }}</span>
+            </div>
+            <p class="text-xs text-[--ng-text-muted] font-mono truncate">
+                {{ rule.source_type }}{% if rule.source_id %} #{{ rule.source_id }}{% endif %}
+                → <span class="text-[--ng-text-secondary]">{{ rule.field_path }}</span>
+                <span class="text-[--ng-text-muted]">{{ rule.operator }}</span>
+                {% if rule.threshold %}<span class="text-[--ng-text-secondary]">{{ rule.threshold }}</span>{% endif %}
+            </p>
+            {% if rule.last_triggered_at %}
+            <p class="text-[10px] text-[--ng-text-muted] mt-1">Last triggered: {{ rule.last_triggered_at|localtime }}</p>
+            {% endif %}
+        </div>
+
+        <!-- Actions -->
+        <div class="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onclick="openEditModal({{ rule.id }}, '{{ rule.name|e }}', '{{ rule.source_type }}', '{{ rule.source_id or '' }}', '{{ rule.field_path }}', '{{ rule.operator }}', '{{ rule.threshold or '' }}', '{{ rule.severity }}', `{{ rule.message_template or '' }}`, {{ rule.cooldown_minutes }})"
+                    class="ng-btn ng-btn-ghost text-[10px] px-2 py-1">Edit</button>
+            <form method="post" action="/rules/{{ rule.id }}/toggle" class="inline">
+                <button type="submit" class="ng-btn ng-btn-ghost text-[10px] px-2 py-1">
+                    {% if rule.enabled %}Disable{% else %}Enable{% endif %}
+                </button>
+            </form>
+            <form method="post" action="/rules/{{ rule.id }}/delete" class="inline"
+                  onsubmit="return confirm('Delete this rule?')">
+                <button type="submit" class="ng-btn ng-btn-ghost text-[10px] px-2 py-1 text-ng-critical">Delete</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-16 text-[--ng-text-secondary]">
+    <svg class="w-12 h-12 mx-auto mb-4 text-[--ng-text-muted]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+    </svg>
+    <p class="text-lg mb-2">No rules yet</p>
+    <p class="text-sm">Create your first rule to get notified when conditions are met.</p>
+</div>
+{% endif %}
+
+</div>
+
+<!-- Add Rule Modal -->
+<div id="addModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+<div class="glass-elevated rounded-xl p-6 w-full max-w-xl mx-4 max-h-[90vh] overflow-y-auto">
+    <h2 class="ng-heading text-lg text-[--ng-text-primary] mb-4">New Alert Rule</h2>
+    <form method="post" action="/rules/add" class="space-y-4" id="addForm">
+
+        <div>
+            <label class="block text-sm text-[--ng-text-secondary] mb-1">Rule Name</label>
+            <input type="text" name="name" required class="ng-input" placeholder="e.g. Proxmox CPU > 90%">
+        </div>
+
+        <!-- Source -->
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Source Type</label>
+                <select name="source_type" id="add_source_type" class="ng-input" onchange="onSourceTypeChange(this, 'add')" required>
+                    <option value="">Select...</option>
+                    {% for src in sources %}
+                    <option value="{{ src.type }}">{{ src.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Instance <span class="text-[--ng-text-muted]">(optional)</span></label>
+                <select name="source_id" id="add_source_id" class="ng-input" onchange="onSourceIdChange('add')">
+                    <option value="">Any</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Field -->
+        <div>
+            <label class="block text-sm text-[--ng-text-secondary] mb-1">Field</label>
+            <div class="relative">
+                <input type="text" name="field_path" id="add_field_path" class="ng-input" placeholder="Select a source first..." required
+                       autocomplete="off" onfocus="showFieldSuggestions('add')" oninput="filterFieldSuggestions('add')">
+                <div id="add_field_suggestions" class="hidden absolute z-10 top-full left-0 right-0 mt-1 glass-elevated rounded-lg max-h-48 overflow-y-auto"></div>
+            </div>
+        </div>
+
+        <!-- Condition -->
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Operator</label>
+                <select name="operator" class="ng-input">
+                    {% for op in operators %}
+                    <option value="{{ op.key }}">{{ op.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Threshold</label>
+                <input type="text" name="threshold" class="ng-input" placeholder="e.g. 90">
+            </div>
+        </div>
+
+        <!-- Action config -->
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Severity</label>
+                <select name="severity" class="ng-input">
+                    <option value="critical">Critical</option>
+                    <option value="warning" selected>Warning</option>
+                    <option value="info">Info</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Cooldown (min)</label>
+                <input type="number" name="cooldown_minutes" value="5" min="1" max="1440" class="ng-input">
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm text-[--ng-text-secondary] mb-1">Custom Message <span class="text-[--ng-text-muted]">(optional)</span></label>
+            <textarea name="message_template" class="ng-input" rows="2"
+                      placeholder="Available vars: {value}, {field}, {source}, {name}, {threshold}"></textarea>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+            <button type="button" onclick="document.getElementById('addModal').classList.add('hidden')" class="ng-btn ng-btn-ghost">Cancel</button>
+            <button type="submit" class="ng-btn ng-btn-primary">Create Rule</button>
+        </div>
+    </form>
+</div>
+</div>
+
+<!-- Edit Rule Modal -->
+<div id="editModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+<div class="glass-elevated rounded-xl p-6 w-full max-w-xl mx-4 max-h-[90vh] overflow-y-auto">
+    <h2 class="ng-heading text-lg text-[--ng-text-primary] mb-4">Edit Rule</h2>
+    <form method="post" id="editForm" class="space-y-4">
+
+        <div>
+            <label class="block text-sm text-[--ng-text-secondary] mb-1">Rule Name</label>
+            <input type="text" name="name" id="edit_name" required class="ng-input">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Source Type</label>
+                <select name="source_type" id="edit_source_type" class="ng-input" onchange="onSourceTypeChange(this, 'edit')" required>
+                    <option value="">Select...</option>
+                    {% for src in sources %}
+                    <option value="{{ src.type }}">{{ src.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Instance</label>
+                <select name="source_id" id="edit_source_id" class="ng-input" onchange="onSourceIdChange('edit')">
+                    <option value="">Any</option>
+                </select>
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm text-[--ng-text-secondary] mb-1">Field</label>
+            <div class="relative">
+                <input type="text" name="field_path" id="edit_field_path" class="ng-input" required
+                       autocomplete="off" onfocus="showFieldSuggestions('edit')" oninput="filterFieldSuggestions('edit')">
+                <div id="edit_field_suggestions" class="hidden absolute z-10 top-full left-0 right-0 mt-1 glass-elevated rounded-lg max-h-48 overflow-y-auto"></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Operator</label>
+                <select name="operator" id="edit_operator" class="ng-input">
+                    {% for op in operators %}
+                    <option value="{{ op.key }}">{{ op.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Threshold</label>
+                <input type="text" name="threshold" id="edit_threshold" class="ng-input">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Severity</label>
+                <select name="severity" id="edit_severity" class="ng-input">
+                    <option value="critical">Critical</option>
+                    <option value="warning">Warning</option>
+                    <option value="info">Info</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Cooldown (min)</label>
+                <input type="number" name="cooldown_minutes" id="edit_cooldown" min="1" max="1440" class="ng-input">
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm text-[--ng-text-secondary] mb-1">Custom Message</label>
+            <textarea name="message_template" id="edit_message" class="ng-input" rows="2"
+                      placeholder="{value}, {field}, {source}, {name}, {threshold}"></textarea>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+            <button type="button" onclick="document.getElementById('editModal').classList.add('hidden')" class="ng-btn ng-btn-ghost">Cancel</button>
+            <button type="submit" class="ng-btn ng-btn-primary">Save Changes</button>
+        </div>
+    </form>
+</div>
+</div>
+
+{% endblock %}
+
+{% block page_scripts %}
+<div id="page-scripts">
+<script>
+// Source data from server
+const _sources = {{ sources|tojson }};
+let _fieldCache = {};  // cache per "type:id"
+
+function onSourceTypeChange(sel, prefix) {
+    const type = sel.value;
+    const idSel = document.getElementById(prefix + '_source_id');
+    idSel.innerHTML = '<option value="">Any</option>';
+    const src = _sources.find(s => s.type === type);
+    if (src) {
+        src.instances.forEach(inst => {
+            idSel.innerHTML += `<option value="${inst.id}">${inst.name}</option>`;
+        });
+    }
+    _loadFields(prefix);
+}
+
+function onSourceIdChange(prefix) {
+    _loadFields(prefix);
+}
+
+async function _loadFields(prefix) {
+    const type = document.getElementById(prefix + '_source_type').value;
+    const id = document.getElementById(prefix + '_source_id').value;
+    if (!type) return;
+
+    const key = type + ':' + (id || '');
+    if (_fieldCache[key]) return;
+
+    try {
+        const url = `/api/rules/fields?source_type=${encodeURIComponent(type)}` + (id ? `&source_id=${id}` : '');
+        const resp = await fetch(url);
+        if (resp.ok) {
+            _fieldCache[key] = await resp.json();
+        }
+    } catch(e) {}
+}
+
+function showFieldSuggestions(prefix) {
+    const type = document.getElementById(prefix + '_source_type').value;
+    const id = document.getElementById(prefix + '_source_id').value;
+    const key = type + ':' + (id || '');
+    const fields = _fieldCache[key];
+    if (!fields || !fields.length) return;
+
+    const container = document.getElementById(prefix + '_field_suggestions');
+    const input = document.getElementById(prefix + '_field_path');
+    const query = input.value.toLowerCase();
+
+    const filtered = fields.filter(f => !query || f.path.toLowerCase().includes(query));
+    if (!filtered.length) { container.classList.add('hidden'); return; }
+
+    container.innerHTML = filtered.map(f => {
+        const typeColor = f.type === 'number' ? 'text-ng-primary' : f.type === 'boolean' ? 'text-ng-warning' : 'text-[--ng-text-muted]';
+        const valStr = f.value !== null && f.value !== undefined ? String(f.value).substring(0, 40) : '';
+        return `<div class="px-3 py-2 hover:bg-white/[0.06] cursor-pointer flex justify-between gap-2 text-xs"
+                     onclick="selectField('${prefix}', '${f.path}')">
+            <span class="font-mono text-[--ng-text-primary]">${f.path}</span>
+            <span class="flex gap-2 shrink-0">
+                <span class="${typeColor} text-[10px]">${f.type}</span>
+                <span class="text-[--ng-text-muted] font-mono truncate max-w-[100px]">${valStr}</span>
+            </span>
+        </div>`;
+    }).join('');
+    container.classList.remove('hidden');
+}
+
+function filterFieldSuggestions(prefix) {
+    showFieldSuggestions(prefix);
+}
+
+function selectField(prefix, path) {
+    document.getElementById(prefix + '_field_path').value = path;
+    document.getElementById(prefix + '_field_suggestions').classList.add('hidden');
+}
+
+// Close suggestions on click outside
+document.addEventListener('click', e => {
+    if (!e.target.closest('[id$="_field_path"]') && !e.target.closest('[id$="_field_suggestions"]')) {
+        document.querySelectorAll('[id$="_field_suggestions"]').forEach(el => el.classList.add('hidden'));
+    }
+});
+
+function openEditModal(id, name, sourceType, sourceId, fieldPath, operator, threshold, severity, message, cooldown) {
+    document.getElementById('editForm').action = '/rules/' + id + '/edit';
+    document.getElementById('edit_name').value = name;
+    document.getElementById('edit_source_type').value = sourceType;
+    onSourceTypeChange(document.getElementById('edit_source_type'), 'edit');
+    // Set source_id after options are populated
+    setTimeout(() => {
+        document.getElementById('edit_source_id').value = sourceId;
+        _loadFields('edit');
+    }, 50);
+    document.getElementById('edit_field_path').value = fieldPath;
+    document.getElementById('edit_operator').value = operator;
+    document.getElementById('edit_threshold').value = threshold;
+    document.getElementById('edit_severity').value = severity;
+    document.getElementById('edit_message').value = message;
+    document.getElementById('edit_cooldown').value = cooldown;
+    document.getElementById('editModal').classList.remove('hidden');
+}
+</script>
+</div>
+{% endblock %}

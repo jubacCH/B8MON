@@ -33,6 +33,7 @@ from models.credential import Credential
 from models.snmp import SnmpMib, SnmpOid, SnmpHostConfig, SnmpResult
 from models.api_key import ApiKey
 from models.notification import NotificationLog
+from models.alert_rule import AlertRule
 
 
 async def init_db():
@@ -83,5 +84,6 @@ __all__ = [
     "SnmpMib", "SnmpOid", "SnmpHostConfig", "SnmpResult",
     "ApiKey",
     "NotificationLog",
+    "AlertRule",
     "init_db",
 ]
