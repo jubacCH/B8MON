@@ -291,6 +291,12 @@ async def run_log_intelligence():
     await run_intelligence()
 
 
+async def run_scheduled_scans():
+    """Run due scheduled subnet scans."""
+    from routers.subnet_scanner import run_scheduled_scans as _run
+    await _run()
+
+
 async def start_scheduler():
     """Read intervals from DB, then register and start all jobs."""
     from database import get_setting
@@ -311,6 +317,8 @@ async def start_scheduler():
                       id="cleanup", replace_existing=True)
     scheduler.add_job(run_log_intelligence, "interval", seconds=30,
                       id="log_intelligence", replace_existing=True)
+    scheduler.add_job(run_scheduled_scans, "interval", seconds=60,
+                      id="subnet_scans", replace_existing=True)
     scheduler.start()
     logger.info("Scheduler started (ping=%ds, integrations=%ds)",
                 ping_interval, integration_interval)

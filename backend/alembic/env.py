@@ -25,6 +25,7 @@ from models.ping import PingHost, PingResult  # noqa: F401
 from models.syslog import SyslogMessage  # noqa: F401
 from models.incident import Incident, IncidentEvent  # noqa: F401
 from models.log_template import LogTemplate, HostBaseline, PrecursorPattern  # noqa: F401
+from models.scanner import SubnetScanSchedule  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
