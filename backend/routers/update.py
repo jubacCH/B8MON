@@ -9,6 +9,8 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from ratelimit import rate_limit
+
 router = APIRouter(prefix="/api/update")
 log = logging.getLogger(__name__)
 
@@ -84,7 +86,8 @@ def _get_local_full_commit() -> str:
 
 
 @router.get("/check")
-async def check_for_updates():
+@rate_limit(max_requests=5, window_seconds=60)
+async def check_for_updates(request: Request):
     """Compare local commit with GitHub remote. Returns update availability + changelog."""
     local = _get_local_version()
     local_full = _get_local_full_commit()
@@ -176,6 +179,7 @@ async def check_for_updates():
 
 
 @router.post("/apply")
+@rate_limit(max_requests=2, window_seconds=300)
 async def apply_update(request: Request):
     """Pull latest code and rebuild the container. Returns immediately — container will restart."""
     # Check admin role

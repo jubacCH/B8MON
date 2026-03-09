@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import Session, User, get_db
+from ratelimit import rate_limit
 
 router = APIRouter()
 
@@ -21,6 +22,7 @@ async def login_page(request: Request):
 
 
 @router.post("/login")
+@rate_limit(max_requests=10, window_seconds=60, html=True)
 async def login(
     request: Request,
     username: str = Form(...),

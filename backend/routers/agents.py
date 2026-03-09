@@ -14,6 +14,7 @@ from templating import templates
 from sqlalchemy import delete, select, update
 
 from database import AsyncSessionLocal, PingHost, PingResult, get_setting, set_setting
+from ratelimit import rate_limit
 from models.agent import Agent, AgentSnapshot
 from services.websocket import broadcast_agent_metric
 
@@ -35,6 +36,7 @@ async def _get_enrollment_key() -> str:
 # ── API: Agent self-enrollment ────────────────────────────────────────────────
 
 @router.post("/api/agent/enroll")
+@rate_limit(max_requests=5, window_seconds=60)
 async def agent_enroll(request: Request):
     """Agent self-registers using the enrollment key. Returns a token."""
     try:
