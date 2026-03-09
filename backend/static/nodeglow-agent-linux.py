@@ -345,6 +345,114 @@ def get_recent_logs(max_entries=200):
     return logs
 
 
+# ── Log file tailing ─────────────────────────────────────────────────────────
+
+_file_positions: dict = {}  # path -> (size, offset)
+
+
+def tail_log_files(file_paths, max_lines=200):
+    """Read new lines from custom log files. Tracks position between calls."""
+    import glob as globmod
+    logs = []
+    if not file_paths:
+        return logs
+
+    for pattern in file_paths:
+        pattern = pattern.strip()
+        if not pattern:
+            continue
+        matched = globmod.glob(pattern)
+        if not matched:
+            continue
+
+        for filepath in matched:
+            try:
+                stat = os.stat(filepath)
+                file_key = filepath
+                prev_size, prev_offset = _file_positions.get(file_key, (0, 0))
+
+                if stat.st_size < prev_offset:
+                    prev_offset = 0  # rotated
+                if stat.st_size == prev_offset:
+                    continue
+
+                with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                    f.seek(prev_offset)
+                    lines_read = 0
+                    for line in f:
+                        line = line.rstrip("\r\n")
+                        if not line:
+                            continue
+                        if lines_read >= max_lines:
+                            break
+                        logs.append({
+                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            "severity": 6,
+                            "app_name": os.path.basename(filepath),
+                            "message": line[:1000],
+                            "facility": 1,
+                        })
+                        lines_read += 1
+                    _file_positions[file_key] = (stat.st_size, f.tell())
+            except Exception:
+                pass
+
+    return logs
+
+
+# ── Agent self-log upload ────────────────────────────────────────────────────
+
+_agent_log_offset = 0
+
+
+def get_agent_log_entries(max_lines=50):
+    """Read new entries from the agent's own log file."""
+    global _agent_log_offset
+
+    log_dir = os.path.dirname(os.path.abspath(__file__))
+    log_file = os.path.join(log_dir, "nodeglow-agent.log")
+
+    logs = []
+    try:
+        if not os.path.exists(log_file):
+            return logs
+        stat = os.stat(log_file)
+        if stat.st_size < _agent_log_offset:
+            _agent_log_offset = 0
+        if stat.st_size == _agent_log_offset:
+            return logs
+
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            f.seek(_agent_log_offset)
+            count = 0
+            for line in f:
+                line = line.rstrip("\r\n")
+                if not line:
+                    continue
+                if count >= max_lines:
+                    break
+                sev = 6
+                upper = line.upper()
+                if " ERROR " in upper or "ERROR:" in upper:
+                    sev = 3
+                elif " WARNING " in upper or "WARN " in upper:
+                    sev = 4
+                elif " CRITICAL " in upper:
+                    sev = 2
+                logs.append({
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "severity": sev,
+                    "app_name": "nodeglow-agent",
+                    "message": line[:500],
+                    "facility": 1,
+                })
+                count += 1
+            _agent_log_offset = f.tell()
+    except Exception:
+        pass
+    return logs
+
+
 def _get_syslog_fallback(max_lines=100):
     """Fallback: read recent lines from /var/log/syslog or /var/log/messages."""
     import re
@@ -630,6 +738,8 @@ def main():
     log_interval = 60  # collect logs every 60 seconds
     last_log_send = 0
     server_log_levels = [1, 2, 3]  # default: Critical, Error, Warning
+    server_log_file_paths = []
+    server_upload_agent_log = True
 
     while True:
         try:
@@ -637,7 +747,7 @@ def main():
             ok, srv_config = send_metrics(args.server, args.token, data)
             if ok:
                 log.info("OK cpu=%s%% mem=%s%% load=%s", data.get('cpu_pct', '?'), data.get('memory', {}).get('pct', '?'), data.get('load', {}).get('load_1', '?'))
-                # Update log levels from server config
+                # Update config from server
                 if "log_levels" in srv_config:
                     try:
                         new_levels = [int(x) for x in srv_config["log_levels"].split(",") if x.strip()]
@@ -646,6 +756,15 @@ def main():
                         server_log_levels = new_levels
                     except Exception:
                         pass
+                if "log_file_paths" in srv_config:
+                    try:
+                        new_paths = [p.strip() for p in srv_config["log_file_paths"].splitlines() if p.strip()]
+                        if new_paths != server_log_file_paths:
+                            log.info("Log file paths updated: %s", new_paths)
+                        server_log_file_paths = new_paths
+                    except Exception:
+                        pass
+                server_upload_agent_log = srv_config.get("upload_agent_log", True)
 
             # Send logs less frequently than metrics
             now = time.time()
@@ -653,6 +772,19 @@ def main():
                 last_log_send = now
                 try:
                     logs = get_recent_logs()
+
+                    # Tail custom log files
+                    if server_log_file_paths:
+                        file_logs = tail_log_files(server_log_file_paths)
+                        if file_logs:
+                            logs.extend(file_logs)
+
+                    # Agent self-log
+                    if server_upload_agent_log:
+                        agent_logs = get_agent_log_entries()
+                        if agent_logs:
+                            logs.extend(agent_logs)
+
                     if logs:
                         lok = send_logs(args.server, args.token, socket.gethostname(), logs)
                         log.info("Logs: %d entries %s", len(logs), "sent" if lok else "FAILED")

@@ -168,8 +168,13 @@ async def agent_report(request: Request):
         "uptime_s": body.get("uptime_s"),
     })
 
-    # Return config to agent (log levels, etc.)
-    return {"ok": True, "config": {"log_levels": agent.log_levels or "1,2,3"}}
+    # Return config to agent (log levels, channels, file paths, etc.)
+    return {"ok": True, "config": {
+        "log_levels": agent.log_levels or "1,2,3",
+        "log_channels": agent.log_channels or "System,Application",
+        "log_file_paths": agent.log_file_paths or "",
+        "upload_agent_log": True,
+    }}
 
 
 # ── API: Agent log submission ────────────────────────────────────────────────
@@ -454,9 +459,32 @@ async def agent_save_settings(request: Request, agent_id: int):
             levels.append(str(lvl))
     log_levels = ",".join(levels) if levels else ""
 
+    # Build log_channels from checkboxes
+    channel_names = [
+        "System", "Application", "Security", "Setup",
+        "Microsoft-Windows-PowerShell/Operational",
+        "Microsoft-Windows-Windows Defender/Operational",
+        "Microsoft-Windows-TaskScheduler/Operational",
+        "Microsoft-Windows-TerminalServices-LocalSessionManager/Operational",
+        "Microsoft-Windows-Sysmon/Operational",
+        "Microsoft-Windows-WindowsUpdateClient/Operational",
+    ]
+    channels = []
+    for ch in channel_names:
+        if form.get(f"ch_{ch}"):
+            channels.append(ch)
+    log_channels = ",".join(channels) if channels else ""
+
+    # Log file paths (one per line)
+    log_file_paths = form.get("log_file_paths", "").strip()
+
     async with AsyncSessionLocal() as db:
         await db.execute(
-            update(Agent).where(Agent.id == agent_id).values(log_levels=log_levels)
+            update(Agent).where(Agent.id == agent_id).values(
+                log_levels=log_levels,
+                log_channels=log_channels,
+                log_file_paths=log_file_paths,
+            )
         )
         await db.commit()
     return RedirectResponse(f"/agents/{agent_id}", status_code=302)

@@ -119,8 +119,11 @@
 <div class="glass-card p-5 mb-4">
     <h3 class="metric-label !text-[10px] mb-4">Log Collection</h3>
     <form method="post" action="/agents/{{ agent.id }}/settings">
-        <p class="text-xs text-[--ng-text-muted] mb-3">Windows Event Log levels to collect and forward to Syslog:</p>
-        <div class="flex flex-wrap gap-4">
+
+        <!-- Severity Levels -->
+        <p class="text-xs text-[--ng-text-primary] font-medium mb-2">Severity Levels</p>
+        <p class="text-[10px] text-[--ng-text-muted] mb-3">Which severity levels to collect from Event Logs:</p>
+        <div class="flex flex-wrap gap-4 mb-5">
             {% set active_levels = (agent.log_levels or "1,2,3").split(",") %}
             <label class="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" name="level_1" value="on"
@@ -168,8 +171,51 @@
                 </span>
             </label>
         </div>
-        <div class="mt-3">
+
+        <!-- Event Log Channels -->
+        <div class="border-t border-white/[0.06] pt-4 mb-5">
+            <p class="text-xs text-[--ng-text-primary] font-medium mb-2">Event Log Channels</p>
+            <p class="text-[10px] text-[--ng-text-muted] mb-3">Which Windows Event Logs to collect from:</p>
+            {% set active_channels = (agent.log_channels or "System,Application").split(",") %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {% set channel_list = [
+                    ("System", "System", "Core OS events, drivers, services"),
+                    ("Application", "Application", "App crashes, errors, installations"),
+                    ("Security", "Security", "Logon events, audit, access control"),
+                    ("Setup", "Setup", "Windows Update installations"),
+                    ("Microsoft-Windows-PowerShell/Operational", "PowerShell", "Script executions, commands"),
+                    ("Microsoft-Windows-Windows Defender/Operational", "Defender", "Threat detections, scan results"),
+                    ("Microsoft-Windows-TaskScheduler/Operational", "Task Scheduler", "Scheduled task runs, failures"),
+                    ("Microsoft-Windows-TerminalServices-LocalSessionManager/Operational", "RDP Sessions", "Remote desktop logins"),
+                    ("Microsoft-Windows-Sysmon/Operational", "Sysmon", "Process creation, network connections (if installed)"),
+                    ("Microsoft-Windows-WindowsUpdateClient/Operational", "Windows Update", "Update downloads, install status"),
+                ] %}
+                {% for ch_name, ch_label, ch_desc in channel_list %}
+                <label class="flex items-start gap-2 cursor-pointer p-2 rounded-lg hover:bg-white/[0.03] transition-colors">
+                    <input type="checkbox" name="ch_{{ ch_name }}" value="on"
+                           {% if ch_name in active_channels %}checked{% endif %}
+                           class="rounded bg-white/[0.03] border-[--ng-glass-border] mt-0.5">
+                    <div>
+                        <span class="text-xs text-[--ng-text-primary]">{{ ch_label }}</span>
+                        <p class="text-[9px] text-[--ng-text-muted] font-mono">{{ ch_desc }}</p>
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Custom Log File Paths -->
+        <div class="border-t border-white/[0.06] pt-4 mb-4">
+            <p class="text-xs text-[--ng-text-primary] font-medium mb-2">Custom Log Files</p>
+            <p class="text-[10px] text-[--ng-text-muted] mb-2">File paths the agent should tail and forward (one per line):</p>
+            <textarea name="log_file_paths" rows="3" placeholder="C:\inetpub\logs\LogFiles\W3SVC1\u_ex*.log&#10;C:\Program Files\MyApp\logs\app.log&#10;/var/log/nginx/error.log"
+                      class="ng-input w-full text-xs font-mono resize-y">{{ agent.log_file_paths or '' }}</textarea>
+            <p class="text-[9px] text-[--ng-text-muted] mt-1">Agent reads new lines from these files every 60s. Supports exact paths and glob patterns.</p>
+        </div>
+
+        <div class="flex items-center gap-3">
             <button type="submit" class="ng-btn ng-btn-primary !text-xs !px-3 !py-1.5">Save</button>
+            <span class="text-[9px] text-[--ng-text-muted]">Changes take effect on next agent report cycle (~30s)</span>
         </div>
     </form>
 </div>

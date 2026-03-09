@@ -708,40 +708,57 @@ _WIN_LEVEL_TO_SYSLOG = {
 _last_log_ts = None  # ISO timestamp of last collected log
 
 
-def get_recent_logs(max_events=200, levels=None):
-    """Collect recent Windows Event Log entries (System + Application)."""
+def get_recent_logs(max_events=200, levels=None, channels=None):
+    """Collect recent Windows Event Log entries from configured channels."""
     global _last_log_ts
 
     if levels is None:
         levels = [1, 2, 3]  # Critical, Error, Warning
     if not levels:
         return []
+    if channels is None:
+        channels = ["System", "Application"]
+    if not channels:
+        return []
 
     level_str = ",".join(str(l) for l in levels)
 
     # Build StartTime for FilterHashtable — this is natively supported and efficient
     if _last_log_ts:
-        # Parse ISO timestamp back to PowerShell DateTime
-        # Subtract 1 second to avoid missing events at exact boundary
         start_time_expr = f"[DateTime]::Parse('{_last_log_ts}').ToLocalTime().AddSeconds(-1)"
     else:
         # First run: look back 2 minutes to catch events from before agent started
         start_time_expr = "(Get-Date).AddSeconds(-120)"
 
+    # Map channel names to syslog facility numbers
+    _CHANNEL_FACILITY = {
+        "System": 0, "Application": 1, "Security": 4, "Setup": 1,
+    }
+
+    # Limit per channel to stay within max_events total
+    per_channel = max(20, max_events // max(len(channels), 1))
+
     logs = []
-    for log_name in ("System", "Application"):
-        # Use _ps directly with ConvertTo-Json inside the try block.
-        # _ps_json appends "| ConvertTo-Json" AFTER catch which breaks PowerShell parsing.
+    for log_name in channels:
+        facility = _CHANNEL_FACILITY.get(log_name, 1)
+
+        # Security log uses Keywords instead of Level for filtering
+        if log_name == "Security":
+            filter_part = f"LogName='{log_name}'; StartTime=$startTime"
+        else:
+            filter_part = f"LogName='{log_name}'; Level={level_str}; StartTime=$startTime"
+
         ps_cmd = (
             f"try {{ "
             f"$startTime = {start_time_expr}; "
-            f"Get-WinEvent -FilterHashtable @{{LogName='{log_name}'; Level={level_str}; StartTime=$startTime}} "
-            f"-MaxEvents {max_events} -ErrorAction Stop | "
+            f"Get-WinEvent -FilterHashtable @{{{filter_part}}} "
+            f"-MaxEvents {per_channel} -ErrorAction Stop | "
             f"ForEach-Object {{ @{{ "
             f"ts = $_.TimeCreated.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); "
             f"level = $_.Level; "
             f"source = $_.ProviderName; "
             f"id = $_.Id; "
+            f"ch = '{log_name}'; "
             f"msg = if ($_.Message) {{ if ($_.Message.Length -gt 500) {{ $_.Message.Substring(0,500) }} else {{ $_.Message }} }} else {{ '' }} "
             f"}} }} | ConvertTo-Json -Compress"
             f"}} catch {{ }}"
@@ -755,26 +772,143 @@ def get_recent_logs(max_events=200, levels=None):
             except Exception:
                 result = None
         if result:
-            # PowerShell returns single object (not array) if only 1 result
             if isinstance(result, dict):
                 result = [result]
             for entry in result:
                 if not isinstance(entry, dict):
                     continue
+                sev = _WIN_LEVEL_TO_SYSLOG.get(entry.get("level"), 6)
+                # Security events: audit success=info, audit failure=warning
+                if log_name == "Security":
+                    sev = 4 if entry.get("level") == 0 else 6
                 logs.append({
                     "timestamp": entry.get("ts", ""),
-                    "severity": _WIN_LEVEL_TO_SYSLOG.get(entry.get("level"), 6),
+                    "severity": sev,
                     "app_name": entry.get("source", ""),
-                    "message": (entry.get("msg") or "").replace("\r\n", " ").replace("\n", " "),
-                    "facility": 1 if log_name == "Application" else 0,  # user vs kern
+                    "message": f"[{log_name}] " + (entry.get("msg") or "").replace("\r\n", " ").replace("\n", " "),
+                    "facility": facility,
                 })
 
     if logs:
-        # Update last timestamp to newest entry
         newest = max((l["timestamp"] for l in logs if l["timestamp"]), default=None)
         if newest:
             _last_log_ts = newest
 
+    return logs
+
+
+# ── Log file tailing ─────────────────────────────────────────────────────────
+
+_file_positions: dict = {}  # path -> (inode/size, offset)
+
+
+def tail_log_files(file_paths, max_lines=200):
+    """Read new lines from custom log files. Tracks position between calls."""
+    import glob as globmod
+    logs = []
+    if not file_paths:
+        return logs
+
+    for pattern in file_paths:
+        pattern = pattern.strip()
+        if not pattern:
+            continue
+        # Expand globs
+        matched = globmod.glob(pattern)
+        if not matched:
+            continue
+
+        for filepath in matched:
+            try:
+                stat = os.stat(filepath)
+                file_key = filepath.lower()
+                prev_size, prev_offset = _file_positions.get(file_key, (0, 0))
+
+                # File was truncated or rotated — reset
+                if stat.st_size < prev_offset:
+                    prev_offset = 0
+
+                if stat.st_size == prev_offset:
+                    continue  # no new data
+
+                with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                    f.seek(prev_offset)
+                    lines_read = 0
+                    for line in f:
+                        line = line.rstrip("\r\n")
+                        if not line:
+                            continue
+                        if lines_read >= max_lines:
+                            break
+                        logs.append({
+                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            "severity": 6,  # informational
+                            "app_name": os.path.basename(filepath),
+                            "message": line[:1000],
+                            "facility": 1,  # user
+                        })
+                        lines_read += 1
+                    _file_positions[file_key] = (stat.st_size, f.tell())
+            except Exception as e:
+                log.debug("Cannot tail %s: %s", filepath, e)
+
+    return logs
+
+
+# ── Agent self-log upload ────────────────────────────────────────────────────
+
+_agent_log_offset = 0
+
+
+def get_agent_log_entries(max_lines=50):
+    """Read new entries from the agent's own log file."""
+    global _agent_log_offset
+
+    if getattr(sys, 'frozen', False):
+        log_dir = os.path.dirname(sys.executable)
+    else:
+        log_dir = os.path.dirname(os.path.abspath(__file__))
+    log_file = os.path.join(log_dir, "nodeglow-agent.log")
+
+    logs = []
+    try:
+        if not os.path.exists(log_file):
+            return logs
+        stat = os.stat(log_file)
+        if stat.st_size < _agent_log_offset:
+            _agent_log_offset = 0  # rotated
+        if stat.st_size == _agent_log_offset:
+            return logs
+
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            f.seek(_agent_log_offset)
+            count = 0
+            for line in f:
+                line = line.rstrip("\r\n")
+                if not line:
+                    continue
+                if count >= max_lines:
+                    break
+                # Parse severity from log line (e.g. "2026-03-09 12:00:00 ERROR   ...")
+                sev = 6  # info
+                upper = line.upper()
+                if " ERROR " in upper or "ERROR:" in upper:
+                    sev = 3
+                elif " WARNING " in upper or "WARN " in upper:
+                    sev = 4
+                elif " CRITICAL " in upper:
+                    sev = 2
+                logs.append({
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "severity": sev,
+                    "app_name": "nodeglow-agent",
+                    "message": line[:500],
+                    "facility": 1,
+                })
+                count += 1
+            _agent_log_offset = f.tell()
+    except Exception as e:
+        log.debug("Cannot read agent log: %s", e)
     return logs
 
 
@@ -1138,6 +1272,9 @@ def main():
     log_interval = 60  # collect logs every 60 seconds
     last_log_send = 0
     server_log_levels = [1, 2, 3]  # default: Critical, Error, Warning
+    server_log_channels = ["System", "Application"]  # default channels
+    server_log_file_paths = []  # custom file paths to tail
+    server_upload_agent_log = True
 
     while True:
         try:
@@ -1145,7 +1282,7 @@ def main():
             ok, srv_config = send_metrics(args.server, args.token, data)
             if ok:
                 log.info("OK cpu=%s%% mem=%s%%", data.get('cpu_pct', '?'), data.get('memory', {}).get('pct', '?'))
-                # Update log levels from server config
+                # Update config from server
                 if "log_levels" in srv_config:
                     try:
                         new_levels = [int(x) for x in srv_config["log_levels"].split(",") if x.strip()]
@@ -1154,13 +1291,43 @@ def main():
                         server_log_levels = new_levels
                     except Exception:
                         pass
+                if "log_channels" in srv_config:
+                    try:
+                        new_channels = [c.strip() for c in srv_config["log_channels"].split(",") if c.strip()]
+                        if new_channels != server_log_channels:
+                            log.info("Log channels updated: %s", new_channels)
+                        server_log_channels = new_channels
+                    except Exception:
+                        pass
+                if "log_file_paths" in srv_config:
+                    try:
+                        new_paths = [p.strip() for p in srv_config["log_file_paths"].splitlines() if p.strip()]
+                        if new_paths != server_log_file_paths:
+                            log.info("Log file paths updated: %s", new_paths)
+                        server_log_file_paths = new_paths
+                    except Exception:
+                        pass
+                server_upload_agent_log = srv_config.get("upload_agent_log", True)
 
             # Send logs less frequently than metrics
             now = time.time()
             if now - last_log_send >= log_interval:
                 last_log_send = now
                 try:
-                    logs = get_recent_logs(levels=server_log_levels)
+                    logs = get_recent_logs(levels=server_log_levels, channels=server_log_channels)
+
+                    # Tail custom log files
+                    if server_log_file_paths:
+                        file_logs = tail_log_files(server_log_file_paths)
+                        if file_logs:
+                            logs.extend(file_logs)
+
+                    # Agent self-log
+                    if server_upload_agent_log:
+                        agent_logs = get_agent_log_entries()
+                        if agent_logs:
+                            logs.extend(agent_logs)
+
                     if logs:
                         lok = send_logs(args.server, args.token, socket.gethostname(), logs)
                         log.info("Logs: %d entries %s", len(logs), "sent" if lok else "FAILED")
