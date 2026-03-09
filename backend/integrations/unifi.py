@@ -354,3 +354,8 @@ class UnifiIntegration(BaseIntegration):
 
     async def health_check(self) -> bool:
         return await self._api().health_check()
+
+    async def on_snapshot(self, data: dict, config: dict, db) -> None:
+        """Auto-import UniFi devices as ping hosts after each successful collect."""
+        ctrl_name = config.get("host", "UniFi")
+        await import_unifi_devices(ctrl_name, data, db)
