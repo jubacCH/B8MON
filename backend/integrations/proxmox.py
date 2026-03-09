@@ -213,11 +213,21 @@ async def import_proxmox_hosts(cluster_name: str, data: dict, db) -> dict:
     existing_q = await db.execute(select(PingHost))
     existing: dict[str, PingHost] = {h.hostname: h for h in existing_q.scalars().all()}
 
-    guests = data.get("vms", []) + data.get("containers", [])
+    # Import nodes (physical hosts) + VMs + LXCs
+    all_entries = []
+    for node in data.get("nodes", []):
+        all_entries.append({
+            **node,
+            "running": node.get("online", False),
+            "_is_node": True,
+        })
+    for g in data.get("vms", []) + data.get("containers", []):
+        all_entries.append(g)
+
     added = merged = skipped = 0
     dirty = False
 
-    for g in guests:
+    for g in all_entries:
         hostname = (g.get("name") or "").strip()
         if not hostname:
             skipped += 1
