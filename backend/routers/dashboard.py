@@ -37,7 +37,7 @@ DEFAULT_LAYOUT = [
     {"id": "heatmap",       "x": 0, "y": 23, "w": 6,  "h": 10},
     {"id": "uptime",        "x": 6, "y": 23, "w": 6,  "h": 10},
     # Row 3 – Top 10 resource tables (full width)
-    {"id": "top10",         "x": 0, "y": 33, "w": 12, "h": 10},
+    {"id": "top10",         "x": 0, "y": 33, "w": 12, "h": 18},
 ]
 
 
