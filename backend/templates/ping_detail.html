@@ -1110,6 +1110,23 @@
         </div>
       </div>
 
+      <!-- SNMP History Chart -->
+      <div class="glass-card overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-white/[0.08]">
+          <h3 class="ng-heading text-sm text-[--ng-text-secondary]">History</h3>
+          <select id="snmp-chart-metric" onchange="snmpUpdateChart()" class="ng-input text-xs py-1 w-48">
+            {% for key, val in snmp_latest.items() %}
+            {% if val is number %}
+            <option value="{{ key }}">{{ key }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div class="p-4" style="height: 220px">
+          <canvas id="snmp-chart"></canvas>
+        </div>
+      </div>
+
       <!-- Threshold config form (hidden by default) -->
       <div id="snmp-thresh-form" class="glass-card p-4 hidden">
         <h3 class="text-xs font-medium text-[--ng-text-secondary] mb-3">Threshold Configuration</h3>
@@ -1574,5 +1591,75 @@
     if (resp.ok) location.reload();
     else alert('Failed to save thresholds');
   };
+
+  // ── SNMP History Chart ────────────────────────────────────────────────
+  let _snmpChart = null;
+  let _snmpResults = null;
+
+  async function snmpLoadHistory() {
+    if (_snmpResults) return;
+    try {
+      const resp = await fetch(`/api/snmp/hosts/{{ host.id }}/results?limit=120`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      _snmpResults = data.results || [];
+      snmpUpdateChart();
+    } catch(e) {}
+  }
+
+  window.snmpUpdateChart = function() {
+    if (!_snmpResults || !_snmpResults.length) return;
+    const metric = document.getElementById('snmp-chart-metric')?.value;
+    if (!metric) return;
+
+    const labels = [];
+    const values = [];
+    for (const r of _snmpResults) {
+      const ts = new Date(r.timestamp);
+      labels.push(ts.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
+      const v = r.data?.[metric];
+      values.push(typeof v === 'number' ? v : null);
+    }
+
+    const canvas = document.getElementById('snmp-chart');
+    if (!canvas) return;
+
+    if (_snmpChart) _snmpChart.destroy();
+
+    _snmpChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          borderColor: getComputedStyle(document.documentElement).getPropertyValue('--ng-primary').trim() || '#38BDF8',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointHitRadius: 8,
+          tension: 0.3,
+          spanGaps: true,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748b', font: { size: 10 }, maxTicksLimit: 10 } },
+          y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748b', font: { size: 10 } }, beginAtZero: false }
+        },
+        interaction: { intersect: false, mode: 'index' },
+      }
+    });
+  };
+
+  // Auto-load SNMP history when SNMP tab is shown
+  const _origSwitchTab = window.switchTab;
+  window.switchTab = function(id) {
+    _origSwitchTab(id);
+    if (id === 'snmp' && {{ 'true' if snmp_config else 'false' }}) snmpLoadHistory();
+  };
+  // If SNMP tab is active on load
+  if (activeTab === 'snmp' && {{ 'true' if snmp_config else 'false' }}) snmpLoadHistory();
 </script>
 {% endblock %}

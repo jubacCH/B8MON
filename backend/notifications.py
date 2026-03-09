@@ -25,6 +25,21 @@ async def _send_discord(webhook_url: str, title: str, message: str, color: int =
         resp.raise_for_status()
 
 
+async def _send_webhook(url: str, secret: str, title: str, message: str,
+                        severity: str = "critical") -> None:
+    import hashlib, hmac, json, time as _time
+    payload = {"title": title, "message": message, "severity": severity,
+               "timestamp": int(_time.time()), "source": "nodeglow"}
+    body = json.dumps(payload, separators=(",", ":"))
+    headers = {"Content-Type": "application/json"}
+    if secret:
+        sig = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+        headers["X-Nodeglow-Signature"] = f"sha256={sig}"
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(url, content=body, headers=headers)
+        resp.raise_for_status()
+
+
 async def _send_email(host: str, port: int, user: str, password: str,
                       from_addr: str, to_addr: str, subject: str, body: str) -> None:
     msg = MIMEText(body, "plain", "utf-8")
@@ -55,6 +70,8 @@ async def notify(title: str, message: str, severity: str = "critical") -> None:
         tg_token    = await get_setting(db, "telegram_bot_token", "")
         tg_chat     = await get_setting(db, "telegram_chat_id", "")
         dc_webhook  = await get_setting(db, "discord_webhook_url", "")
+        wh_url      = await get_setting(db, "webhook_url", "")
+        wh_secret   = await get_setting(db, "webhook_secret", "")
         smtp_host   = await get_setting(db, "smtp_host", "")
         smtp_port   = await get_setting(db, "smtp_port", "587")
         smtp_user   = await get_setting(db, "smtp_user", "")
@@ -70,6 +87,8 @@ async def notify(title: str, message: str, severity: str = "critical") -> None:
         tasks.append(_send_telegram(tg_token, tg_chat, f"<b>{title}</b>\n{message}"))
     if dc_webhook:
         tasks.append(_send_discord(dc_webhook, title, message, color))
+    if wh_url:
+        tasks.append(_send_webhook(wh_url, wh_secret, title, message, severity))
     if smtp_host and smtp_user and smtp_pw_enc and smtp_to:
         try:
             smtp_pw = decrypt_value(smtp_pw_enc)

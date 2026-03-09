@@ -19,6 +19,7 @@ from routers import (
     subnet_scanner,
     credentials,
     snmp as snmp_router,
+    ssl_monitor,
     api_v1,
 )
 
@@ -42,7 +43,15 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
 
 
-app = FastAPI(title="NODEGLOW", lifespan=lifespan)
+app = FastAPI(
+    title="NODEGLOW",
+    version="1.0.0",
+    description="Network monitoring and incident correlation platform",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+    lifespan=lifespan,
+)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -99,6 +108,8 @@ async def _get_nav_counts(db) -> dict:
 async def inject_globals(request: Request, call_next):
     if request.url.path.startswith("/static/") or request.url.path == "/health" \
             or request.url.path.startswith("/api/agent/") or request.url.path.startswith("/api/v1/") \
+            or request.url.path.startswith("/api/docs") or request.url.path.startswith("/api/redoc") \
+            or request.url.path.startswith("/api/openapi") \
             or request.url.path.startswith("/ws/") \
             or request.url.path.startswith("/install/") or "/download/" in request.url.path:
         return await call_next(request)
@@ -205,4 +216,5 @@ app.include_router(agents_router.router)
 app.include_router(subnet_scanner.router)
 app.include_router(credentials.router)
 app.include_router(snmp_router.router)
+app.include_router(ssl_monitor.router)
 app.include_router(api_v1.router)

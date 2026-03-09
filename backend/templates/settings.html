@@ -626,6 +626,42 @@
         </div>
       </div>
 
+      <!-- Webhook -->
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+        <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-orange-500/15 flex items-center justify-center">
+              <svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+              </svg>
+            </div>
+            <h3 class="ng-heading text-sm text-[--ng-text-primary]">Webhook</h3>
+          </div>
+          <button type="button" onclick="testNotification('webhook')"
+                  class="px-3 py-1.5 text-xs ng-btn ng-btn-ghost">
+            Send test
+          </button>
+        </div>
+        <div class="px-5 py-4 space-y-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">URL</label>
+            <input type="text" name="webhook_url" value="{{ webhook_url }}"
+                   placeholder="https://example.com/webhook"
+                   class="ng-input">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Secret <span class="text-slate-600 font-normal">(optional, for HMAC-SHA256 signature)</span></label>
+            <input type="text" name="webhook_secret" value="{{ webhook_secret }}"
+                   placeholder="my-secret-key"
+                   class="ng-input">
+          </div>
+          <p class="text-xs text-slate-600">
+            POSTs JSON with <code class="text-slate-400">title</code>, <code class="text-slate-400">message</code>, <code class="text-slate-400">severity</code>, <code class="text-slate-400">timestamp</code>.
+            Signature in <code class="text-slate-400">X-Nodeglow-Signature</code> header.
+          </p>
+        </div>
+      </div>
+
       <!-- Email -->
       <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
         <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">

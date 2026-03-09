@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}SSL Certificates – {{ request.state.site_name }}{% endblock %}
+
+{% block content %}
+<div class="p-8 max-w-5xl mx-auto">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="ng-heading text-2xl text-[--ng-text-primary]">SSL Certificates</h1>
+      <p class="text-sm text-slate-500 mt-0.5">
+        {{ certs|length }} HTTPS host{{ 's' if certs|length != 1 else '' }}
+        {% if expiring_soon %} · <span class="text-yellow-400">{{ expiring_soon }} expiring soon</span>{% endif %}
+      </p>
+    </div>
+    <button onclick="_refreshAll()" id="refresh-all-btn"
+            class="ng-btn ng-btn-primary text-xs flex items-center gap-1.5">
+      <svg id="refresh-spin" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+      Refresh All
+    </button>
+  </div>
+
+  {% if not certs %}
+  <div class="glass-card-static !p-8 text-center">
+    <svg class="w-12 h-12 mx-auto text-slate-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+    </svg>
+    <p class="text-slate-400">No HTTPS hosts configured.</p>
+    <p class="text-xs text-slate-600 mt-1">Add hosts with check type <code class="text-slate-400">https</code> to monitor their certificates.</p>
+  </div>
+  {% else %}
+
+  <!-- Summary cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+    {% set valid = certs|selectattr('days', 'defined')|selectattr('days', 'ne', none)|list %}
+    {% set critical = valid|selectattr('days', 'le', 7)|list %}
+    {% set warning = valid|selectattr('days', 'le', 30)|rejectattr('days', 'le', 7)|list %}
+    {% set healthy = valid|rejectattr('days', 'le', 30)|list %}
+    {% set unknown = certs|length - valid|length %}
+
+    <div class="glass-card-static !p-4">
+      <p class="text-xs text-slate-500">Total</p>
+      <p class="text-xl font-bold text-[--ng-text-primary]">{{ certs|length }}</p>
+    </div>
+    <div class="glass-card-static !p-4">
+      <p class="text-xs text-emerald-400">Healthy (>30d)</p>
+      <p class="text-xl font-bold text-emerald-400">{{ healthy|length }}</p>
+    </div>
+    <div class="glass-card-static !p-4">
+      <p class="text-xs text-yellow-400">Warning (≤30d)</p>
+      <p class="text-xl font-bold text-yellow-400">{{ warning|length }}</p>
+    </div>
+    <div class="glass-card-static !p-4">
+      <p class="text-xs text-red-400">Critical (≤7d)</p>
+      <p class="text-xl font-bold text-red-400">{{ critical|length }}</p>
+    </div>
+  </div>
+
+  <!-- Certificate table -->
+  <div class="glass-card-static overflow-hidden">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-white/[0.08] text-left">
+          <th class="px-4 py-3 text-xs font-medium text-slate-500">Host</th>
+          <th class="px-4 py-3 text-xs font-medium text-slate-500">Hostname</th>
+          <th class="px-4 py-3 text-xs font-medium text-slate-500 text-right">Days Left</th>
+          <th class="px-4 py-3 text-xs font-medium text-slate-500">Status</th>
+          <th class="px-4 py-3 text-xs font-medium text-slate-500 text-right">Details</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-white/[0.05]">
+        {% for cert in certs %}
+        <tr class="hover:bg-white/[0.02] transition-colors" id="ssl-row-{{ cert.id }}">
+          <td class="px-4 py-3">
+            <a href="/hosts/{{ cert.id }}" class="text-[--ng-text-primary] hover:text-[--ng-primary] transition-colors font-medium">
+              {{ cert.name }}
+            </a>
+          </td>
+          <td class="px-4 py-3 text-slate-400 text-xs font-mono">{{ cert.hostname }}</td>
+          <td class="px-4 py-3 text-right font-mono font-bold
+            {% if cert.days is none %}text-slate-600
+            {% elif cert.days <= 7 %}text-red-400
+            {% elif cert.days <= 30 %}text-yellow-400
+            {% else %}text-emerald-400{% endif %}">
+            {{ cert.days if cert.days is not none else '–' }}
+          </td>
+          <td class="px-4 py-3">
+            {% if cert.days is none %}
+              <span class="px-2 py-0.5 rounded-full text-[10px] bg-slate-500/10 text-slate-500">Unknown</span>
+            {% elif cert.days <= 7 %}
+              <span class="px-2 py-0.5 rounded-full text-[10px] bg-red-500/10 text-red-400 border border-red-500/20">Critical</span>
+            {% elif cert.days <= 30 %}
+              <span class="px-2 py-0.5 rounded-full text-[10px] bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">Warning</span>
+            {% else %}
+              <span class="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Valid</span>
+            {% endif %}
+            {% if not cert.enabled %}
+              <span class="px-2 py-0.5 rounded-full text-[10px] bg-slate-500/10 text-slate-500 ml-1">disabled</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 text-right">
+            <button onclick="_refreshOne({{ cert.id }}, this)"
+                    class="p-1.5 rounded-lg text-[--ng-text-secondary] hover:text-ng-primary hover:bg-white/[0.05] transition-colors"
+                    title="Refresh certificate info">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+            </button>
+          </td>
+        </tr>
+        <!-- Detail row (hidden until expanded) -->
+        <tr id="ssl-detail-{{ cert.id }}" class="hidden">
+          <td colspan="5" class="px-4 py-3 bg-white/[0.02]">
+            <div class="text-xs text-slate-400" id="ssl-info-{{ cert.id }}">Loading...</div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+async function _refreshOne(id, btn) {
+  const origHTML = btn.innerHTML;
+  btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>';
+  btn.disabled = true;
+  try {
+    const resp = await fetch(`/api/ssl/refresh/${id}`, { method: 'POST' });
+    const data = await resp.json();
+    const detailRow = document.getElementById(`ssl-detail-${id}`);
+    const infoDiv = document.getElementById(`ssl-info-${id}`);
+
+    if (data.ok) {
+      // Update days in main row
+      const row = document.getElementById(`ssl-row-${id}`);
+      const daysCell = row.querySelectorAll('td')[2];
+      const days = data.days;
+      daysCell.textContent = days;
+      daysCell.className = 'px-4 py-3 text-right font-mono font-bold ' +
+        (days <= 7 ? 'text-red-400' : days <= 30 ? 'text-yellow-400' : 'text-emerald-400');
+
+      // Show detail
+      let html = '<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">';
+      if (data.subject_cn) html += `<div><span class="text-slate-600">Subject</span><br><span class="text-slate-300">${data.subject_cn}</span></div>`;
+      if (data.issuer_cn) html += `<div><span class="text-slate-600">Issuer</span><br><span class="text-slate-300">${data.issuer_cn}</span></div>`;
+      if (data.issued_date) html += `<div><span class="text-slate-600">Issued</span><br><span class="text-slate-300">${data.issued_date}</span></div>`;
+      if (data.expiry_date) html += `<div><span class="text-slate-600">Expires</span><br><span class="text-slate-300">${data.expiry_date}</span></div>`;
+      html += '</div>';
+      infoDiv.innerHTML = html;
+      detailRow.classList.remove('hidden');
+    } else {
+      infoDiv.innerHTML = `<span class="text-red-400">${data.error || 'Failed to fetch certificate'}</span>`;
+      detailRow.classList.remove('hidden');
+    }
+  } catch(e) {
+    // ignore
+  } finally {
+    btn.innerHTML = origHTML;
+    btn.disabled = false;
+  }
+}
+
+async function _refreshAll() {
+  const btn = document.getElementById('refresh-all-btn');
+  const spin = document.getElementById('refresh-spin');
+  btn.disabled = true;
+  spin.classList.add('animate-spin');
+  try {
+    const resp = await fetch('/api/ssl/refresh-all', { method: 'POST' });
+    const data = await resp.json();
+    if (data.ok) {
+      setTimeout(() => location.reload(), 500);
+    }
+  } catch(e) {
+    // ignore
+  } finally {
+    btn.disabled = false;
+    spin.classList.remove('animate-spin');
+  }
+}
+</script>
+{% endblock %}

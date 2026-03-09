@@ -43,6 +43,8 @@ async def settings_page(request: Request, db: AsyncSession = Depends(get_db)):
     telegram_bot_token  = await get_setting(db, "telegram_bot_token", "")
     telegram_chat_id    = await get_setting(db, "telegram_chat_id", "")
     discord_webhook_url = await get_setting(db, "discord_webhook_url", "")
+    webhook_url         = await get_setting(db, "webhook_url", "")
+    webhook_secret      = await get_setting(db, "webhook_secret", "")
     smtp_host           = await get_setting(db, "smtp_host", "")
     smtp_port           = await get_setting(db, "smtp_port", "587")
     smtp_user           = await get_setting(db, "smtp_user", "")
@@ -75,6 +77,8 @@ async def settings_page(request: Request, db: AsyncSession = Depends(get_db)):
         "telegram_bot_token": telegram_bot_token,
         "telegram_chat_id": telegram_chat_id,
         "discord_webhook_url": discord_webhook_url,
+        "webhook_url": webhook_url,
+        "webhook_secret": webhook_secret,
         "smtp_host": smtp_host,
         "smtp_port": smtp_port,
         "smtp_user": smtp_user,
@@ -279,6 +283,8 @@ async def save_notifications(
     telegram_bot_token:  str = Form(""),
     telegram_chat_id:    str = Form(""),
     discord_webhook_url: str = Form(""),
+    webhook_url:         str = Form(""),
+    webhook_secret:      str = Form(""),
     smtp_host:           str = Form(""),
     smtp_port:           str = Form("587"),
     smtp_user:           str = Form(""),
@@ -291,6 +297,8 @@ async def save_notifications(
     await set_setting(db, "telegram_bot_token", telegram_bot_token.strip())
     await set_setting(db, "telegram_chat_id", telegram_chat_id.strip())
     await set_setting(db, "discord_webhook_url", discord_webhook_url.strip())
+    await set_setting(db, "webhook_url", webhook_url.strip())
+    await set_setting(db, "webhook_secret", webhook_secret.strip())
     await set_setting(db, "smtp_host", smtp_host.strip())
     await set_setting(db, "smtp_port", smtp_port.strip() or "587")
     await set_setting(db, "smtp_user", smtp_user.strip())
@@ -303,7 +311,7 @@ async def save_notifications(
 
 @router.post("/notifications/test")
 async def test_notification(channel: str = Form(""), db: AsyncSession = Depends(get_db)):
-    from notifications import _send_telegram, _send_discord, _send_email
+    from notifications import _send_telegram, _send_discord, _send_webhook, _send_email
     from database import decrypt_value, get_setting
     try:
         if channel == "telegram":
@@ -313,6 +321,10 @@ async def test_notification(channel: str = Form(""), db: AsyncSession = Depends(
         elif channel == "discord":
             url = await get_setting(db, "discord_webhook_url", "")
             await _send_discord(url, "Nodeglow Test", "Notifications are working ✓", 0x3498db)
+        elif channel == "webhook":
+            url    = await get_setting(db, "webhook_url", "")
+            secret = await get_setting(db, "webhook_secret", "")
+            await _send_webhook(url, secret, "Nodeglow Test", "Notifications are working", "info")
         elif channel == "email":
             host  = await get_setting(db, "smtp_host", "")
             port  = int(await get_setting(db, "smtp_port", "587"))
