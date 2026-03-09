@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
-import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
@@ -26,7 +25,7 @@ CONCURRENT_PINGS = 100
 
 async def _ping_one(sem: asyncio.Semaphore, ip: str) -> dict:
     async with sem:
-        ok, latency = await ping_host(ip, count=1, timeout=1)
+        ok, latency = await ping_host(ip, timeout=1)
         return {"ip": ip, "alive": ok, "latency_ms": round(latency, 1) if latency else None}
 
 
