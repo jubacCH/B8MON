@@ -1,14 +1,18 @@
 <clickhouse>
-    <!-- Homelab-friendly memory limits. For larger deployments, increase these. -->
+    <!-- Homelab-friendly memory limits. Increase for larger deployments. -->
     <max_server_memory_usage_to_ram_ratio>0.3</max_server_memory_usage_to_ram_ratio>
     <mark_cache_size>268435456</mark_cache_size>
     <uncompressed_cache_size>536870912</uncompressed_cache_size>
     <background_pool_size>2</background_pool_size>
     <background_merges_mutations_concurrency_ratio>1</background_merges_mutations_concurrency_ratio>
     <background_move_pool_size>1</background_move_pool_size>
-    <number_of_free_entries_in_pool_to_execute_mutation>1</number_of_free_entries_in_pool_to_execute_mutation>
     <max_concurrent_queries>20</max_concurrent_queries>
     <logger>
         <level>warning</level>
     </logger>
+    <!-- MergeTree defaults — must be compatible with background_pool_size above -->
+    <merge_tree>
+        <number_of_free_entries_in_pool_to_execute_mutation>1</number_of_free_entries_in_pool_to_execute_mutation>
+        <number_of_free_entries_in_pool_to_lower_max_size_of_merge>1</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+    </merge_tree>
 </clickhouse>

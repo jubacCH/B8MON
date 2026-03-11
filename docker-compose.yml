@@ -27,7 +27,7 @@ services:
       CLICKHOUSE_PASSWORD: ${POSTGRES_PASSWORD:-nodeglow}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     healthcheck:
-      test: ["CMD-SHELL", "clickhouse-client --user nodeglow --password ${POSTGRES_PASSWORD:-nodeglow} --query 'SELECT 1'"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 10
