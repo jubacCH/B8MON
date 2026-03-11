@@ -6,46 +6,32 @@ A self-hosted infrastructure monitoring platform with **log intelligence**, **in
 
 ## Tech Stack
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Nodeglow                                │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                    Frontend                               │   │
-│  │  Jinja2 Templates  ·  Tailwind CSS  ·  Chart.js          │   │
-│  │  GridStack (dashboard)  ·  SPA navigation (fetch)        │   │
-│  └──────────────────────┬───────────────────────────────────┘   │
-│                         │                                       │
-│  ┌──────────────────────▼───────────────────────────────────┐   │
-│  │                  Application Layer                        │   │
-│  │  FastAPI (async)  ·  Uvicorn  ·  Python 3.11+            │   │
-│  │                                                           │   │
-│  │  ┌─────────────┐ ┌──────────────┐ ┌────────────────┐     │   │
-│  │  │  Scheduler   │ │  Correlation │ │ Log Intelligence│    │   │
-│  │  │  (APScheduler)│ │  Engine      │ │ (Drain-lite)   │    │   │
-│  │  └─────────────┘ └──────────────┘ └────────────────┘     │   │
-│  │                                                           │   │
-│  │  ┌─────────────────────────────────────────────────┐      │   │
-│  │  │              15 Integration Plugins              │      │   │
-│  │  │  Proxmox · UniFi · TrueNAS · Synology · pfSense │      │   │
-│  │  │  Pi-hole · AdGuard · Portainer · HASS · Gitea    │      │   │
-│  │  │  phpIPAM · Speedtest · UPS/NUT · Redfish · UNAS  │      │   │
-│  │  └─────────────────────────────────────────────────┘      │   │
-│  └──────────────────────┬─────────────┬─────────────────────┘   │
-│                         │             │                         │
-│  ┌──────────────────────▼──┐  ┌───────▼──────────────────────┐  │
-│  │     PostgreSQL 16       │  │     ClickHouse               │  │
-│  │  (config, hosts, users, │  │  (syslog messages,           │  │
-│  │   incidents, templates) │  │   high-volume time-series)   │  │
-│  │  SQLAlchemy (asyncpg)   │  │  clickhouse-driver (native)  │  │
-│  └─────────────────────────┘  └──────────────────────────────┘  │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                    Infrastructure                         │   │
-│  │  Docker Compose  ·  Syslog UDP/TCP  ·  Agent (Win/Linux) │   │
-│  │  Fernet Encryption  ·  REST API (api_keys)               │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph Frontend
+        FE["Jinja2 Templates · Tailwind CSS · Chart.js · GridStack"]
+    end
+
+    subgraph Application ["Application Layer — FastAPI (async) · Uvicorn · Python 3.11+"]
+        SCH["Scheduler<br/><small>APScheduler</small>"]
+        COR["Correlation<br/><small>Engine</small>"]
+        LOG["Log Intelligence<br/><small>Drain-lite</small>"]
+        RULES["Alert Rules<br/><small>Regex · Operators</small>"]
+        INT["15 Integration Plugins<br/><small>Proxmox · UniFi · TrueNAS · Synology · pfSense · Pi-hole<br/>AdGuard · Portainer · HASS · Gitea · phpIPAM · Speedtest<br/>UPS/NUT · Redfish · UNAS</small>"]
+    end
+
+    subgraph Data ["Data Layer"]
+        PG["PostgreSQL 16<br/><small>Config, hosts, users,<br/>incidents, templates<br/>SQLAlchemy (asyncpg)</small>"]
+        CH["ClickHouse<br/><small>Syslog messages,<br/>high-volume time-series<br/>clickhouse-driver (native)</small>"]
+    end
+
+    subgraph Infra ["Infrastructure"]
+        DOCKER["Docker Compose · Syslog UDP/TCP · Agent (Win/Linux)<br/>Fernet Encryption · REST API (api_keys)"]
+    end
+
+    Frontend --> Application
+    Application --> Data
+    Data --> Infra
 ```
 
 | Layer | Technology | Purpose |
