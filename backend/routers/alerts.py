@@ -1,13 +1,14 @@
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 from templating import templates
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import PingHost, PingResult, get_db
+from models.incident import Incident
 from models.integration import IntegrationConfig
 from services import snapshot as snap_svc
 
@@ -23,7 +24,12 @@ _INTEGRATION_LABELS = {
 
 
 @router.get("", response_class=HTMLResponse)
-async def alerts_page(request: Request, db: AsyncSession = Depends(get_db)):
+async def alerts_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    tab: str = Query("alerts", description="Active tab: alerts or incidents"),
+    status: str = Query(None, description="Filter incidents by status"),
+):
     alerts = []
 
     # ── Offline hosts ─────────────────────────────────────────────────────────
@@ -100,8 +106,30 @@ async def alerts_page(request: Request, db: AsyncSession = Depends(get_db)):
     # Sort: critical first, then by time desc
     alerts.sort(key=lambda a: (0 if a["severity"] == "critical" else 1, -(a["time"].timestamp() if a["time"] else 0)))
 
+    # ── Incidents ──────────────────────────────────────────────────────────────
+    status_order = case(
+        (Incident.status == "open", 0),
+        (Incident.status == "acknowledged", 1),
+        else_=2,
+    )
+    inc_query = select(Incident).order_by(status_order, Incident.updated_at.desc())
+    if status:
+        inc_query = inc_query.where(Incident.status == status)
+    incidents = (await db.execute(inc_query)).scalars().all()
+
+    inc_counts = {}
+    for s in ("open", "acknowledged", "resolved"):
+        c = (await db.execute(
+            select(func.count(Incident.id)).where(Incident.status == s)
+        )).scalar() or 0
+        inc_counts[s] = c
+
     return templates.TemplateResponse("alerts.html", {
         "request": request,
         "alerts": alerts,
+        "incidents": incidents,
+        "inc_counts": inc_counts,
+        "tab": tab,
+        "f_status": status,
         "active_page": "alerts",
     })

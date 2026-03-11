@@ -14,40 +14,13 @@ from models.incident import Incident, IncidentEvent
 router = APIRouter(prefix="/incidents")
 
 
-@router.get("", response_class=HTMLResponse)
-async def incidents_list(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    status: str = None,
-):
-    from sqlalchemy import case
-    status_order = case(
-        (Incident.status == "open", 0),
-        (Incident.status == "acknowledged", 1),
-        else_=2,
-    )
-    query = select(Incident).order_by(status_order, Incident.updated_at.desc())
-
+@router.get("")
+async def incidents_list(status: str = None):
+    """Redirect to unified alerts page with incidents tab."""
+    url = "/alerts?tab=incidents"
     if status:
-        query = query.where(Incident.status == status)
-
-    incidents = (await db.execute(query)).scalars().all()
-
-    # Counts by status
-    counts = {}
-    for s in ("open", "acknowledged", "resolved"):
-        c = (await db.execute(
-            select(func.count(Incident.id)).where(Incident.status == s)
-        )).scalar() or 0
-        counts[s] = c
-
-    return templates.TemplateResponse("incidents.html", {
-        "request": request,
-        "incidents": incidents,
-        "counts": counts,
-        "f_status": status,
-        "active_page": "incidents",
-    })
+        url += f"&status={status}"
+    return RedirectResponse(url, status_code=302)
 
 
 @router.get("/{incident_id}", response_class=HTMLResponse)
@@ -63,12 +36,12 @@ async def incident_detail(
     )).scalar_one_or_none()
 
     if not incident:
-        return RedirectResponse("/incidents", status_code=302)
+        return RedirectResponse("/alerts?tab=incidents", status_code=302)
 
     return templates.TemplateResponse("incident_detail.html", {
         "request": request,
         "incident": incident,
-        "active_page": "incidents",
+        "active_page": "alerts",
     })
 
 

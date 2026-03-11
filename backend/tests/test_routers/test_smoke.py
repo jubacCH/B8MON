@@ -48,9 +48,10 @@ async def test_syslog_page(client):
 
 
 async def test_incidents_page(client):
-    """Incidents page renders."""
-    resp = await client.get("/incidents")
-    assert resp.status_code == 200
+    """Incidents redirects to unified alerts page."""
+    resp = await client.get("/incidents", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "alerts?tab=incidents" in resp.headers.get("location", "")
 
 
 async def test_settings_page(client):
