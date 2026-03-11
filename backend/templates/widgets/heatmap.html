@@ -1,53 +1,67 @@
-{# Widget: Ping heatmap (7-day availability grid) #}
+{# Widget: Availability heatmap (7-day per-host grid) #}
 <div class="grid-stack-item" gs-id="heatmap" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="3" gs-min-w="4">
   <div class="grid-stack-item-content p-4 relative">
     {{ widget_remove_btn() }}
     {% if heatmap_data %}
-    <div class="flex items-center gap-2 mb-3 cursor-pointer section-header" data-section="heatmap">
-      <h2 class="metric-label !text-[10px]">Availability (7d)</h2>
-      <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-2 cursor-pointer section-header" data-section="heatmap">
+        <h2 class="metric-label !text-[10px]">Availability</h2>
+        <span class="text-[9px] font-mono text-[--ng-text-muted]">7 days</span>
+        <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1">
+          <span class="w-2 h-2 rounded-[2px] bg-ng-critical/60"></span>
+          <span class="w-2 h-2 rounded-[2px] bg-ng-warning/50"></span>
+          <span class="w-2 h-2 rounded-[2px] bg-ng-success/30"></span>
+          <span class="w-2 h-2 rounded-[2px] bg-ng-success/70"></span>
+          <span class="text-[9px] text-[--ng-text-muted] font-mono ml-0.5">100%</span>
+        </div>
+      </div>
     </div>
-    <div class="section-body overflow-x-auto">
-      <table class="w-full text-[10px]">
-        <thead>
-          <tr>
-            <th class="text-left text-[--ng-text-muted] font-mono font-normal pb-1.5 pr-3 sticky left-0 bg-[--ng-bg]">Host</th>
-            {% for day in heatmap_days %}
-            <th class="text-center text-[--ng-text-muted] font-mono font-normal pb-1.5 px-0.5 min-w-[18px]">{{ day }}</th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in heatmap_data %}
-          <tr>
-            <td class="py-0.5 pr-3 sticky left-0 bg-[--ng-bg]">
-              <a href="/hosts/{{ row.host_id }}" class="text-[--ng-text-primary] hover:text-ng-primary transition-colors truncate block max-w-[100px]">{{ row.name }}</a>
-            </td>
+    <div class="section-body overflow-y-auto" style="max-height: calc(100% - 36px)">
+      <div class="space-y-[3px]">
+        {% for row in heatmap_data %}
+        <div class="flex items-center gap-2 group">
+          <a href="/hosts/{{ row.host_id }}" class="text-[10px] font-mono text-[--ng-text-secondary] group-hover:text-ng-primary transition-colors truncate w-24 shrink-0 text-right" title="{{ row.name }}">{{ row.name }}</a>
+          <div class="flex gap-[3px] flex-1">
             {% for pct in row.days %}
-            <td class="py-0.5 px-0.5">
-              <div class="w-3 h-3 rounded-sm mx-auto
-                {% if pct is none %}bg-white/[0.04]
-                {% elif pct >= 99 %}bg-ng-success/60
-                {% elif pct >= 95 %}bg-ng-success/30
-                {% elif pct >= 80 %}bg-ng-warning/50
-                {% else %}bg-ng-critical/50{% endif %}"
-                title="{{ '%.1f'|format(pct) if pct is not none else 'no data' }}%"></div>
-            </td>
+            <div class="relative flex-1 group/cell">
+              <div class="h-[14px] rounded-[3px] transition-all duration-150
+                {% if pct is none %}bg-white/[0.03] border border-white/[0.04]
+                {% elif pct >= 99.9 %}bg-ng-success/70 group-hover/cell:bg-ng-success/90
+                {% elif pct >= 99 %}bg-ng-success/50 group-hover/cell:bg-ng-success/70
+                {% elif pct >= 95 %}bg-ng-success/30 group-hover/cell:bg-ng-success/50
+                {% elif pct >= 80 %}bg-ng-warning/50 group-hover/cell:bg-ng-warning/70
+                {% else %}bg-ng-critical/60 group-hover/cell:bg-ng-critical/80{% endif %}">
+              </div>
+              <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded text-[9px] font-mono whitespace-nowrap opacity-0 group-hover/cell:opacity-100 pointer-events-none transition-opacity z-10"
+                   style="background:rgba(10,12,28,0.95);border:1px solid rgba(255,255,255,0.1)">
+                <span class="text-[--ng-text-primary]">{{ heatmap_days[loop.index0] }}</span>
+                <span class="text-[--ng-text-muted] ml-1">{{ '%.1f'|format(pct) if pct is not none else 'no data' }}{% if pct is not none %}%{% endif %}</span>
+              </div>
+            </div>
             {% endfor %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      <div class="flex items-center gap-2 mt-2">
-        <span class="text-[--ng-text-muted] text-[10px] font-mono">Legend:</span>
-        <span class="w-3 h-3 rounded-sm bg-ng-success/60"></span><span class="text-[10px] text-[--ng-text-muted]">≥99%</span>
-        <span class="w-3 h-3 rounded-sm bg-ng-success/30"></span><span class="text-[10px] text-[--ng-text-muted]">≥95%</span>
-        <span class="w-3 h-3 rounded-sm bg-ng-warning/50"></span><span class="text-[10px] text-[--ng-text-muted]">≥80%</span>
-        <span class="w-3 h-3 rounded-sm bg-ng-critical/50"></span><span class="text-[10px] text-[--ng-text-muted]">&lt;80%</span>
+          </div>
+          {% set avg = row.days|reject('none')|list %}
+          <span class="text-[9px] font-mono w-10 text-right shrink-0
+            {% if avg %}
+              {% set avg_val = (avg|sum / avg|length) %}
+              {% if avg_val >= 99 %}text-ng-success
+              {% elif avg_val >= 95 %}text-[--ng-text-secondary]
+              {% elif avg_val >= 80 %}text-ng-warning
+              {% else %}text-ng-critical{% endif %}
+            {% else %}text-[--ng-text-muted]{% endif %}">
+            {% if avg %}{{ '%.1f'|format(avg|sum / avg|length) }}%{% else %}-{% endif %}
+          </span>
+        </div>
+        {% endfor %}
       </div>
     </div>
     {% else %}
-    <p class="text-[--ng-text-muted] text-xs">No heatmap data</p>
+    <div class="flex items-center justify-center h-full">
+      <p class="text-[--ng-text-muted] text-xs font-mono">No availability data yet</p>
+    </div>
     {% endif %}
   </div>
 </div>

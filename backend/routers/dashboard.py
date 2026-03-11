@@ -686,7 +686,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         window_7d = now - timedelta(days=7)
         for i in range(7):
             d = (now - timedelta(days=6 - i))
-            heatmap_days.append(d.strftime("%a")[:2])
+            heatmap_days.append(d.strftime("%a %d.%m"))
 
         from sqlalchemy import cast, Date
         day_stats = (await db.execute(

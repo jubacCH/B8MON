@@ -747,28 +747,44 @@ async def toggle_maintenance(
 
 @router.get("/api/search")
 async def api_search_hosts(q: str = "", db: AsyncSession = Depends(get_db)):
-    """Search hosts by name, hostname, or IP. Returns JSON for Cmd+K search."""
+    """Search hosts by name, hostname, or IP. Returns JSON for sidebar search."""
     query = (q or "").strip().lower()
     if not query or len(query) < 2:
         return []
 
     result = await db.execute(
-        select(PingHost.id, PingHost.name, PingHost.hostname, PingHost.enabled, PingHost.source)
+        select(PingHost)
         .where(
             func.lower(PingHost.name).contains(query)
             | func.lower(PingHost.hostname).contains(query)
         )
         .order_by(PingHost.name)
-        .limit(15)
+        .limit(10)
     )
-    rows = result.all()
+    hosts = result.scalars().all()
+    if not hosts:
+        return []
+
+    # Get latest ping result for online status
+    host_ids = [h.id for h in hosts]
+    latest_sub = (
+        select(PingResult.host_id, func.max(PingResult.id).label("max_id"))
+        .where(PingResult.host_id.in_(host_ids))
+        .group_by(PingResult.host_id)
+        .subquery()
+    )
+    latest_rows = (await db.execute(
+        select(PingResult).join(latest_sub, PingResult.id == latest_sub.c.max_id)
+    )).scalars().all()
+    latest_map = {r.host_id: r for r in latest_rows}
+
     return [
         {
-            "id": r.id,
-            "name": r.name or r.hostname,
-            "hostname": r.hostname,
-            "enabled": r.enabled,
-            "source": r.source,
+            "id": h.id,
+            "name": h.name or h.hostname,
+            "hostname": h.hostname,
+            "enabled": h.enabled,
+            "online": latest_map[h.id].success if h.id in latest_map else None,
         }
-        for r in rows
+        for h in hosts
     ]

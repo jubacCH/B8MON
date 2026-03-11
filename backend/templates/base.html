@@ -104,13 +104,22 @@
       <!-- Navigation -->
       <nav class="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
 
-        <!-- Search shortcut -->
-        <button onclick="openCmdK()" class="ng-nav-item w-full text-left mb-1 !text-[--ng-text-muted] hover:!text-[--ng-text-secondary]">
-          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-          </svg>
-          <span class="flex-1">Search</span>
-        </button>
+        <!-- Inline search -->
+        <div class="relative mb-1 px-1">
+          <div class="relative">
+            <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[--ng-text-muted] pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input id="sidebar-search" type="text" placeholder="Search..." autocomplete="off"
+                   class="w-full bg-white/[0.04] border border-white/[0.06] rounded-lg text-xs text-[--ng-text-primary] placeholder:text-[--ng-text-muted] pl-8 pr-8 py-1.5 outline-none focus:border-[--ng-primary]/40 focus:bg-white/[0.06] transition-colors"
+                   oninput="sidebarSearch(this.value)"
+                   onfocus="if(this.value.trim().length>=2)document.getElementById('sidebar-results').classList.remove('hidden')"
+                   onkeydown="sidebarSearchKey(event)">
+            <kbd class="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-[--ng-text-muted] font-mono opacity-60">⌘K</kbd>
+          </div>
+          <div id="sidebar-results" class="hidden absolute left-1 right-1 top-full mt-1 z-50 glass-elevated rounded-lg overflow-hidden shadow-xl max-h-72 overflow-y-auto">
+          </div>
+        </div>
 
         <p class="px-3 pt-1 pb-1.5 text-[9px] font-mono uppercase tracking-[3px] text-[--ng-text-muted]">Monitor</p>
 
@@ -386,24 +395,14 @@
   <!-- ── Toast Container ──────────────────────────────────────────────── -->
   <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
-  <!-- ── Cmd+K Search Modal ───────────────────────────────────────────── -->
-  <div id="cmdk-modal" class="hidden fixed inset-0 bg-black/60 flex items-start justify-center z-50 pt-[15vh]"
-       onclick="if(event.target===this)closeCmdK()">
-    <div class="glass-elevated w-full max-w-lg overflow-hidden">
-      <div class="flex items-center gap-3 px-4 py-3 border-b border-white/[0.08]">
-        <svg class="w-4 h-4 text-[--ng-text-muted] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-        </svg>
-        <input id="cmdk-input" type="text" placeholder="Search hosts, integrations..." autocomplete="off"
-               class="flex-1 bg-transparent text-[--ng-text-primary] text-sm outline-none placeholder:text-[--ng-text-muted]"
-               oninput="cmdkSearch(this.value)">
-        <kbd class="text-[10px] text-[--ng-text-muted] font-mono px-1.5 py-0.5 rounded border border-white/[0.08] bg-white/[0.03]">ESC</kbd>
-      </div>
-      <div id="cmdk-results" class="max-h-80 overflow-y-auto p-2">
-        <p class="text-center text-[--ng-text-muted] text-xs py-6 font-mono">Type to search...</p>
-      </div>
-    </div>
-  </div>
+  <!-- Click outside closes sidebar search -->
+  <script>
+  document.addEventListener('click', function(e) {
+    const wrap = document.querySelector('.relative.mb-1.px-1');
+    const res = document.getElementById('sidebar-results');
+    if (wrap && res && !wrap.contains(e.target)) res.classList.add('hidden');
+  });
+  </script>
 
   <!-- ── Integration Picker Modal ─────────────────────────────────────── -->
   <div id="integration-picker" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"

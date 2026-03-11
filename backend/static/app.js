@@ -195,8 +195,8 @@ window.showToast = function(msg, type) {
   }, 4000);
 };
 
-// ── Cmd+K Search ──────────────────────────────────────────────────────────
-const cmdkItems = [
+// ── Sidebar Inline Search ─────────────────────────────────────────────────
+const _searchPages = [
   {name: 'Dashboard', url: '/', section: 'Pages'},
   {name: 'Hosts', url: '/hosts', section: 'Pages'},
   {name: 'Alerts', url: '/alerts', section: 'Pages'},
@@ -224,100 +224,107 @@ const cmdkItems = [
   {name: 'Redfish', url: '/integration/redfish', section: 'Integrations'},
 ];
 
-function openCmdK() {
-  document.getElementById('cmdk-modal').classList.remove('hidden');
-  const input = document.getElementById('cmdk-input');
-  input.value = '';
-  input.focus();
-  cmdkSearch('');
-}
-function closeCmdK() {
-  document.getElementById('cmdk-modal').classList.add('hidden');
-}
-let _cmdkTimer = null;
-window.cmdkSearch = function(q) {
-  const results = document.getElementById('cmdk-results');
+let _searchTimer = null;
+window.sidebarSearch = function(q) {
+  const container = document.getElementById('sidebar-results');
   const query = q.toLowerCase().trim();
-  if (!query) {
-    results.innerHTML = '<p class="text-center text-[--ng-text-muted] text-xs py-6 font-mono">Type to search...</p>';
+  if (!query || query.length < 2) {
+    container.classList.add('hidden');
     return;
   }
+  container.classList.remove('hidden');
 
-  // Static page/integration matches
-  const matches = cmdkItems.filter(i => i.name.toLowerCase().includes(query));
-  _renderCmdkResults(matches, []);
+  // Instant: static page/integration matches
+  const pages = _searchPages.filter(i => i.name.toLowerCase().includes(query));
+  _renderSidebarResults(pages, []);
 
-  // Debounced host search
-  clearTimeout(_cmdkTimer);
-  _cmdkTimer = setTimeout(async () => {
+  // Debounced: host search from API
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(async () => {
     try {
       const resp = await fetch(`/hosts/api/search?q=${encodeURIComponent(query)}`);
       if (!resp.ok) return;
       const hosts = await resp.json();
-      // Re-check input hasn't changed
-      const current = document.getElementById('cmdk-input').value.toLowerCase().trim();
-      if (current === query) _renderCmdkResults(matches, hosts);
+      const current = document.getElementById('sidebar-search').value.toLowerCase().trim();
+      if (current === query) _renderSidebarResults(pages, hosts);
     } catch(e) {}
-  }, 200);
+  }, 150);
 };
 
-function _renderCmdkResults(staticMatches, hosts) {
-  const results = document.getElementById('cmdk-results');
-  if (!staticMatches.length && !hosts.length) {
-    results.innerHTML = '<p class="text-center text-[--ng-text-muted] text-xs py-6 font-mono">No results</p>';
+function _renderSidebarResults(pages, hosts) {
+  const container = document.getElementById('sidebar-results');
+  if (!pages.length && !hosts.length) {
+    container.innerHTML = '<p class="text-center text-[--ng-text-muted] text-[10px] py-4 font-mono">No results</p>';
     return;
   }
   let html = '';
   let idx = 0;
-  let lastSection = '';
-  staticMatches.forEach(m => {
-    if (m.section !== lastSection) {
-      lastSection = m.section;
-      html += `<p class="text-[9px] font-mono uppercase tracking-[2px] text-[--ng-text-muted] px-3 pt-2 pb-1">${m.section}</p>`;
-    }
-    html += `<a href="${m.url}" onclick="closeCmdK()" class="cmdk-item flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[--ng-text-secondary] hover:bg-white/[0.06] hover:text-[--ng-text-primary] transition-colors ${idx === 0 ? 'bg-white/[0.04] text-[--ng-text-primary]' : ''}" data-idx="${idx}">${m.name}</a>`;
-    idx++;
-  });
+
+  // Hosts first (primary use case)
   if (hosts.length) {
     html += `<p class="text-[9px] font-mono uppercase tracking-[2px] text-[--ng-text-muted] px-3 pt-2 pb-1">Hosts</p>`;
     hosts.forEach(h => {
-      const status = h.enabled ? '<span class="w-1.5 h-1.5 rounded-full bg-ng-success inline-block"></span>' : '<span class="w-1.5 h-1.5 rounded-full bg-white/20 inline-block"></span>';
-      const sub = h.hostname !== h.name ? `<span class="text-[--ng-text-muted] text-xs font-mono ml-2">${h.hostname}</span>` : '';
-      html += `<a href="/hosts/${h.id}" onclick="closeCmdK()" class="cmdk-item flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[--ng-text-secondary] hover:bg-white/[0.06] hover:text-[--ng-text-primary] transition-colors ${idx === 0 ? 'bg-white/[0.04] text-[--ng-text-primary]' : ''}" data-idx="${idx}">${status} ${h.name}${sub}</a>`;
+      const dot = h.online === true
+        ? '<span class="w-1.5 h-1.5 rounded-full bg-ng-success shrink-0"></span>'
+        : h.online === false
+          ? '<span class="w-1.5 h-1.5 rounded-full bg-ng-critical shrink-0"></span>'
+          : '<span class="w-1.5 h-1.5 rounded-full bg-white/20 shrink-0"></span>';
+      const ip = h.hostname && h.hostname !== h.name
+        ? `<span class="text-[--ng-text-muted] text-[10px] font-mono">${h.hostname}</span>` : '';
+      html += `<a href="/hosts/${h.id}" class="sb-item flex items-center gap-2 px-3 py-1.5 text-xs text-[--ng-text-secondary] hover:bg-white/[0.06] hover:text-[--ng-text-primary] transition-colors cursor-pointer ${idx === 0 ? 'bg-white/[0.04] text-[--ng-text-primary]' : ''}" data-idx="${idx}">
+        ${dot}
+        <span class="truncate flex-1">${h.name}</span>
+        ${ip}
+      </a>`;
       idx++;
     });
   }
-  results.innerHTML = html;
+
+  if (pages.length) {
+    let lastSection = '';
+    pages.forEach(m => {
+      if (m.section !== lastSection) {
+        lastSection = m.section;
+        html += `<p class="text-[9px] font-mono uppercase tracking-[2px] text-[--ng-text-muted] px-3 pt-2 pb-1">${m.section}</p>`;
+      }
+      html += `<a href="${m.url}" class="sb-item flex items-center gap-2 px-3 py-1.5 text-xs text-[--ng-text-secondary] hover:bg-white/[0.06] hover:text-[--ng-text-primary] transition-colors cursor-pointer ${idx === 0 ? 'bg-white/[0.04] text-[--ng-text-primary]' : ''}" data-idx="${idx}">${m.name}</a>`;
+      idx++;
+    });
+  }
+  container.innerHTML = html;
 }
 
-// Keyboard shortcuts
+window.sidebarSearchKey = function(e) {
+  const container = document.getElementById('sidebar-results');
+  if (container.classList.contains('hidden')) return;
+  const items = [...container.querySelectorAll('.sb-item')];
+  if (!items.length) return;
+  const active = items.findIndex(i => i.classList.contains('bg-white/[0.04]'));
+
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const next = e.key === 'ArrowDown' ? Math.min(active + 1, items.length - 1) : Math.max(active - 1, 0);
+    items.forEach(i => i.classList.remove('bg-white/[0.04]', 'text-[--ng-text-primary]'));
+    items[next]?.classList.add('bg-white/[0.04]', 'text-[--ng-text-primary]');
+    items[next]?.scrollIntoView({block: 'nearest'});
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const sel = items[active >= 0 ? active : 0];
+    if (sel) {
+      container.classList.add('hidden');
+      navigate(sel.getAttribute('href'));
+    }
+  } else if (e.key === 'Escape') {
+    container.classList.add('hidden');
+    document.getElementById('sidebar-search').blur();
+  }
+};
+
+// Cmd/Ctrl+K → focus sidebar search
 document.addEventListener('keydown', e => {
-  // Cmd/Ctrl+K → open search
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
     e.preventDefault();
-    const modal = document.getElementById('cmdk-modal');
-    modal.classList.contains('hidden') ? openCmdK() : closeCmdK();
-    return;
-  }
-  // ESC → close search
-  if (e.key === 'Escape' && !document.getElementById('cmdk-modal').classList.contains('hidden')) {
-    closeCmdK();
-    return;
-  }
-  // Arrow nav in Cmd+K results
-  if (!document.getElementById('cmdk-modal').classList.contains('hidden')) {
-    const items = [...document.querySelectorAll('.cmdk-item')];
-    const active = items.findIndex(i => i.classList.contains('bg-white/[0.04]'));
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      const next = e.key === 'ArrowDown' ? Math.min(active + 1, items.length - 1) : Math.max(active - 1, 0);
-      items.forEach(i => { i.classList.remove('bg-white/[0.04]', 'text-[--ng-text-primary]'); });
-      items[next]?.classList.add('bg-white/[0.04]', 'text-[--ng-text-primary]');
-      items[next]?.scrollIntoView({block: 'nearest'});
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const sel = items[active >= 0 ? active : 0];
-      if (sel) { closeCmdK(); navigate(sel.getAttribute('href')); }
-    }
+    const input = document.getElementById('sidebar-search');
+    if (input) { input.focus(); input.select(); }
   }
 });
