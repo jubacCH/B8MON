@@ -7,31 +7,46 @@ A self-hosted infrastructure monitoring platform with **log intelligence**, **in
 ## Tech Stack
 
 ```mermaid
-graph TD
-    subgraph Frontend
-        FE["Jinja2 Templates · Tailwind CSS · Chart.js · GridStack"]
-    end
+block-beta
+  columns 4
 
-    subgraph Application ["Application Layer — FastAPI (async) · Uvicorn · Python 3.11+"]
-        SCH["Scheduler<br/><small>APScheduler</small>"]
-        COR["Correlation<br/><small>Engine</small>"]
-        LOG["Log Intelligence<br/><small>Drain-lite</small>"]
-        RULES["Alert Rules<br/><small>Regex · Operators</small>"]
-        INT["15 Integration Plugins<br/><small>Proxmox · UniFi · TrueNAS · Synology · pfSense · Pi-hole<br/>AdGuard · Portainer · HASS · Gitea · phpIPAM · Speedtest<br/>UPS/NUT · Redfish · UNAS</small>"]
-    end
+  block:frontend("Frontend"):4
+    A["Jinja2"] B["Tailwind CSS"] C["Chart.js"] D["GridStack"]
+  end
 
-    subgraph Data ["Data Layer"]
-        PG["PostgreSQL 16<br/><small>Config, hosts, users,<br/>incidents, templates<br/>SQLAlchemy (asyncpg)</small>"]
-        CH["ClickHouse<br/><small>Syslog messages,<br/>high-volume time-series<br/>clickhouse-driver (native)</small>"]
-    end
+  space:4
 
-    subgraph Infra ["Infrastructure"]
-        DOCKER["Docker Compose · Syslog UDP/TCP · Agent (Win/Linux)<br/>Fernet Encryption · REST API (api_keys)"]
-    end
+  block:app("FastAPI · Uvicorn · Python 3.11+"):4
+    E["Scheduler"] F["Correlation"] G["Log Intelligence"] H["Alert Rules"]
+  end
 
-    Frontend --> Application
-    Application --> Data
-    Data --> Infra
+  space:4
+
+  block:plugins("15 Integration Plugins"):4
+    I["Proxmox"] J["UniFi"] K["TrueNAS"] L["+ 12 more"]
+  end
+
+  space:4
+
+  block:pg("PostgreSQL 16"):2
+    M["Config · Hosts · Users · Incidents"]
+  end
+  block:ch("ClickHouse"):2
+    N["Syslog · Time-Series"]
+  end
+
+  space:4
+
+  block:infra("Infrastructure"):4
+    O["Docker Compose"] P["Syslog UDP/TCP"] Q["Agent Win/Linux"] R["REST API"]
+  end
+
+  frontend --> app
+  app --> plugins
+  plugins --> pg
+  plugins --> ch
+  pg --> infra
+  ch --> infra
 ```
 
 | Layer | Technology | Purpose |
