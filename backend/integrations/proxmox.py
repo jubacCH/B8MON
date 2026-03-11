@@ -70,10 +70,10 @@ class ProxmoxAPI:
         results = await asyncio.gather(*[_one(g) for g in guests])
         return {vmid: mac for vmid, mac in results if mac}
 
-    async def cluster_tasks(self, limit: int = 50) -> list[dict]:
+    async def cluster_tasks(self) -> list[dict]:
         """Fetch recent cluster-wide tasks."""
         try:
-            return await self.get(f"/cluster/tasks?limit={limit}")
+            return await self.get("/cluster/tasks")
         except Exception:
             return []
 
@@ -328,7 +328,7 @@ class ProxmoxIntegration(BaseIntegration):
             resources, status, tasks = await asyncio.gather(
                 api.cluster_resources(),
                 api.cluster_status(),
-                api.cluster_tasks(limit=50),
+                api.cluster_tasks(),
             )
             data = parse_cluster_data(resources, status, tasks)
             return CollectorResult(success=True, data=data)
