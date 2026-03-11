@@ -12,7 +12,8 @@
       <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
     </div>
     <div class="section-body">
-      <div class="grid grid-cols-4 gap-2">
+      <!-- Row 1: Key metrics -->
+      <div class="grid grid-cols-4 gap-2 mb-2">
         <div class="glass-card-static !p-2 text-center">
           <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-0.5">Messages</p>
           <p class="text-[--ng-text-primary] text-base font-mono font-medium tabular-nums">{{ "{:,}".format(syslog_stats.total) }}</p>
@@ -35,13 +36,86 @@
           <div class="space-y-0.5">
             {% for src in syslog_stats.top_sources[:3] %}
             <div class="flex items-center justify-between text-[10px] font-mono">
-              <a href="/syslog?source_ip={{ src.ip }}" class="text-[--ng-text-secondary] hover:text-ng-primary transition-colors truncate">{{ src.ip }}</a>
+              <a href="/syslog?host={{ src.ip }}" class="text-[--ng-text-secondary] hover:text-ng-primary transition-colors truncate">{{ src.ip }}</a>
               <span class="text-[--ng-text-muted] tabular-nums ml-2 shrink-0">{{ "{:,}".format(src.count) }}</span>
             </div>
             {% endfor %}
           </div>
         </div>
       </div>
+
+      <!-- Row 2: Error trend sparkline + Errors by host -->
+      <div class="grid grid-cols-2 gap-2">
+        {% if syslog_stats.error_trend %}
+        <div class="glass-card-static !p-2">
+          <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Error Trend (24h)</p>
+          <canvas id="syslog-error-trend" height="48"></canvas>
+          <script>
+          (function(){
+            const data = {{ syslog_stats.error_trend | tojson }};
+            const ctx = document.getElementById('syslog-error-trend');
+            if (!ctx || !data.length || typeof Chart === 'undefined') return;
+            new Chart(ctx, {
+              type: 'bar',
+              data: {
+                labels: data.map(d => d.hour),
+                datasets: [
+                  { label: 'Errors', data: data.map(d => d.errors), backgroundColor: 'rgba(239,68,68,0.6)', borderRadius: 2, barPercentage: 0.9 },
+                  { label: 'Warnings', data: data.map(d => d.warnings), backgroundColor: 'rgba(234,179,8,0.35)', borderRadius: 2, barPercentage: 0.9 },
+                ]
+              },
+              options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, titleFont: { size: 10 }, bodyFont: { size: 10 } } },
+                scales: {
+                  x: { display: true, stacked: true, ticks: { font: { size: 8 }, color: 'rgba(255,255,255,0.3)', maxTicksLimit: 6, maxRotation: 0 }, grid: { display: false }, border: { display: false } },
+                  y: { display: false, stacked: true, beginAtZero: true }
+                },
+                interaction: { mode: 'nearest', axis: 'x', intersect: false }
+              }
+            });
+          })();
+          </script>
+        </div>
+        {% endif %}
+
+        {% if syslog_stats.errors_by_host %}
+        <div class="glass-card-static !p-2">
+          <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Errors by Host</p>
+          <div class="space-y-1">
+            {% set max_host_errs = syslog_stats.errors_by_host[0].count if syslog_stats.errors_by_host else 1 %}
+            {% for h in syslog_stats.errors_by_host %}
+            <div class="flex items-center gap-2 text-[10px]">
+              <span class="text-[--ng-text-secondary] font-mono truncate w-24" title="{{ h.host }}">{{ h.host }}</span>
+              <div class="flex-1 h-2 rounded-full bg-white/[0.04] overflow-hidden">
+                <div class="h-full rounded-full bg-ng-critical/60" style="width:{{ (h.count / max_host_errs * 100)|int }}%"></div>
+              </div>
+              <span class="text-[--ng-text-muted] font-mono tabular-nums shrink-0">{{ h.count }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Row 3: Recent critical messages -->
+      {% if syslog_stats.recent_critical %}
+      <div class="mt-2">
+        <div class="glass-card-static !p-2 !border-ng-critical/15">
+          <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Recent Critical</p>
+          <div class="space-y-1">
+            {% for c in syslog_stats.recent_critical %}
+            <div class="flex items-start gap-2 text-[10px]">
+              <span class="shrink-0 w-2 h-2 mt-0.5 rounded-full bg-red-500 {% if c.severity == 0 %}animate-pulse{% endif %}"></span>
+              <span class="text-[--ng-text-muted] font-mono shrink-0">{{ c.time }}</span>
+              <span class="text-[--ng-text-secondary] font-mono shrink-0 truncate w-20" title="{{ c.host }}">{{ c.host }}</span>
+              <span class="text-[--ng-text-primary] truncate">{{ c.message }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
     </div>
     {% else %}
     <p class="text-[--ng-text-muted] text-xs">No syslog data</p>

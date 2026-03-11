@@ -75,6 +75,12 @@ async def client():
         async with session_factory() as session:
             yield session
 
+    async def _ch_query_mock(sql, params=None):
+        return []
+
+    async def _ch_scalar_mock(sql, params=None):
+        return 0
+
     with patch("main.start_scheduler", new_callable=AsyncMock), \
          patch("main.stop_scheduler"), \
          patch("main.init_db", new_callable=AsyncMock), \
@@ -85,7 +91,10 @@ async def client():
          patch("main.AsyncSessionLocal", side_effect=fake_session), \
          patch("models.base.AsyncSessionLocal", side_effect=fake_session), \
          patch("routers.agents.AsyncSessionLocal", side_effect=fake_session), \
-         patch("database.get_current_user", new_callable=AsyncMock, return_value=FakeUser()):
+         patch("database.get_current_user", new_callable=AsyncMock, return_value=FakeUser()), \
+         patch("services.clickhouse_client.query", side_effect=_ch_query_mock), \
+         patch("services.clickhouse_client.query_scalar", side_effect=_ch_scalar_mock), \
+         patch("services.clickhouse_client.get_client", new_callable=AsyncMock):
 
         from main import app
         transport = ASGITransport(app=app)

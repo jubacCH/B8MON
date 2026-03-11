@@ -468,7 +468,10 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     # ── Syslog stats (last 24h) ──────────────────────────────────────────────
     from models.syslog import SEVERITY_LABELS
     from services.clickhouse_client import query as ch_query, query_scalar as ch_scalar
-    syslog_stats = {"total": 0, "by_severity": {}, "top_sources": [], "error_rate_1h": 0}
+    syslog_stats = {
+        "total": 0, "by_severity": {}, "top_sources": [], "error_rate_1h": 0,
+        "error_trend": [], "errors_by_host": [], "recent_critical": [],
+    }
     try:
         syslog_stats["total"] = int(await ch_scalar(
             "SELECT count() FROM syslog_messages WHERE timestamp >= {t:DateTime64(3)}",
@@ -494,6 +497,47 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
             "SELECT count() FROM syslog_messages WHERE severity <= 3 AND timestamp >= {t:DateTime64(3)}",
             {"t": now - timedelta(hours=1)},
         ) or 0)
+
+        # Error trend: hourly buckets for 24h (errors + warnings)
+        trend_rows = await ch_query(
+            """SELECT toStartOfHour(timestamp) AS hour,
+                      countIf(severity <= 3) AS errors,
+                      countIf(severity = 4) AS warnings
+               FROM syslog_messages
+               WHERE timestamp >= {t:DateTime64(3)}
+               GROUP BY hour ORDER BY hour""",
+            {"t": window_24h},
+        )
+        syslog_stats["error_trend"] = [
+            {"hour": localtime(r["hour"], "%H:%M"), "errors": r["errors"], "warnings": r["warnings"]}
+            for r in trend_rows
+        ]
+
+        # Errors by host: top 5 hosts with most errors in 24h
+        host_err_rows = await ch_query(
+            """SELECT coalesce(nullIf(hostname, ''), source_ip) AS host,
+                      count() AS cnt
+               FROM syslog_messages
+               WHERE severity <= 3 AND timestamp >= {t:DateTime64(3)}
+               GROUP BY host ORDER BY cnt DESC LIMIT 5""",
+            {"t": window_24h},
+        )
+        syslog_stats["errors_by_host"] = [{"host": r["host"], "count": r["cnt"]} for r in host_err_rows]
+
+        # Recent critical messages (severity 0-2: emergency, alert, critical)
+        crit_rows = await ch_query(
+            """SELECT timestamp, severity, coalesce(nullIf(hostname, ''), source_ip) AS host,
+                      substring(message, 1, 120) AS msg
+               FROM syslog_messages
+               WHERE severity <= 2 AND timestamp >= {t:DateTime64(3)}
+               ORDER BY timestamp DESC LIMIT 5""",
+            {"t": window_24h},
+        )
+        syslog_stats["recent_critical"] = [
+            {"time": localtime(r["timestamp"], "%H:%M"), "severity": r["severity"],
+             "host": r["host"], "message": r["msg"]}
+            for r in crit_rows
+        ]
     except Exception:
         pass
 
