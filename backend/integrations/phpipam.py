@@ -191,19 +191,17 @@ class PhpIpamIntegration(BaseIntegration):
                 subnet_id = a.get("subnetId", "?")
                 subnets[subnet_id] = subnets.get(subnet_id, 0) + 1
 
-            # Recent addresses (last 10 added/modified)
-            recent = sorted(
-                [a for a in active if a.get("ip")],
-                key=lambda a: a.get("editDate") or a.get("lastSeen") or "",
-                reverse=True,
-            )[:10]
-            recent_list = []
-            for a in recent:
-                recent_list.append({
+            # Build full address list
+            all_addrs = []
+            for a in sorted(active, key=lambda a: a.get("ip") or ""):
+                if not a.get("ip"):
+                    continue
+                all_addrs.append({
                     "ip": a.get("ip", ""),
                     "hostname": a.get("hostname") or a.get("description") or "",
                     "last_seen": a.get("lastSeen") or "",
                     "mac": a.get("mac") or "",
+                    "subnet_id": a.get("subnetId") or "",
                 })
 
             return CollectorResult(success=True, data={
@@ -211,7 +209,7 @@ class PhpIpamIntegration(BaseIntegration):
                 "addresses_active": len(active),
                 "addresses_inactive": len(addresses) - len(active),
                 "subnets_count": len(subnets),
-                "recent_addresses": recent_list,
+                "addresses": all_addrs,
             })
         except Exception as exc:
             return CollectorResult(success=False, error=str(exc))

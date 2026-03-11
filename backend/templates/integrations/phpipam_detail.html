@@ -39,34 +39,46 @@
     </div>
 </div>
 
-<!-- Recent Addresses -->
-{% set recent = data.get('recent_addresses', []) %}
-{% if recent %}
-<div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl p-6">
-    <h2 class="ng-heading text-sm text-[--ng-text-secondary] mb-4">Recent Addresses</h2>
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead>
-                <tr class="text-left text-[--ng-text-muted] text-xs uppercase tracking-wider border-b border-white/[0.08]">
-                    <th class="pb-2 pr-4">IP</th>
-                    <th class="pb-2 pr-4">Hostname</th>
-                    <th class="pb-2 pr-4">MAC</th>
-                    <th class="pb-2">Last Seen</th>
+<!-- All Addresses -->
+{% set addrs = data.get('addresses', []) %}
+{% if addrs %}
+<h2 class="metric-label !text-[10px] mb-3">Addresses ({{ addrs|length }})</h2>
+<div class="mb-3">
+    <input type="text" id="ipamSearch" placeholder="Search IP, hostname, MAC..."
+           class="ng-input !py-1.5 !text-xs max-w-sm" autocomplete="off">
+</div>
+<div class="glass-card overflow-hidden">
+    <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+        <table class="w-full text-sm" id="ipamTable">
+            <thead class="sticky top-0 bg-[--ng-glass-bg]">
+                <tr class="border-b border-white/[0.06] text-[--ng-text-muted] text-[10px] uppercase tracking-wider">
+                    <th class="px-4 py-2.5 text-left font-medium">IP</th>
+                    <th class="px-4 py-2.5 text-left font-medium">Hostname</th>
+                    <th class="px-4 py-2.5 text-left font-medium">MAC</th>
+                    <th class="px-4 py-2.5 text-left font-medium">Last Seen</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-white/[0.06]">
-                {% for addr in recent %}
-                <tr class="hover:bg-white/[0.03]">
-                    <td class="py-2 pr-4 font-mono text-[--ng-text-primary]">{{ addr.ip }}</td>
-                    <td class="py-2 pr-4 text-[--ng-text-secondary]">{{ addr.hostname or '---' }}</td>
-                    <td class="py-2 pr-4 font-mono text-xs text-slate-500">{{ addr.mac or '---' }}</td>
-                    <td class="py-2 text-xs text-slate-500">{{ addr.last_seen or '---' }}</td>
+            <tbody>
+                {% for addr in addrs %}
+                <tr class="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                    <td class="px-4 py-2 text-xs font-mono text-[--ng-text-primary]">{{ addr.ip }}</td>
+                    <td class="px-4 py-2 text-xs text-[--ng-text-secondary]">{{ addr.hostname or '—' }}</td>
+                    <td class="px-4 py-2 text-xs font-mono text-slate-500">{{ addr.mac or '—' }}</td>
+                    <td class="px-4 py-2 text-xs text-slate-500">{{ addr.last_seen or '—' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+<script>
+document.getElementById('ipamSearch')?.addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('#ipamTable tbody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+});
+</script>
 {% endif %}
 
 {% else %}
