@@ -1,0 +1,31 @@
+{# Widget: Proxmox clusters #}
+<div class="grid-stack-item" gs-id="proxmox" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="3" gs-min-w="2">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    {% if proxmox_clusters %}
+    <h2 class="metric-label !text-[10px] mb-3">Proxmox</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+      {% for cluster in proxmox_clusters %}
+      <a href="/integration/proxmox/{{ cluster.id }}" class="glass-card block" id="px-card-{{ cluster.id }}">
+        <div class="flex items-center justify-between mb-3">
+          <div class="min-w-0">
+            <p class="text-[--ng-text-primary] font-semibold text-sm truncate">{{ cluster.name }}</p>
+            <p class="text-[--ng-text-muted] text-xs font-mono truncate mt-0.5">{{ cluster.host }}</p>
+          </div>
+          <div class="w-7 h-7 rounded-lg bg-ng-warning/10 flex items-center justify-center shrink-0 ml-2">
+            <svg class="w-3.5 h-3.5 text-ng-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </div>
+        </div>
+        <div class="border-t border-white/[0.06] pt-3">
+          <div class="px-status text-[--ng-text-muted] text-xs font-mono">Loading...</div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">No Proxmox clusters</p>
+    {% endif %}
+  </div>
+</div>

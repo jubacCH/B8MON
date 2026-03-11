@@ -1,0 +1,106 @@
+{# Widget: Top 10 tables (latency, downtime, CPU, RAM, disk) #}
+<div class="grid-stack-item" gs-id="top10" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="3" gs-min-w="6">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    {% if top_latency or top_downtime or top_cpu or top_ram or top_disk %}
+    <div class="flex items-center gap-2 mb-3 cursor-pointer section-header" data-section="top10">
+      <h2 class="metric-label !text-[10px]">Top 10</h2>
+      <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </div>
+    <div class="section-body">
+    {% if top_latency or top_downtime %}
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+      {% if top_latency %}
+      <div class="glass-card-static !p-0 overflow-hidden">
+        <div class="px-4 py-3 border-b border-white/[0.06] flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-ng-primary glow-primary"></span>
+          <span class="metric-label !text-[10px]">Highest Latency (24h)</span>
+        </div>
+        <table class="w-full text-xs"><tbody>
+          {% for s in top_latency %}
+          <tr class="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+            <td class="px-4 py-2">
+              <span class="w-1.5 h-1.5 rounded-full inline-block mr-1.5 {% if s.online %}bg-ng-success{% elif s.online is false %}bg-ng-critical{% else %}bg-[--ng-text-muted]{% endif %}"></span>
+              <a href="/ping/{{ s.host.id }}" class="text-[--ng-text-primary] hover:text-ng-primary transition-colors">{{ s.host.name }}</a>
+            </td>
+            <td class="px-4 py-2 text-[--ng-text-muted] text-[10px] font-mono">{{ s.host.hostname }}</td>
+            <td class="px-4 py-2 text-right font-medium text-ng-primary font-mono tabular-nums">{{ s.avg_latency }} ms</td>
+          </tr>
+          {% endfor %}
+        </tbody></table>
+      </div>
+      {% endif %}
+      {% if top_downtime %}
+      <div class="glass-card-static !p-0 overflow-hidden">
+        <div class="px-4 py-3 border-b border-white/[0.06] flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-ng-critical"></span>
+          <span class="metric-label !text-[10px]">Lowest Uptime (24h)</span>
+        </div>
+        <table class="w-full text-xs"><tbody>
+          {% for s in top_downtime %}
+          <tr class="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+            <td class="px-4 py-2">
+              <span class="w-1.5 h-1.5 rounded-full inline-block mr-1.5 {% if s.online %}bg-ng-success{% elif s.online is false %}bg-ng-critical{% else %}bg-[--ng-text-muted]{% endif %}"></span>
+              <a href="/ping/{{ s.host.id }}" class="text-[--ng-text-primary] hover:text-ng-primary transition-colors">{{ s.host.name }}</a>
+            </td>
+            <td class="px-4 py-2 text-[--ng-text-muted] text-[10px] font-mono">{{ s.host.hostname }}</td>
+            <td class="px-4 py-2 text-right font-medium font-mono tabular-nums {% if s.uptime_pct >= 99 %}text-ng-success{% elif s.uptime_pct >= 90 %}text-ng-warning{% else %}text-ng-critical{% endif %}">{{ s.uptime_pct }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody></table>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if top_cpu or top_ram or top_disk %}
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      {% if top_cpu %}
+      <div class="glass-card-static !p-0 overflow-hidden">
+        <div class="px-4 py-3 border-b border-white/[0.06] flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-ng-warning"></span><span class="metric-label !text-[10px]">CPU</span></div>
+        <table class="w-full text-xs"><tbody>
+          {% for g in top_cpu %}{% set host_id = ping_host_map.get(g.name) %}
+          <tr class="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+            <td class="px-4 py-2">{% if host_id %}<a href="/ping/{{ host_id }}" class="text-[--ng-text-primary] font-medium hover:text-ng-primary transition-colors">{{ g.name }}</a>{% else %}<span class="text-[--ng-text-primary] font-medium">{{ g.name }}</span>{% endif %}<span class="ml-1.5 px-1 py-0.5 rounded text-[9px] font-mono {% if g.type == 'VM' %}bg-ng-primary/15 text-ng-primary{% else %}bg-ng-mint/15 text-ng-mint{% endif %}">{{ g.type }}</span></td>
+            <td class="px-4 py-2 text-[--ng-text-muted] text-[10px] font-mono">{{ g.node }}</td>
+            <td class="px-4 py-2 text-right tabular-nums font-mono font-medium {% if g.cpu_pct > 80 %}text-ng-critical{% elif g.cpu_pct > 60 %}text-ng-warning{% else %}text-ng-warning/70{% endif %}">{{ g.cpu_pct }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody></table>
+      </div>
+      {% endif %}
+      {% if top_ram %}
+      <div class="glass-card-static !p-0 overflow-hidden">
+        <div class="px-4 py-3 border-b border-white/[0.06] flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-ng-accent"></span><span class="metric-label !text-[10px]">RAM</span></div>
+        <table class="w-full text-xs"><tbody>
+          {% for g in top_ram %}{% set host_id = ping_host_map.get(g.name) %}
+          <tr class="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+            <td class="px-4 py-2">{% if host_id %}<a href="/ping/{{ host_id }}" class="text-[--ng-text-primary] font-medium hover:text-ng-primary transition-colors">{{ g.name }}</a>{% else %}<span class="text-[--ng-text-primary] font-medium">{{ g.name }}</span>{% endif %}<span class="ml-1.5 px-1 py-0.5 rounded text-[9px] font-mono {% if g.type == 'VM' %}bg-ng-primary/15 text-ng-primary{% else %}bg-ng-mint/15 text-ng-mint{% endif %}">{{ g.type }}</span></td>
+            <td class="px-4 py-2 text-[--ng-text-muted] text-[10px] font-mono">{{ g.node }}</td>
+            <td class="px-4 py-2 text-right tabular-nums font-mono"><span class="font-medium text-ng-accent">{{ g.mem_used_gb }} GB</span>{% if g.mem_total_gb %}<span class="text-[--ng-text-muted]"> / {{ g.mem_total_gb }}</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody></table>
+      </div>
+      {% endif %}
+      {% if top_disk %}
+      <div class="glass-card-static !p-0 overflow-hidden">
+        <div class="px-4 py-3 border-b border-white/[0.06] flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-ng-mint"></span><span class="metric-label !text-[10px]">Disk</span></div>
+        <table class="w-full text-xs"><tbody>
+          {% for g in top_disk %}{% set host_id = ping_host_map.get(g.name) %}
+          <tr class="border-t border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+            <td class="px-4 py-2">{% if host_id %}<a href="/ping/{{ host_id }}" class="text-[--ng-text-primary] font-medium hover:text-ng-primary transition-colors">{{ g.name }}</a>{% else %}<span class="text-[--ng-text-primary] font-medium">{{ g.name }}</span>{% endif %}<span class="ml-1.5 px-1 py-0.5 rounded text-[9px] font-mono {% if g.type == 'VM' %}bg-ng-primary/15 text-ng-primary{% else %}bg-ng-mint/15 text-ng-mint{% endif %}">{{ g.type }}</span></td>
+            <td class="px-4 py-2 text-[--ng-text-muted] text-[10px] font-mono">{{ g.node }}</td>
+            <td class="px-4 py-2 text-right tabular-nums font-mono">{% if g.disk_used_gb > 0 %}<span class="font-medium {% if g.disk_pct > 90 %}text-ng-critical{% elif g.disk_pct > 75 %}text-ng-warning{% else %}text-ng-mint{% endif %}">{{ g.disk_pct }}%</span><span class="text-[--ng-text-muted]"> {{ g.disk_used_gb }}/{{ g.disk_total_gb }} GB</span>{% else %}<span class="text-[--ng-text-secondary]">{{ g.disk_total_gb }} GB</span><span class="text-[--ng-text-muted] text-[10px]"> alloc.</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody></table>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+    </div>{# section-body #}
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">No data</p>
+    {% endif %}
+  </div>
+</div>

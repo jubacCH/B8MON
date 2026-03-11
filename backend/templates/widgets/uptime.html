@@ -1,0 +1,37 @@
+{# Widget: Uptime ranking #}
+<div class="grid-stack-item" gs-id="uptime" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="3" gs-min-w="3">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    {% if uptime_ranking %}
+    <div class="flex items-center gap-2 mb-3 cursor-pointer section-header" data-section="uptime">
+      <h2 class="metric-label !text-[10px]">Uptime Ranking (24h)</h2>
+      <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </div>
+    <div class="space-y-1 section-body">
+      {% for h in uptime_ranking %}
+      <a href="/ping/{{ h.host_id }}" class="flex items-center gap-3 px-3 py-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">
+        <span class="text-[--ng-text-muted] text-[10px] font-mono tabular-nums w-4 shrink-0">{{ loop.index }}</span>
+        <span class="w-2 h-2 rounded-full shrink-0
+          {% if h.uptime >= 99.9 %}bg-ng-success
+          {% elif h.uptime >= 99 %}bg-ng-success/70
+          {% elif h.uptime >= 95 %}bg-ng-warning
+          {% else %}bg-ng-critical{% endif %}"></span>
+        <span class="text-[--ng-text-primary] text-xs font-medium truncate flex-1">{{ h.name }}</span>
+        <div class="w-16 shrink-0">
+          <div class="metric-bar">
+            <div class="metric-bar-fill {% if h.uptime < 95 %}!bg-ng-critical{% elif h.uptime < 99 %}!bg-ng-warning{% endif %}" style="width:{{ h.uptime }}%"></div>
+          </div>
+        </div>
+        <span class="text-[10px] font-mono tabular-nums w-12 text-right shrink-0
+          {% if h.uptime >= 99.9 %}text-ng-success
+          {% elif h.uptime >= 99 %}text-ng-success/70
+          {% elif h.uptime >= 95 %}text-ng-warning
+          {% else %}text-ng-critical{% endif %}">{{ h.uptime }}%</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">No uptime data</p>
+    {% endif %}
+  </div>
+</div>

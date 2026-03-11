@@ -1,0 +1,53 @@
+{# Widget: UPS / NUT status #}
+<div class="grid-stack-item" gs-id="ups" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="3" gs-min-w="3">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    {% if ups_data %}
+    <div class="flex items-center gap-2 mb-3">
+      <h2 class="metric-label !text-[10px]">UPS</h2>
+      {% if ups_data.on_battery %}
+      <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-ng-warning/15 text-ng-warning">On Battery</span>
+      {% endif %}
+    </div>
+    <div class="space-y-3">
+      {% for u in ups_data.units %}
+      <div class="glass-card-static !p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[--ng-text-primary] text-xs font-medium">{{ u.name }}</span>
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-mono
+            {% if u.on_battery %}bg-ng-warning/15 text-ng-warning
+            {% else %}bg-ng-success/15 text-ng-success{% endif %}">{{ u.status_label }}</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <p class="text-[--ng-text-muted] text-[10px] font-mono mb-0.5">Battery</p>
+            <div class="metric-bar">
+              <div class="metric-bar-fill {% if u.battery_pct < 30 %}!bg-ng-critical{% elif u.battery_pct < 60 %}!bg-ng-warning{% endif %}" style="width:{{ u.battery_pct }}%"></div>
+            </div>
+            <p class="text-[--ng-text-secondary] text-[10px] font-mono tabular-nums mt-0.5">{{ u.battery_pct }}%</p>
+          </div>
+          <div>
+            <p class="text-[--ng-text-muted] text-[10px] font-mono mb-0.5">Load</p>
+            <div class="metric-bar">
+              <div class="metric-bar-fill {% if u.load_pct > 80 %}!bg-ng-critical{% elif u.load_pct > 60 %}!bg-ng-warning{% endif %}" style="width:{{ u.load_pct }}%"></div>
+            </div>
+            <p class="text-[--ng-text-secondary] text-[10px] font-mono tabular-nums mt-0.5">{{ u.load_pct }}%</p>
+          </div>
+          <div>
+            <p class="text-[--ng-text-muted] text-[10px] font-mono mb-0.5">Runtime</p>
+            <p class="text-[--ng-text-primary] text-sm font-mono tabular-nums mt-1">
+              {% if u.runtime_s >= 3600 %}{{ (u.runtime_s / 3600)|round(1) }}h{% else %}{{ (u.runtime_s / 60)|round(0)|int }}m{% endif %}
+            </p>
+          </div>
+        </div>
+        {% if u.model %}
+        <p class="text-[--ng-text-muted] text-[10px] font-mono mt-2">{{ u.model }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">No UPS data</p>
+    {% endif %}
+  </div>
+</div>

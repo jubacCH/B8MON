@@ -1,0 +1,53 @@
+{# Widget: Ping heatmap (7-day availability grid) #}
+<div class="grid-stack-item" gs-id="heatmap" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="3" gs-min-w="4">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    {% if heatmap_data %}
+    <div class="flex items-center gap-2 mb-3 cursor-pointer section-header" data-section="heatmap">
+      <h2 class="metric-label !text-[10px]">Availability (7d)</h2>
+      <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </div>
+    <div class="section-body overflow-x-auto">
+      <table class="w-full text-[10px]">
+        <thead>
+          <tr>
+            <th class="text-left text-[--ng-text-muted] font-mono font-normal pb-1.5 pr-3 sticky left-0 bg-[--ng-bg]">Host</th>
+            {% for day in heatmap_days %}
+            <th class="text-center text-[--ng-text-muted] font-mono font-normal pb-1.5 px-0.5 min-w-[18px]">{{ day }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in heatmap_data %}
+          <tr>
+            <td class="py-0.5 pr-3 sticky left-0 bg-[--ng-bg]">
+              <a href="/ping/{{ row.host_id }}" class="text-[--ng-text-primary] hover:text-ng-primary transition-colors truncate block max-w-[100px]">{{ row.name }}</a>
+            </td>
+            {% for pct in row.days %}
+            <td class="py-0.5 px-0.5">
+              <div class="w-3 h-3 rounded-sm mx-auto
+                {% if pct is none %}bg-white/[0.04]
+                {% elif pct >= 99 %}bg-ng-success/60
+                {% elif pct >= 95 %}bg-ng-success/30
+                {% elif pct >= 80 %}bg-ng-warning/50
+                {% else %}bg-ng-critical/50{% endif %}"
+                title="{{ '%.1f'|format(pct) if pct is not none else 'no data' }}%"></div>
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="flex items-center gap-2 mt-2">
+        <span class="text-[--ng-text-muted] text-[10px] font-mono">Legend:</span>
+        <span class="w-3 h-3 rounded-sm bg-ng-success/60"></span><span class="text-[10px] text-[--ng-text-muted]">≥99%</span>
+        <span class="w-3 h-3 rounded-sm bg-ng-success/30"></span><span class="text-[10px] text-[--ng-text-muted]">≥95%</span>
+        <span class="w-3 h-3 rounded-sm bg-ng-warning/50"></span><span class="text-[10px] text-[--ng-text-muted]">≥80%</span>
+        <span class="w-3 h-3 rounded-sm bg-ng-critical/50"></span><span class="text-[10px] text-[--ng-text-muted]">&lt;80%</span>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">No heatmap data</p>
+    {% endif %}
+  </div>
+</div>

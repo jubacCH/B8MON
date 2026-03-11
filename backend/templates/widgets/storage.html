@@ -1,0 +1,37 @@
+{# Widget: Storage overview (TrueNAS/Synology/UNAS pools) #}
+<div class="grid-stack-item" gs-id="storage" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="3" gs-min-w="3">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    {% if storage_pools %}
+    <div class="flex items-center gap-2 mb-3 cursor-pointer section-header" data-section="storage">
+      <h2 class="metric-label !text-[10px]">Storage</h2>
+      <span class="text-[--ng-text-muted] text-[10px] font-mono ml-auto">{{ storage_pools|length }} pool{{ 's' if storage_pools|length != 1 }}</span>
+      <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </div>
+    <div class="space-y-2 section-body">
+      {% for pool in storage_pools %}
+      <div class="glass-card-static !p-3">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="w-2 h-2 rounded-full shrink-0 {% if pool.healthy %}bg-ng-success{% else %}bg-ng-critical{% endif %}"></span>
+            <span class="text-[--ng-text-primary] text-xs font-medium truncate">{{ pool.name }}</span>
+            <span class="text-[--ng-text-muted] text-[10px] font-mono">{{ pool.source }}</span>
+          </div>
+          <span class="text-[10px] font-mono tabular-nums shrink-0 ml-2
+            {% if pool.pct >= 90 %}text-ng-critical{% elif pool.pct >= 75 %}text-ng-warning{% else %}text-[--ng-text-secondary]{% endif %}">{{ pool.pct }}%</span>
+        </div>
+        <div class="metric-bar">
+          <div class="metric-bar-fill {% if pool.pct >= 90 %}!bg-ng-critical{% elif pool.pct >= 75 %}!bg-ng-warning{% endif %}" style="width:{{ [pool.pct, 100] | min }}%"></div>
+        </div>
+        <div class="flex justify-between mt-1 text-[10px] font-mono text-[--ng-text-muted]">
+          <span>{{ "%.1f"|format(pool.used_gb / 1024) if pool.used_gb >= 1024 else "%.0f"|format(pool.used_gb) }} {{ "TB" if pool.used_gb >= 1024 else "GB" }} used</span>
+          <span>{{ "%.1f"|format(pool.total_gb / 1024) if pool.total_gb >= 1024 else "%.0f"|format(pool.total_gb) }} {{ "TB" if pool.total_gb >= 1024 else "GB" }} total</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">No storage data</p>
+    {% endif %}
+  </div>
+</div>

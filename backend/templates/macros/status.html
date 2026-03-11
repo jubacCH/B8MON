@@ -1,0 +1,61 @@
+{#
+  Reusable status/severity macros to reduce template duplication.
+
+  Usage:
+    {% from "macros/status.html" import severity_pill, status_pill, status_dot %}
+    {{ severity_pill("critical") }}
+    {{ status_pill("open") }}
+    {{ status_dot("open", "critical") }}
+#}
+
+{# Severity badge: critical | warning | info #}
+{% macro severity_pill(severity, size="sm") %}
+{% set cls = {
+  "critical": "bg-red-500/15 text-red-400",
+  "warning":  "bg-yellow-500/15 text-yellow-400",
+  "info":     "bg-blue-500/15 text-blue-400",
+} %}
+<span class="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide {{ cls.get(severity, 'bg-blue-500/15 text-blue-400') }}">{{ severity }}</span>
+{% endmacro %}
+
+{# Incident/alert status badge: open | acknowledged | resolved #}
+{% macro status_pill(status) %}
+{% set cls = {
+  "open":         "bg-red-500/10 text-red-400 border border-red-500/20",
+  "acknowledged": "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20",
+  "resolved":     "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+} %}
+<span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ cls.get(status, 'bg-slate-500/10 text-slate-400') }}">{{ status }}</span>
+{% endmacro %}
+
+{# Small colored dot for list rows #}
+{% macro status_dot(status, severity="info") %}
+{% if status == "open" %}
+  <span class="w-2.5 h-2.5 rounded-full inline-block {% if severity == 'critical' %}bg-red-400 animate-pulse{% else %}bg-yellow-400{% endif %}"></span>
+{% elif status == "acknowledged" %}
+  <span class="w-2.5 h-2.5 rounded-full inline-block bg-yellow-400/50"></span>
+{% else %}
+  <span class="w-2.5 h-2.5 rounded-full inline-block bg-emerald-400/50"></span>
+{% endif %}
+{% endmacro %}
+
+{# Online/offline health dot #}
+{% macro health_dot(online, maintenance=false, size="2.5") %}
+{% if maintenance %}
+  <span class="w-{{ size }} h-{{ size }} rounded-full inline-block bg-yellow-400/50"></span>
+{% elif online %}
+  <span class="w-{{ size }} h-{{ size }} rounded-full inline-block bg-emerald-400"></span>
+{% else %}
+  <span class="w-{{ size }} h-{{ size }} rounded-full inline-block bg-red-400 animate-pulse"></span>
+{% endif %}
+{% endmacro %}
+
+{# Event type pill for incident timeline #}
+{% macro event_type_pill(event_type) %}
+{% set cls = {
+  "created":      "bg-red-500/15 text-red-400",
+  "resolved":     "bg-emerald-500/15 text-emerald-400",
+  "acknowledged": "bg-yellow-500/15 text-yellow-400",
+} %}
+<span class="px-1.5 py-0.5 rounded text-[10px] font-medium uppercase {{ cls.get(event_type, 'bg-slate-500/10 text-slate-400') }}">{{ event_type }}</span>
+{% endmacro %}

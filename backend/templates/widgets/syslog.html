@@ -1,0 +1,50 @@
+{# Widget: Syslog stats (24h) #}
+<div class="grid-stack-item" gs-id="syslog" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="3" gs-min-w="4">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    {% if syslog_stats and syslog_stats.total > 0 %}
+    <div class="flex items-center gap-2 mb-3 cursor-pointer section-header" data-section="syslog">
+      <h2 class="metric-label !text-[10px]">Syslog (24h)</h2>
+      {% if syslog_stats.error_rate_1h > 0 %}
+      <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-ng-critical/15 text-ng-critical">{{ syslog_stats.error_rate_1h }} errors/1h</span>
+      {% endif %}
+      <a href="/syslog" class="text-[10px] text-[--ng-text-muted] hover:text-ng-primary transition-colors font-mono ml-auto mr-2">View all</a>
+      <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </div>
+    <div class="section-body">
+      <div class="grid grid-cols-2 gap-3">
+        <div class="glass-card-static !p-3">
+          <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Messages</p>
+          <p class="text-[--ng-text-primary] text-xl font-mono font-medium tabular-nums">{{ "{:,}".format(syslog_stats.total) }}</p>
+        </div>
+        <div class="glass-card-static !p-3 {% if syslog_stats.error_rate_1h > 50 %}!border-ng-critical/20 !bg-ng-critical/[0.04]{% endif %}">
+          <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Errors (1h)</p>
+          <p class="text-xl font-mono font-medium tabular-nums {% if syslog_stats.error_rate_1h > 50 %}text-ng-critical{% elif syslog_stats.error_rate_1h > 10 %}text-ng-warning{% else %}text-ng-success{% endif %}">{{ syslog_stats.error_rate_1h }}</p>
+        </div>
+        <div class="glass-card-static !p-3">
+          <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-2">By Severity</p>
+          <div class="flex flex-wrap gap-1.5">
+            {% for sev, info in syslog_stats.by_severity.items() | sort %}
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums
+              {% if sev <= 2 %}bg-red-500/15 text-red-400{% elif sev == 3 %}bg-orange-500/15 text-orange-400{% elif sev == 4 %}bg-yellow-500/15 text-yellow-400{% elif sev <= 5 %}bg-blue-500/15 text-blue-400{% elif sev == 6 %}bg-emerald-500/15 text-emerald-400{% else %}bg-slate-500/15 text-slate-400{% endif %}">{{ info.label[:4] }} {{ info.count }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="glass-card-static !p-3">
+          <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-2">Top Sources</p>
+          <div class="space-y-1">
+            {% for src in syslog_stats.top_sources[:3] %}
+            <div class="flex items-center justify-between text-[10px] font-mono">
+              <a href="/syslog?source_ip={{ src.ip }}" class="text-[--ng-text-secondary] hover:text-ng-primary transition-colors truncate">{{ src.ip }}</a>
+              <span class="text-[--ng-text-muted] tabular-nums ml-2 shrink-0">{{ "{:,}".format(src.count) }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">No syslog data</p>
+    {% endif %}
+  </div>
+</div>

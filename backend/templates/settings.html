@@ -1,0 +1,614 @@
+{% extends "base.html" %}
+{% block title %}Settings – {{ request.state.site_name }}{% endblock %}
+
+{% block content %}
+<div class="p-8 max-w-4xl mx-auto">
+
+  <!-- Header -->
+  <div class="mb-6">
+    <h1 class="ng-heading text-2xl text-[--ng-text-primary]">Settings</h1>
+    <p class="text-sm text-slate-500 mt-0.5">System configuration</p>
+  </div>
+
+  {% if saved %}
+  <div class="mb-5 flex items-center gap-2 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm">
+    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+    </svg>
+    Settings saved.
+  </div>
+  {% endif %}
+
+  <!-- Tab nav -->
+  <div class="flex gap-1 mb-6 bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl p-1">
+    {% for id, label, icon in [
+      ('system',        'System',          'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z'),
+      ('monitoring',    'Monitoring',      'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'),
+      ('import',        'Import',          'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12'),
+      ('notifications', 'Notifications',  'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9'),
+      ('appearance',    'Appearance',     'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01'),
+    ] %}
+    <button onclick="switchTab('{{ id }}')" id="tab-btn-{{ id }}"
+            class="tab-btn flex items-center gap-2 flex-1 justify-center px-3 py-2 rounded-lg text-sm font-medium transition-all">
+      <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icon }}"/>
+      </svg>
+      <span class="hidden sm:inline">{{ label }}</span>
+    </button>
+    {% endfor %}
+  </div>
+
+  <!-- ── Tab: System ─────────────────────────────────────────────────── -->
+  <div id="tab-system" class="tab-panel space-y-5">
+    <form method="post" action="/settings/save">
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+        <div class="px-5 py-4 border-b border-white/[0.08]">
+          <h2 class="ng-heading text-sm text-[--ng-text-primary]">General</h2>
+          <p class="text-xs text-slate-600 mt-0.5">Basic application settings</p>
+        </div>
+        <div class="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Site name</label>
+            <input type="text" name="site_name" value="{{ site_name }}"
+                   class="ng-input">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Timezone</label>
+            <select name="timezone"
+                    class="ng-input">
+              {% set tz_list = [
+                'UTC',
+                'Europe/London','Europe/Dublin','Europe/Lisbon',
+                'Europe/Paris','Europe/Brussels','Europe/Amsterdam','Europe/Luxembourg',
+                'Europe/Berlin','Europe/Vienna','Europe/Zurich','Europe/Rome','Europe/Madrid',
+                'Europe/Warsaw','Europe/Prague','Europe/Budapest','Europe/Zagreb',
+                'Europe/Stockholm','Europe/Oslo','Europe/Copenhagen','Europe/Helsinki',
+                'Europe/Athens','Europe/Bucharest','Europe/Sofia','Europe/Istanbul',
+                'Europe/Moscow','Europe/Kiev',
+                'America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
+                'America/Toronto','America/Vancouver','America/Phoenix','America/Anchorage',
+                'America/Honolulu','America/Sao_Paulo','America/Argentina/Buenos_Aires',
+                'America/Mexico_City','America/Bogota','America/Lima',
+                'Asia/Dubai','Asia/Karachi','Asia/Kolkata','Asia/Dhaka',
+                'Asia/Bangkok','Asia/Jakarta','Asia/Singapore','Asia/Shanghai',
+                'Asia/Tokyo','Asia/Seoul','Asia/Hong_Kong','Asia/Taipei',
+                'Australia/Sydney','Australia/Melbourne','Australia/Perth','Australia/Brisbane',
+                'Pacific/Auckland','Pacific/Fiji',
+                'Africa/Cairo','Africa/Johannesburg','Africa/Lagos','Africa/Nairobi',
+              ] %}
+              {% for tz in tz_list %}
+              <option value="{{ tz }}" {% if timezone == tz %}selected{% endif %}>{{ tz }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hidden fields to satisfy /settings/save (not changed in system tab) -->
+      <input type="hidden" name="ping_interval" value="{{ ping_interval }}">
+      <input type="hidden" name="proxmox_interval" value="{{ proxmox_interval }}">
+      <input type="hidden" name="ping_retention" value="{{ ping_retention }}">
+      <input type="hidden" name="proxmox_retention" value="{{ proxmox_retention }}">
+      <input type="hidden" name="integration_retention" value="{{ integration_retention }}">
+      <input type="hidden" name="anomaly_threshold" value="{{ anomaly_threshold }}">
+      <input type="hidden" name="latency_threshold" value="{{ latency_threshold }}">
+      <input type="hidden" name="cpu_threshold" value="{{ cpu_threshold }}">
+      <input type="hidden" name="ram_threshold" value="{{ ram_threshold }}">
+      <input type="hidden" name="disk_threshold" value="{{ disk_threshold }}">
+      <input type="hidden" name="syslog_port" value="{{ syslog_port }}">
+
+      <div class="mt-4">
+        <button type="submit"
+                class="px-4 py-2 ng-btn ng-btn-primary">
+          Save
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── Tab: Monitoring ─────────────────────────────────────────────── -->
+  <div id="tab-monitoring" class="tab-panel hidden space-y-5">
+    <form method="post" action="/settings/save">
+      <!-- Hidden: system fields unchanged -->
+      <input type="hidden" name="site_name" value="{{ site_name }}">
+      <input type="hidden" name="timezone" value="{{ timezone }}">
+
+      <!-- Poll intervals -->
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+        <div class="px-5 py-4 border-b border-white/[0.08]">
+          <h2 class="ng-heading text-sm text-[--ng-text-primary]">Poll intervals</h2>
+          <p class="text-xs text-slate-600 mt-0.5">How often each collector runs</p>
+        </div>
+        <div class="px-5 py-4 grid grid-cols-3 gap-5">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Ping / Hosts (seconds)</label>
+            <input type="number" name="ping_interval" value="{{ ping_interval }}" min="10" max="3600"
+                   class="ng-input">
+            <p class="text-slate-700 text-xs mt-1">10 – 3600 s</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Proxmox (seconds)</label>
+            <input type="number" name="proxmox_interval" value="{{ proxmox_interval }}" min="10" max="3600"
+                   class="ng-input">
+            <p class="text-slate-700 text-xs mt-1">10 – 3600 s</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Syslog Port (UDP + TCP)</label>
+            <input type="number" name="syslog_port" value="{{ syslog_port }}" min="1" max="65535"
+                   class="ng-input">
+            <p class="text-slate-700 text-xs mt-1">Default: 1514. Restarts listener on change.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data retention -->
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+        <div class="px-5 py-4 border-b border-white/[0.08]">
+          <h2 class="ng-heading text-sm text-[--ng-text-primary]">Data retention</h2>
+          <p class="text-xs text-slate-600 mt-0.5">How long historical data is kept</p>
+        </div>
+        <div class="px-5 py-4 grid grid-cols-3 gap-5">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Ping results (days)</label>
+            <input type="number" name="ping_retention" value="{{ ping_retention }}" min="1" max="365"
+                   class="ng-input">
+            <p class="text-slate-700 text-xs mt-1">1 – 365 d</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Proxmox snapshots (days)</label>
+            <input type="number" name="proxmox_retention" value="{{ proxmox_retention }}" min="1" max="90"
+                   class="ng-input">
+            <p class="text-slate-700 text-xs mt-1">1 – 90 d</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Integration snapshots (days)</label>
+            <input type="number" name="integration_retention" value="{{ integration_retention }}" min="1" max="90"
+                   class="ng-input">
+            <p class="text-slate-700 text-xs mt-1">1 – 90 d</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alert thresholds -->
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+        <div class="px-5 py-4 border-b border-white/[0.08]">
+          <h2 class="ng-heading text-sm text-[--ng-text-primary]">Alert thresholds</h2>
+          <p class="text-xs text-slate-600 mt-0.5">Global defaults — individual hosts can override the latency threshold</p>
+        </div>
+        <div class="px-5 py-4 space-y-5">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Ping latency threshold (ms)</label>
+            <input type="number" name="latency_threshold" value="{{ latency_threshold }}"
+                   min="1" max="10000" placeholder="Leave empty to disable"
+                   class="ng-input max-w-xs">
+            <p class="text-slate-700 text-xs mt-1">Alert when latency exceeds this value. Empty = no global threshold.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-2">Proxmox resource thresholds (%)</label>
+            <div class="grid grid-cols-3 gap-4 max-w-sm">
+              <div>
+                <p class="text-xs text-slate-600 mb-1">CPU</p>
+                <input type="number" name="cpu_threshold" value="{{ cpu_threshold }}" min="1" max="100"
+                       class="ng-input">
+              </div>
+              <div>
+                <p class="text-xs text-slate-600 mb-1">RAM</p>
+                <input type="number" name="ram_threshold" value="{{ ram_threshold }}" min="1" max="100"
+                       class="ng-input">
+              </div>
+              <div>
+                <p class="text-xs text-slate-600 mb-1">Disk</p>
+                <input type="number" name="disk_threshold" value="{{ disk_threshold }}" min="1" max="100"
+                       class="ng-input">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Anomaly detection -->
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+        <div class="px-5 py-4 border-b border-white/[0.08]">
+          <h2 class="ng-heading text-sm text-[--ng-text-primary]">Anomaly detection</h2>
+          <p class="text-xs text-slate-600 mt-0.5">Flags metrics that deviate significantly from their 24h average</p>
+        </div>
+        <div class="px-5 py-4">
+          <label class="block text-xs font-medium text-slate-400 mb-1.5">Multiplier (× 24h average)</label>
+          <input type="number" name="anomaly_threshold" value="{{ anomaly_threshold }}"
+                 min="1.5" max="10" step="0.1"
+                 class="ng-input max-w-xs">
+          <p class="text-slate-700 text-xs mt-1">2.0 = alert when a metric is &gt;2× its 24h average. Range: 1.5 – 10.</p>
+        </div>
+      </div>
+
+      <div>
+        <button type="submit"
+                class="px-4 py-2 ng-btn ng-btn-primary">
+          Save
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── Tab: Import ─────────────────────────────────────────────────── -->
+  <div id="tab-import" class="tab-panel hidden space-y-5">
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+      <div class="px-5 py-4 border-b border-white/[0.08]">
+        <div class="flex items-center gap-2">
+          <h2 class="ng-heading text-sm text-[--ng-text-primary]">phpIPAM</h2>
+          <span class="px-2 py-0.5 rounded-full text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Optional</span>
+        </div>
+        <p class="text-xs text-slate-600 mt-0.5">Import IP addresses from phpIPAM as monitored hosts. Only new entries are added.</p>
+      </div>
+
+      <form method="post" action="/settings/phpipam/save">
+        <div class="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">phpIPAM URL</label>
+            <input type="text" name="phpipam_url" value="{{ phpipam_url }}" placeholder="http://phpipam.local"
+                   class="ng-input">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">App ID</label>
+            <input type="text" name="phpipam_app_id" value="{{ phpipam_app_id }}" placeholder="monitoring"
+                   class="ng-input">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
+            <input type="text" name="phpipam_username" value="{{ phpipam_username }}"
+                   placeholder="admin (leave empty for App-Code mode)" autocomplete="off"
+                   class="ng-input">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
+            <input type="password" name="phpipam_password" autocomplete="new-password"
+                   placeholder="{{ '••••••••' if phpipam_has_pw else 'Enter password' }}"
+                   class="ng-input">
+            {% if phpipam_has_pw %}
+            <p class="text-slate-700 text-xs mt-1">Password set — leave empty to keep current</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="px-5 pb-4 flex flex-wrap items-end gap-5">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Auto-sync interval (hours)</label>
+            <input type="number" name="phpipam_sync_hours" value="{{ phpipam_sync_hours }}"
+                   min="0" max="168" placeholder="0 = disabled"
+                   class="ng-input w-36">
+            <p class="text-slate-700 text-xs mt-1">0 = no automatic sync</p>
+          </div>
+          <div class="pb-0.5">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" name="phpipam_verify_ssl" {% if phpipam_verify_ssl == "1" %}checked{% endif %}
+                     class="w-4 h-4 rounded border-white/[0.08] bg-white/[0.03] accent-[--ng-primary]">
+              <span class="text-sm text-slate-400">Verify SSL certificate</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="px-5 pb-5 flex items-center gap-3">
+          <button type="submit"
+                  class="px-4 py-2 ng-btn ng-btn-primary">
+            Save
+          </button>
+          {% if phpipam_url and phpipam_app_id %}
+          <button type="button" id="phpipam-sync-btn" onclick="runPhpIpamSync()"
+                  class="flex items-center gap-2 px-4 py-2 ng-btn ng-btn-ghost">
+            <svg id="phpipam-spin" class="w-3.5 h-3.5 hidden animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Sync now
+          </button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+
+    <div id="phpipam-result" class="hidden px-4 py-3 rounded-lg text-sm border"></div>
+  </div>
+
+  <!-- ── Tab: Appearance ─────────────────────────────────────────────── -->
+  <div id="tab-appearance" class="tab-panel hidden space-y-5">
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+      <div class="px-5 py-4 border-b border-white/[0.08]">
+        <h2 class="ng-heading text-sm text-[--ng-text-primary]">Accent Color</h2>
+        <p class="text-xs text-slate-600 mt-0.5">Customize the primary accent color used across the UI</p>
+      </div>
+      <div class="px-5 py-4">
+        <div class="flex flex-wrap gap-3" id="accent-picker">
+          {% for name, hex in [
+            ('Sky',    '#38BDF8'),
+            ('Violet', '#A78BFA'),
+            ('Mint',   '#34D399'),
+            ('Rose',   '#FB7185'),
+            ('Amber',  '#FBBF24'),
+            ('Orange', '#FB923C'),
+            ('Cyan',   '#22D3EE'),
+            ('Pink',   '#F472B6'),
+            ('Indigo', '#818CF8'),
+            ('Lime',   '#A3E635'),
+          ] %}
+          <button type="button" onclick="setAccentColor('{{ hex }}')"
+                  class="accent-swatch group flex flex-col items-center gap-1.5" data-color="{{ hex }}">
+            <div class="w-10 h-10 rounded-xl border-2 border-transparent group-hover:border-white/30 transition-all flex items-center justify-center"
+                 style="background: {{ hex }}20; border-color: var(--swatch-border, transparent)">
+              <div class="w-5 h-5 rounded-lg" style="background: {{ hex }}"></div>
+            </div>
+            <span class="text-[10px] font-mono text-[--ng-text-muted]">{{ name }}</span>
+          </button>
+          {% endfor %}
+        </div>
+        <div class="mt-4 flex items-center gap-3">
+          <label class="text-xs text-[--ng-text-muted] font-mono">Custom:</label>
+          <input type="color" id="custom-accent" value="#38BDF8"
+                 onchange="setAccentColor(this.value)"
+                 class="w-8 h-8 rounded-lg border border-white/[0.08] bg-transparent cursor-pointer">
+          <button type="button" onclick="setAccentColor('#38BDF8')"
+                  class="text-xs text-[--ng-text-muted] hover:text-[--ng-text-secondary] transition-colors font-mono">
+            Reset to default
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+      <div class="px-5 py-4 border-b border-white/[0.08]">
+        <h2 class="ng-heading text-sm text-[--ng-text-primary]">Preview</h2>
+      </div>
+      <div class="px-5 py-4 space-y-3">
+        <div class="flex items-center gap-3">
+          <span class="w-3 h-3 rounded-full" style="background: var(--ng-primary)"></span>
+          <span class="text-sm text-[--ng-text-primary]">Primary color</span>
+          <span class="text-xs font-mono text-[--ng-text-muted]" id="accent-hex-display">#38BDF8</span>
+        </div>
+        <div class="flex gap-2">
+          <button class="ng-btn ng-btn-primary">Button</button>
+          <button class="ng-btn ng-btn-ghost">Ghost</button>
+        </div>
+        <div class="metric-bar w-48">
+          <div class="metric-bar-fill" style="width: 65%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Notifications ──────────────────────────────────────────── -->
+  <div id="tab-notifications" class="tab-panel hidden">
+    <form method="post" action="/settings/notifications/save" class="space-y-5">
+
+      <!-- Enable -->
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl px-5 py-4">
+        <label class="flex items-center gap-3 cursor-pointer">
+          <div class="relative">
+            <input type="checkbox" name="notify_enabled" value="on" {% if notify_enabled == '1' %}checked{% endif %}
+                   class="sr-only peer">
+            <div class="w-9 h-5 bg-white/[0.08] peer-checked:bg-indigo-600 rounded-full transition-colors"></div>
+            <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4"></div>
+          </div>
+          <div>
+            <p class="text-sm font-medium text-slate-300">Enable notifications</p>
+            <p class="text-xs text-slate-600">Receive alerts on host state changes</p>
+          </div>
+        </label>
+      </div>
+
+      <!-- Telegram -->
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+        <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-sky-500/15 flex items-center justify-center">
+              <svg class="w-4 h-4 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+              </svg>
+            </div>
+            <h3 class="ng-heading text-sm text-[--ng-text-primary]">Telegram</h3>
+          </div>
+          <button type="button" onclick="testNotification('telegram')"
+                  class="px-3 py-1.5 text-xs ng-btn ng-btn-ghost">
+            Send test
+          </button>
+        </div>
+        <div class="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Bot Token</label>
+            <input type="text" name="telegram_bot_token" value="{{ telegram_bot_token }}"
+                   placeholder="1234567890:ABCdef..."
+                   class="ng-input">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Chat ID</label>
+            <input type="text" name="telegram_chat_id" value="{{ telegram_chat_id }}"
+                   placeholder="-100123456789"
+                   class="ng-input">
+          </div>
+        </div>
+      </div>
+
+      <!-- Discord -->
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+        <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center">
+              <svg class="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057.1 18.08.113 18.1.132 18.113a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
+              </svg>
+            </div>
+            <h3 class="ng-heading text-sm text-[--ng-text-primary]">Discord</h3>
+          </div>
+          <button type="button" onclick="testNotification('discord')"
+                  class="px-3 py-1.5 text-xs ng-btn ng-btn-ghost">
+            Send test
+          </button>
+        </div>
+        <div class="px-5 py-4">
+          <label class="block text-xs font-medium text-slate-400 mb-1.5">Webhook URL</label>
+          <input type="text" name="discord_webhook_url" value="{{ discord_webhook_url }}"
+                 placeholder="https://discord.com/api/webhooks/..."
+                 class="ng-input">
+        </div>
+      </div>
+
+      <!-- Email -->
+      <div class="bg-[--ng-glass-bg] border border-[--ng-glass-border] rounded-xl">
+        <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+              <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+              </svg>
+            </div>
+            <h3 class="ng-heading text-sm text-[--ng-text-primary]">Email (SMTP)</h3>
+          </div>
+          <button type="button" onclick="testNotification('email')"
+                  class="px-3 py-1.5 text-xs ng-btn ng-btn-ghost">
+            Send test
+          </button>
+        </div>
+        <div class="px-5 py-4 space-y-4">
+          <div class="grid grid-cols-3 gap-4">
+            <div class="col-span-2">
+              <label class="block text-xs font-medium text-slate-400 mb-1.5">SMTP Host</label>
+              <input type="text" name="smtp_host" value="{{ smtp_host }}" placeholder="smtp.gmail.com"
+                     class="ng-input">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1.5">Port</label>
+              <input type="number" name="smtp_port" value="{{ smtp_port }}" placeholder="587"
+                     class="ng-input">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
+              <input type="text" name="smtp_user" value="{{ smtp_user }}"
+                     class="ng-input">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1.5">Password{% if smtp_has_pw %} <span class="text-slate-600 font-normal">(saved)</span>{% endif %}</label>
+              <input type="password" name="smtp_password" placeholder="{{ '••••••••' if smtp_has_pw else '' }}"
+                     class="ng-input">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1.5">From</label>
+              <input type="email" name="smtp_from" value="{{ smtp_from }}" placeholder="vigil@example.com"
+                     class="ng-input">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1.5">To</label>
+              <input type="email" name="smtp_to" value="{{ smtp_to }}" placeholder="admin@example.com"
+                     class="ng-input">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button type="submit"
+                class="px-4 py-2 ng-btn ng-btn-primary">
+          Save
+        </button>
+        <span id="test-result" class="text-sm"></span>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  const ACTIVE   = 'bg-white/[0.08] text-[--ng-text-primary] shadow-sm border border-[--ng-glass-highlight]';
+  const INACTIVE = 'text-[--ng-text-muted] hover:text-[--ng-text-secondary] hover:bg-white/[0.03]';
+
+  window.switchTab = function(id) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.className = b.className.replace(ACTIVE, '').replace(INACTIVE, '').trim();
+      b.classList.add(...INACTIVE.split(' '));
+    });
+    document.getElementById('tab-' + id).classList.remove('hidden');
+    const btn = document.getElementById('tab-btn-' + id);
+    btn.className = btn.className.replace(INACTIVE, '').trim();
+    btn.classList.add(...ACTIVE.split(' '));
+    history.replaceState(null, '', '#' + id);
+  };
+
+  const tab = (location.hash.slice(1)) || '{{ request.query_params.get("tab", "system") }}';
+  window.switchTab(['system','monitoring','import','notifications','appearance'].includes(tab) ? tab : 'system');
+})();
+
+// ── Accent Color Picker ───────────────────────────────────────────────
+window.setAccentColor = function(hex) {
+  document.documentElement.style.setProperty('--ng-primary', hex);
+  document.documentElement.style.setProperty('--ng-primary-glow', hex);
+  // Generate lighter version for primary-light
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  const light = `rgb(${Math.min(255, r + 80)}, ${Math.min(255, g + 80)}, ${Math.min(255, b + 80)})`;
+  document.documentElement.style.setProperty('--ng-primary-light', light);
+  localStorage.setItem('ng-accent-color', hex);
+  const display = document.getElementById('accent-hex-display');
+  if (display) display.textContent = hex;
+  const customInput = document.getElementById('custom-accent');
+  if (customInput) customInput.value = hex;
+  // Highlight active swatch
+  document.querySelectorAll('.accent-swatch').forEach(s => {
+    const border = s.querySelector('div');
+    if (border) border.style.setProperty('--swatch-border', s.dataset.color === hex ? 'rgba(255,255,255,0.5)' : 'transparent');
+  });
+};
+// Apply saved accent on load
+(function() {
+  const saved = localStorage.getItem('ng-accent-color');
+  if (saved) window.setAccentColor(saved);
+})();
+
+async function testNotification(channel) {
+  const result = document.getElementById('test-result');
+  result.textContent = 'Sending…';
+  result.className = 'text-sm text-slate-400';
+  try {
+    const fd = new FormData();
+    fd.append('channel', channel);
+    const resp = await fetch('/settings/notifications/test', { method: 'POST', body: fd });
+    const data = await resp.json();
+    result.textContent = data.message;
+    result.className = data.ok ? 'text-sm text-emerald-400' : 'text-sm text-red-400';
+  } catch(e) {
+    result.textContent = 'Error: ' + e.message;
+    result.className = 'text-sm text-red-400';
+  }
+}
+
+async function runPhpIpamSync() {
+  const btn  = document.getElementById('phpipam-sync-btn');
+  const spin = document.getElementById('phpipam-spin');
+  const box  = document.getElementById('phpipam-result');
+  btn.disabled = true;
+  spin.classList.remove('hidden');
+  box.classList.add('hidden');
+  try {
+    const resp = await fetch('/settings/phpipam/sync', { method: 'POST' });
+    const data = await resp.json();
+    box.classList.remove('hidden', 'bg-emerald-500/10', 'border-emerald-500/20', 'text-emerald-400',
+                                    'bg-red-500/10',    'border-red-500/20',    'text-red-400');
+    if (data.errors?.length && !data.added) {
+      box.classList.add('bg-red-500/10', 'border-red-500/20', 'text-red-400');
+      box.textContent = 'Error: ' + data.errors[0];
+    } else {
+      box.classList.add('bg-emerald-500/10', 'border-emerald-500/20', 'text-emerald-400');
+      box.textContent = `Sync: ${data.added} added, ${data.merged ?? 0} updated, ${data.skipped} skipped`
+        + (data.errors.length ? ` · ${data.errors.length} error(s)` : '');
+    }
+  } catch(e) {
+    box.classList.remove('hidden');
+    box.classList.add('bg-red-500/10', 'border-red-500/20', 'text-red-400');
+    box.textContent = 'Connection error';
+  } finally {
+    btn.disabled = false;
+    spin.classList.add('hidden');
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}{{ agent.name }} – Agent{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+<div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+        <a href="/agents" title="Back to Agents" class="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/[0.06] transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </a>
+        <span class="w-3 h-3 rounded-full {% if online %}bg-ng-success{% else %}bg-slate-500{% endif %}"></span>
+        <h1 class="ng-heading text-2xl text-[--ng-text-primary]">{{ agent.name }}</h1>
+        {% if agent.agent_version %}
+        <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-white/[0.06] text-[--ng-text-muted]">v{{ agent.agent_version }}</span>
+        {% endif %}
+        {% if online %}
+        <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-medium border border-emerald-500/20">Online</span>
+        {% else %}
+        <span class="px-2 py-0.5 rounded-full bg-slate-500/10 text-slate-400 text-[10px] font-medium border border-slate-500/20">Offline</span>
+        {% endif %}
+    </div>
+    <div class="flex gap-2">
+        {% if ping_host %}
+        <a href="/ping/{{ ping_host.id }}?tab=monitoring" class="ng-btn ng-btn-ghost flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+            View Host Metrics
+        </a>
+        {% endif %}
+        <form method="post" action="/agents/{{ agent.id }}/delete" onsubmit="return confirm('Delete this agent and all its data?')">
+            <button type="submit" class="bg-ng-critical/10 hover:bg-ng-critical/20 text-ng-critical border border-ng-critical/20 px-3 py-1.5 rounded-lg text-sm transition-colors">Delete</button>
+        </form>
+    </div>
+</div>
+
+<!-- Agent info -->
+<div class="grid gap-4 md:grid-cols-2 mb-6">
+
+    <!-- Status card -->
+    <div class="glass-card p-5">
+        <h3 class="metric-label !text-[10px] mb-4">Agent Status</h3>
+        <div class="space-y-3">
+            <div class="flex justify-between text-xs">
+                <span class="text-[--ng-text-muted]">Hostname</span>
+                <span class="text-[--ng-text-primary] font-mono">{{ agent.hostname or '—' }}</span>
+            </div>
+            <div class="flex justify-between text-xs">
+                <span class="text-[--ng-text-muted]">Platform</span>
+                <span class="text-[--ng-text-secondary]">{{ agent.platform or '—' }} {{ agent.arch or '' }}</span>
+            </div>
+            {% if full_data.get('os_info') %}
+            <div class="flex justify-between text-xs">
+                <span class="text-[--ng-text-muted]">OS</span>
+                <span class="text-[--ng-text-secondary] font-mono text-[10px]">{{ full_data.os_info.get('name', '') }} {{ full_data.os_info.get('version', '') }}</span>
+            </div>
+            {% endif %}
+            {% if full_data.get('network_adapters') %}
+            {% for a in full_data.network_adapters %}
+            {% for ip in a.get('ips', []) %}
+            <div class="flex justify-between text-xs">
+                <span class="text-[--ng-text-muted]">IP</span>
+                <span class="text-[--ng-text-primary] font-mono">{{ ip }}</span>
+            </div>
+            {% endfor %}
+            {% endfor %}
+            {% endif %}
+            <div class="flex justify-between text-xs">
+                <span class="text-[--ng-text-muted]">Last seen</span>
+                <span class="text-[--ng-text-secondary]">{{ agent.last_seen|localtime if agent.last_seen else 'never' }}</span>
+            </div>
+            {% if latest %}
+            <div class="flex justify-between text-xs">
+                <span class="text-[--ng-text-muted]">Report interval</span>
+                <span class="text-[--ng-text-secondary]">30s</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Quick metrics (compact) -->
+    {% if latest %}
+    <div class="glass-card p-5">
+        <h3 class="metric-label !text-[10px] mb-4">Current Metrics</h3>
+        <div class="grid grid-cols-3 gap-4">
+            <div class="text-center">
+                <p class="text-2xl font-bold {% if latest.cpu_pct is not none %}{% if latest.cpu_pct > 85 %}text-ng-critical{% elif latest.cpu_pct > 70 %}text-ng-warning{% else %}text-ng-success{% endif %}{% else %}text-[--ng-text-muted]{% endif %}">{% if latest.cpu_pct is not none %}{{ latest.cpu_pct }}%{% else %}—{% endif %}</p>
+                <p class="metric-label !text-[10px]">CPU</p>
+            </div>
+            <div class="text-center">
+                <p class="text-2xl font-bold {% if latest.mem_pct is not none %}{% if latest.mem_pct > 85 %}text-ng-critical{% elif latest.mem_pct > 70 %}text-ng-warning{% else %}text-ng-success{% endif %}{% else %}text-[--ng-text-muted]{% endif %}">{% if latest.mem_pct is not none %}{{ latest.mem_pct }}%{% else %}—{% endif %}</p>
+                <p class="metric-label !text-[10px]">Memory</p>
+            </div>
+            <div class="text-center">
+                <p class="text-2xl font-bold {% if latest.disk_pct is not none %}{% if latest.disk_pct > 85 %}text-ng-critical{% elif latest.disk_pct > 70 %}text-ng-warning{% else %}text-[--ng-text-primary]{% endif %}{% else %}text-[--ng-text-muted]{% endif %}">{% if latest.disk_pct is not none %}{{ latest.disk_pct }}%{% else %}—{% endif %}</p>
+                <p class="metric-label !text-[10px]">Disk</p>
+            </div>
+        </div>
+        {% if ping_host %}
+        <div class="mt-4 pt-3 border-t border-white/[0.06] text-center">
+            <a href="/ping/{{ ping_host.id }}?tab=monitoring" class="text-ng-primary text-xs hover:underline">View full metrics in Host detail &rarr;</a>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="glass-card p-5 flex items-center justify-center">
+        <div class="text-center text-[--ng-text-muted]">
+            <p class="text-sm mb-1">No data yet</p>
+            <p class="text-[10px]">Waiting for agent to report...</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Log Collection Settings -->
+<div class="glass-card p-5 mb-4">
+    <h3 class="metric-label !text-[10px] mb-4">Log Collection</h3>
+    <form method="post" action="/agents/{{ agent.id }}/settings">
+        <p class="text-xs text-[--ng-text-muted] mb-3">Windows Event Log levels to collect and forward to Syslog:</p>
+        <div class="flex flex-wrap gap-4">
+            {% set active_levels = (agent.log_levels or "1,2,3").split(",") %}
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" name="level_1" value="on"
+                       {% if "1" in active_levels %}checked{% endif %}
+                       class="rounded bg-white/[0.03] border-[--ng-glass-border] accent-red-500">
+                <span class="text-sm">
+                    <span class="inline-block w-2 h-2 rounded-full bg-red-500 mr-1"></span>
+                    Critical
+                </span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" name="level_2" value="on"
+                       {% if "2" in active_levels %}checked{% endif %}
+                       class="rounded bg-white/[0.03] border-[--ng-glass-border] accent-orange-500">
+                <span class="text-sm">
+                    <span class="inline-block w-2 h-2 rounded-full bg-orange-500 mr-1"></span>
+                    Error
+                </span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" name="level_3" value="on"
+                       {% if "3" in active_levels %}checked{% endif %}
+                       class="rounded bg-white/[0.03] border-[--ng-glass-border] accent-yellow-500">
+                <span class="text-sm">
+                    <span class="inline-block w-2 h-2 rounded-full bg-yellow-500 mr-1"></span>
+                    Warning
+                </span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" name="level_4" value="on"
+                       {% if "4" in active_levels %}checked{% endif %}
+                       class="rounded bg-white/[0.03] border-[--ng-glass-border] accent-blue-400">
+                <span class="text-sm">
+                    <span class="inline-block w-2 h-2 rounded-full bg-blue-400 mr-1"></span>
+                    Information
+                </span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" name="level_5" value="on"
+                       {% if "5" in active_levels %}checked{% endif %}
+                       class="rounded bg-white/[0.03] border-[--ng-glass-border] accent-slate-400">
+                <span class="text-sm">
+                    <span class="inline-block w-2 h-2 rounded-full bg-slate-400 mr-1"></span>
+                    Verbose
+                </span>
+            </label>
+        </div>
+        <div class="mt-3">
+            <button type="submit" class="ng-btn ng-btn-primary !text-xs !px-3 !py-1.5">Save</button>
+        </div>
+    </form>
+</div>
+
+<!-- Agent Configuration -->
+<div class="glass-card p-5">
+    <h3 class="metric-label !text-[10px] mb-4">Configuration</h3>
+    <div class="space-y-3">
+        <div>
+            <p class="text-[10px] text-[--ng-text-muted] font-mono mb-1">Token</p>
+            <div class="flex items-center gap-2">
+                <code class="flex-1 block bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 text-[10px] font-mono text-[--ng-text-muted] select-all overflow-x-auto">{{ agent.token }}</code>
+                <button onclick="navigator.clipboard.writeText('{{ agent.token }}').then(()=>showToast('Token copied','success'))"
+                        class="ng-btn ng-btn-ghost !px-2 !py-1 !text-[10px] shrink-0">Copy</button>
+                <form method="post" action="/agents/{{ agent.id }}/regenerate-token" onsubmit="return confirm('Regenerate token? The agent will need to re-enroll.')" class="inline shrink-0">
+                    <button type="submit" class="ng-btn ng-btn-ghost !px-2 !py-1 !text-[10px] text-ng-warning">Regenerate</button>
+                </form>
+            </div>
+        </div>
+        <div class="border-t border-white/[0.06] pt-3">
+            <p class="text-[10px] text-[--ng-text-muted] font-mono mb-1">Re-install on this host</p>
+            <div class="space-y-2">
+                <div class="relative group">
+                    <code id="reinstall-linux" class="block bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 pr-16 text-[11px] font-mono text-ng-success overflow-x-auto whitespace-nowrap">curl -sSL {{ request.url.scheme }}://{{ request.url.netloc }}/install/linux | sudo bash</code>
+                    <button onclick="navigator.clipboard.writeText(document.getElementById('reinstall-linux').textContent.trim()).then(()=>showToast('Copied!','success'))"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 ng-btn ng-btn-ghost !px-2 !py-1 !text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">Copy</button>
+                </div>
+                <div class="relative group">
+                    <code id="reinstall-win" class="block bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 pr-16 text-[11px] font-mono text-[#58a6ff] overflow-x-auto whitespace-nowrap">irm {{ request.url.scheme }}://{{ request.url.netloc }}/install/windows | iex</code>
+                    <button onclick="navigator.clipboard.writeText(document.getElementById('reinstall-win').textContent.trim()).then(()=>showToast('Copied!','success'))"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 ng-btn ng-btn-ghost !px-2 !py-1 !text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">Copy</button>
+                </div>
+            </div>
+            <p class="text-[9px] text-[--ng-text-muted] mt-1">Same hostname = same agent. Re-running the installer reconnects this host.</p>
+        </div>
+    </div>
+</div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,620 @@
+{% extends "base.html" %}
+{% block title %}Syslog – {{ request.state.site_name }}{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+  {# ── Header ─────────────────────────────────────────────────────────── #}
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="ng-heading text-2xl text-[--ng-text-primary]">Syslog</h1>
+      <p class="text-[--ng-text-muted] text-sm mt-0.5 font-mono">
+        {{ "{:,}".format(total) }} messages in the last
+        {% if f_hours < 24 %}{{ f_hours }}h{% elif f_hours == 24 %}24h{% elif f_hours == 48 %}2d{% else %}7d{% endif %}
+      </p>
+    </div>
+
+    <div class="flex items-center gap-3">
+      {# Severity spike alert #}
+      {% if alert_spike %}
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium animate-pulse">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+        </svg>
+        Error spike: {{ alert_spike.recent }} errors in 5min ({{ alert_spike.ratio }}x normal)
+      </div>
+      {% endif %}
+
+      {# Live tail toggle #}
+      <button id="live-toggle" type="button" onclick="toggleLive()"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all
+                     border-slate-600/30 text-slate-400 hover:text-white hover:border-slate-500/50">
+        <span class="w-2 h-2 rounded-full bg-slate-500" id="live-dot"></span>
+        <span id="live-label">Live</span>
+      </button>
+
+      {# Severity summary pills #}
+      <div class="flex items-center gap-1.5 flex-wrap">
+        {% for sev, label in [(0,'Emerg'),(1,'Alert'),(2,'Crit'),(3,'Err'),(4,'Warn'),(5,'Notice'),(6,'Info'),(7,'Debug')] %}
+          {% set cnt = severity_counts.get(sev, 0) %}
+          {% if cnt > 0 %}
+          <a href="?severity={{ sev }}&hours={{ f_hours }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&sort={{ f_sort }}&order={{ f_order }}"
+             class="px-2 py-0.5 rounded text-[10px] font-semibold tabular-nums cursor-pointer transition-all
+               {% if sev <= 2 %}bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25
+               {% elif sev == 3 %}bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25
+               {% elif sev == 4 %}bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 hover:bg-yellow-500/25
+               {% elif sev <= 6 %}bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20
+               {% else %}bg-slate-500/10 text-slate-500 border border-slate-500/20 hover:bg-slate-500/20{% endif %}
+               {% if f_severity == sev %}ring-1 ring-white/30 scale-105{% endif %}">
+            {{ label }} {{ cnt }}
+          </a>
+          {% endif %}
+        {% endfor %}
+        {% if f_severity is not none %}
+        <a href="?hours={{ f_hours }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&sort={{ f_sort }}&order={{ f_order }}"
+           class="px-2 py-0.5 rounded text-[10px] text-slate-500 hover:text-white border border-slate-600/30 hover:border-slate-500/50 transition-colors ml-1">
+          Clear
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Log-rate chart ──────────────────────────────────────────────────── #}
+  <div class="glass-card !rounded-xl !p-3 mb-4">
+    <div class="flex items-center justify-between mb-1">
+      <span class="text-[10px] text-[--ng-text-muted] uppercase tracking-wider font-medium">Message Rate</span>
+      <div class="flex items-center gap-3 text-[10px]">
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-red-400 inline-block"></span>Errors</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-yellow-400 inline-block"></span>Warnings</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-blue-400 inline-block"></span>Info</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-slate-500 inline-block"></span>Debug</span>
+      </div>
+    </div>
+    <canvas id="rateChart" height="45"></canvas>
+  </div>
+
+  {# ── Intelligence Panel ─────────────────────────────────────────────── #}
+  {% if intelligence and (intelligence.anomalies or intelligence.new_templates or intelligence.precursors) %}
+  <div class="glass-card !rounded-xl !p-3 mb-4 !border-indigo-500/20 !bg-indigo-500/[0.03]">
+    <div class="flex items-center gap-2 mb-2">
+      <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+      </svg>
+      <span class="text-indigo-400 text-xs font-display tracking-wider uppercase">Intelligence</span>
+      <a href="/syslog/templates" class="ml-auto text-[10px] text-indigo-400/60 hover:text-indigo-400 transition-colors font-mono">
+        Browse templates &rarr;
+      </a>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+
+      {# Baseline anomalies #}
+      {% if intelligence.anomalies %}
+      <div>
+        <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Rate Anomalies</p>
+        {% for a in intelligence.anomalies %}
+        <div class="flex items-center gap-2 text-xs mb-1">
+          <span class="px-1.5 py-0.5 rounded text-[9px] font-mono
+            {% if a.type == 'silent' %}bg-yellow-500/15 text-yellow-400{% else %}bg-red-500/15 text-red-400{% endif %}">
+            {% if a.type == 'silent' %}SILENT{% else %}SPIKE{% endif %}
+          </span>
+          <span class="text-[--ng-text-secondary] font-mono truncate">{{ a.source_ip }}</span>
+          <span class="text-[--ng-text-muted] text-[10px] font-mono ml-auto shrink-0">
+            {% if a.type == 'silent' %}0{% else %}{{ a.current_count }}{% endif %} / ~{{ a.expected }}/hr
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {# New templates #}
+      {% if intelligence.new_templates %}
+      <div>
+        <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">New Patterns</p>
+        {% for t in intelligence.new_templates %}
+        <div class="mb-1.5">
+          <p class="text-[10px] text-[--ng-text-secondary] font-mono truncate leading-relaxed" title="{{ t.template }}">{{ t.template[:80] }}</p>
+          <div class="flex items-center gap-1.5 mt-0.5">
+            <span class="text-[9px] text-emerald-400 font-mono">NEW {{ t.first_seen }}</span>
+            <span class="text-[9px] text-[--ng-text-muted] font-mono">{{ t.count }}x</span>
+            {% for tag in t.tags.split(",") if tag.strip() %}
+            <span class="px-1 py-0 rounded text-[8px] font-mono bg-indigo-500/15 text-indigo-400">{{ tag.strip() }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {# Precursors #}
+      {% if intelligence.precursors %}
+      <div>
+        <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Failure Precursors</p>
+        {% for p in intelligence.precursors %}
+        <div class="mb-1.5">
+          <p class="text-[10px] text-[--ng-text-secondary] font-mono truncate" title="{{ p.template }}">{{ p.template[:80] }}</p>
+          <div class="flex items-center gap-2 mt-0.5">
+            <span class="px-1 py-0 rounded text-[8px] font-mono bg-red-500/15 text-red-400">{{ p.confidence }}% → {{ p.event }}</span>
+            <span class="text-[9px] text-[--ng-text-muted] font-mono">~{{ (p.lead_time / 60)|round(1) }}min before</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Filter bar ────────────────────────────────────────────────────── #}
+  <form method="get" action="/syslog" id="syslog-filter"
+        class="glass-card !rounded-xl !p-3 flex flex-wrap items-center gap-2.5 mb-4">
+
+    {# Search #}
+    <div class="relative flex-1 min-w-[200px]">
+      <svg class="w-4 h-4 text-[--ng-text-muted] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+      </svg>
+      <input type="text" name="q" value="{{ f_q }}" placeholder="Search messages..."
+             class="w-full pl-9 pr-3 py-1.5 ng-input text-sm" id="syslog-search">
+    </div>
+
+    {# Severity #}
+    <select name="severity" class="ng-input text-sm py-1.5 w-[120px]" onchange="this.form.submit()">
+      <option value="">All levels</option>
+      {% for sev in range(8) %}
+      <option value="{{ sev }}" {% if f_severity == sev %}selected{% endif %}>
+        {{ severity_labels.get(sev, '?') }}
+      </option>
+      {% endfor %}
+    </select>
+
+    {# Host #}
+    <select name="host" class="ng-input text-sm py-1.5 w-[160px]" onchange="this.form.submit()">
+      <option value="">All hosts</option>
+      {% for ip, hostname in known_hosts %}
+      <option value="{{ ip }}" {% if f_host == ip %}selected{% endif %}>{{ hostname or ip }}</option>
+      {% endfor %}
+    </select>
+
+    {# App #}
+    <select name="app" class="ng-input text-sm py-1.5 w-[130px]" onchange="this.form.submit()">
+      <option value="">All apps</option>
+      {% for a in known_apps %}
+      <option value="{{ a }}" {% if f_app == a %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+
+    {% if f_facility is not none %}
+    <input type="hidden" name="facility" value="{{ f_facility }}">
+    {% endif %}
+
+    {# Time range #}
+    <select name="hours" class="ng-input text-sm py-1.5 w-[80px]" onchange="this.form.submit()">
+      {% for h in [1, 6, 12, 24, 48, 168] %}
+      <option value="{{ h }}" {% if f_hours == h %}selected{% endif %}>
+        {% if h < 24 %}{{ h }}h{% elif h == 24 %}24h{% elif h == 48 %}2d{% else %}7d{% endif %}
+      </option>
+      {% endfor %}
+    </select>
+
+    <input type="hidden" name="sort" value="{{ f_sort }}">
+    <input type="hidden" name="order" value="{{ f_order }}">
+
+    <button type="submit" class="ng-btn ng-btn-primary text-sm !py-1.5 !px-4">Search</button>
+    {% if f_q or f_host or f_app or f_severity is not none or f_facility is not none or f_hours != 24 %}
+    <a href="/syslog" class="text-[10px] text-[--ng-text-muted] hover:text-white transition-colors">Reset all</a>
+    {% endif %}
+
+    {# Saved views dropdown #}
+    <div class="ml-auto flex items-center gap-2">
+      {% if saved_views %}
+      <select class="ng-input text-xs py-1 w-[130px]" onchange="if(this.value)window.location=this.value">
+        <option value="">Saved views</option>
+        {% for v in saved_views %}
+        <option value="/syslog?{{ v.filters_json | replace('{','') | replace('}','') | replace('\"','') | replace(': ','=') | replace(', ','&') }}">{{ v.name }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+
+      {# Save current view #}
+      <button type="button" onclick="document.getElementById('save-view-modal').classList.toggle('hidden')"
+              class="text-[10px] text-[--ng-text-muted] hover:text-white transition-colors" title="Save current filters">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+        </svg>
+      </button>
+
+      {# Auto-refresh indicator (hidden when live) #}
+      <div id="refresh-wrap" class="flex items-center gap-2 text-[10px] text-[--ng-text-muted]">
+        <span id="syslog-refresh-label">Auto-refresh: 10s</span>
+        <div class="w-16 h-1 rounded-full bg-white/5 overflow-hidden">
+          <div id="syslog-refresh-bar" class="h-full bg-[--ng-primary] rounded-full transition-all" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  {# ── Save view modal ─────────────────────────────────────────────── #}
+  <div id="save-view-modal" class="hidden glass-card !rounded-xl !p-4 mb-4 flex items-center gap-3">
+    <form method="post" action="/syslog/views" class="flex items-center gap-2 flex-1">
+      <input type="text" name="view_name" placeholder="View name..." class="ng-input text-sm py-1.5 flex-1" required>
+      <input type="hidden" name="severity" value="{{ f_severity if f_severity is not none else '' }}">
+      <input type="hidden" name="facility" value="{{ f_facility if f_facility is not none else '' }}">
+      <input type="hidden" name="host" value="{{ f_host }}">
+      <input type="hidden" name="app" value="{{ f_app }}">
+      <input type="hidden" name="q" value="{{ f_q }}">
+      <input type="hidden" name="hours" value="{{ f_hours }}">
+      <button type="submit" class="ng-btn ng-btn-primary text-sm !py-1.5 !px-4">Save</button>
+      <button type="button" onclick="document.getElementById('save-view-modal').classList.add('hidden')"
+              class="text-xs text-slate-500 hover:text-white">Cancel</button>
+    </form>
+    {% if saved_views %}
+    <div class="border-l border-white/10 pl-3 flex gap-1 flex-wrap">
+      {% for v in saved_views %}
+      <form method="post" action="/syslog/views/{{ v.id }}/delete" class="inline">
+        <button type="submit" class="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors" title="Delete {{ v.name }}">
+          {{ v.name }} &times;
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Retention info ──────────────────────────────────────────────── #}
+  <div class="text-[10px] text-[--ng-text-muted]/50 mb-3 font-mono">
+    Retention: Debug {{ retention_days[7] }}d | Info {{ retention_days[6] }}d | Notice {{ retention_days[5] }}d | Warn {{ retention_days[4] }}d | Error+ {{ retention_days[3] }}d
+  </div>
+
+  {# ── Live tail container (hidden by default) ────────────────────── #}
+  <div id="live-container" class="hidden glass-card !rounded-xl overflow-hidden mb-4">
+    <div class="flex items-center justify-between px-4 py-2 border-b border-white/[0.08]">
+      <span class="text-xs font-medium text-emerald-400 flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Live Stream
+      </span>
+      <span class="text-[10px] text-[--ng-text-muted]" id="live-count">0 messages</span>
+    </div>
+    <div class="overflow-y-auto max-h-[300px]" id="live-body">
+      <table class="w-full text-sm">
+        <tbody id="live-rows" class="divide-y divide-white/[0.04]"></tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if not messages %}
+  {# ── Empty state ──────────────────────────────────────────────────── #}
+  <div class="glass-card !rounded-xl p-12 text-center">
+    <div class="w-12 h-12 rounded-full bg-slate-500/10 flex items-center justify-center mx-auto mb-4">
+      <svg class="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+    </div>
+    <p class="text-[--ng-text-primary] font-semibold">No syslog messages</p>
+    <p class="text-[--ng-text-muted] text-sm mt-1">No messages match the current filters, or no syslog data has been received yet.</p>
+    <p class="text-[--ng-text-muted] text-xs mt-3 font-mono">Configure your devices to send syslog to <span class="text-[--ng-primary]">{{ request.url.hostname }}:514</span> (UDP)</p>
+  </div>
+
+  {% else %}
+
+  {# ── Log table ────────────────────────────────────────────────────── #}
+  <div class="glass-card !rounded-xl overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm" id="syslog-table">
+        <thead>
+          <tr class="border-b border-white/[0.08] text-left">
+            {% macro sort_header(col, label, width) %}
+            {% set is_active = f_sort == col %}
+            {% set next_order = 'asc' if (is_active and f_order == 'desc') else 'desc' %}
+            <th class="px-4 py-2.5 text-[--ng-text-muted] font-medium text-[10px] uppercase tracking-wider {{ width }}">
+              <a href="?sort={{ col }}&order={{ next_order }}&severity={{ f_severity if f_severity is not none else '' }}&facility={{ f_facility if f_facility is not none else '' }}&host={{ f_host }}&app={{ f_app }}&q={{ f_q }}&hours={{ f_hours }}&page={{ page }}"
+                 class="flex items-center gap-1 hover:text-[--ng-text-primary] transition-colors {% if is_active %}text-[--ng-primary]{% endif %}">
+                {{ label }}
+                {% if is_active %}
+                <svg class="w-3 h-3 {% if f_order == 'asc' %}rotate-180{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+                {% endif %}
+              </a>
+            </th>
+            {% endmacro %}
+            {{ sort_header("time", "Time", "w-[150px]") }}
+            {{ sort_header("severity", "Severity", "w-[80px]") }}
+            {{ sort_header("host", "Host", "w-[150px]") }}
+            {{ sort_header("source", "Source IP", "w-[120px]") }}
+            {{ sort_header("app", "App", "w-[100px]") }}
+            <th class="px-4 py-2.5 text-[--ng-text-muted] font-medium text-[10px] uppercase tracking-wider">Message</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-white/[0.04]" id="syslog-body">
+          {% for msg in messages %}
+          {% set dedup = msg._dedup_count if msg._dedup_count is defined else 1 %}
+          <tr class="hover:bg-white/[0.03] transition-colors group cursor-pointer
+            {% if msg.severity is not none and msg.severity <= 2 %}bg-red-500/[0.04]
+            {% elif msg.severity == 3 %}bg-orange-500/[0.03]
+            {% elif msg.severity == 4 %}bg-yellow-500/[0.02]{% endif %}"
+            {% if msg._fields %}onclick="this.nextElementSibling?.classList.toggle('hidden')"{% endif %}>
+            <td class="px-4 py-2 text-[--ng-text-muted] text-xs tabular-nums whitespace-nowrap font-mono">
+              {{ msg.timestamp|localtime("%m-%d %H:%M:%S") }}
+            </td>
+            <td class="px-4 py-2">
+              {% if msg.severity is not none %}
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold
+                {% if msg.severity <= 2 %}bg-red-500/20 text-red-400
+                {% elif msg.severity == 3 %}bg-orange-500/20 text-orange-400
+                {% elif msg.severity == 4 %}bg-yellow-500/20 text-yellow-400
+                {% elif msg.severity <= 6 %}bg-blue-500/15 text-blue-400
+                {% else %}bg-slate-500/15 text-slate-500{% endif %}">
+                {{ severity_labels.get(msg.severity, '?') }}
+              </span>
+              {% endif %}
+            </td>
+            {% set resolved_id = msg.host_id or ip_to_host_id.get(msg.source_ip) or (ip_to_host_id.get((msg.hostname or '').lower())) %}
+            <td class="px-4 py-2 text-xs truncate max-w-[150px]">
+              {% if resolved_id %}
+              <a href="/ping/{{ resolved_id }}?tab=syslog" class="text-[--ng-text-secondary] hover:text-white transition-colors underline decoration-dotted underline-offset-2" onclick="event.stopPropagation()">{{ msg.hostname or '...' }}</a>
+              {% else %}
+              <span class="text-[--ng-text-secondary]">{{ msg.hostname or '...' }}</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-2 text-xs truncate max-w-[120px] font-mono">
+              {% if resolved_id %}
+              <a href="/ping/{{ resolved_id }}?tab=syslog" class="text-[--ng-text-muted] hover:text-white transition-colors" onclick="event.stopPropagation()">{{ msg.source_ip }}</a>
+              {% else %}
+              <span class="text-[--ng-text-muted]">{{ msg.source_ip }}</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-2 text-[--ng-text-muted] text-xs truncate max-w-[100px]">
+              {% if msg.app_name %}
+              <span class="px-1.5 py-0.5 rounded bg-white/5 text-[--ng-text-secondary]">{{ msg.app_name }}</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-2 text-xs font-mono break-all">
+              <div class="flex items-center gap-2">
+                {% for tag in (msg._tags or [])[:2] %}
+                <span class="shrink-0 px-1 py-0 rounded text-[8px]
+                  {% if tag == 'security' %}bg-red-500/15 text-red-400
+                  {% elif tag == 'hardware' %}bg-orange-500/15 text-orange-400
+                  {% elif tag == 'network' %}bg-blue-500/15 text-blue-400
+                  {% elif tag == 'auth' %}bg-yellow-500/15 text-yellow-400
+                  {% else %}bg-indigo-500/15 text-indigo-400{% endif %}">{{ tag }}</span>
+                {% endfor %}
+                <span class="line-clamp-2 flex-1 text-[--ng-text-primary] {% if (msg._noise_score or 50) > 70 %}opacity-40{% endif %}" title="{{ msg.message }}">{{ msg.message[:500] }}</span>
+                {% if dedup > 1 %}
+                <span class="shrink-0 px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-400 text-[10px] font-bold tabular-nums" title="Repeated {{ dedup }} times">
+                  x{{ dedup }}
+                </span>
+                {% endif %}
+                {% if msg._fields %}
+                <svg class="w-3.5 h-3.5 text-slate-600 shrink-0 group-hover:text-slate-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {# ── Expandable structured fields row ──────────────────── #}
+          {% if msg._fields %}
+          <tr class="hidden bg-white/[0.02]">
+            <td colspan="6" class="px-4 py-3">
+              <div class="flex flex-wrap gap-2">
+                {% for key, val in msg._fields.items() %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/[0.04] text-[11px]">
+                  <span class="text-slate-500">{{ key }}:</span>
+                  <span class="text-[--ng-text-secondary] font-mono">{{ val[:80] }}</span>
+                </span>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── Pagination ───────────────────────────────────────────────────── #}
+  {% if total_pages > 1 %}
+  <div class="flex items-center justify-between mt-4">
+    <p class="text-[--ng-text-muted] text-xs font-mono">
+      Page {{ page }} / {{ total_pages }}
+      <span class="text-[--ng-text-muted]/50 ml-2">({{ "{:,}".format(total) }} total)</span>
+    </p>
+    <div class="flex items-center gap-1">
+      {% set qs = "severity=" ~ (f_severity if f_severity is not none else '') ~ "&facility=" ~ (f_facility if f_facility is not none else '') ~ "&host=" ~ f_host ~ "&app=" ~ f_app ~ "&q=" ~ f_q ~ "&hours=" ~ f_hours ~ "&sort=" ~ f_sort ~ "&order=" ~ f_order %}
+      {% if page > 1 %}
+      <a href="?page=1&{{ qs }}" class="px-2.5 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
+        &laquo;&laquo;
+      </a>
+      <a href="?page={{ page - 1 }}&{{ qs }}" class="px-3 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
+        &lsaquo; Prev
+      </a>
+      {% endif %}
+      {% if page < total_pages %}
+      <a href="?page={{ page + 1 }}&{{ qs }}" class="px-3 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
+        Next &rsaquo;
+      </a>
+      <a href="?page={{ total_pages }}&{{ qs }}" class="px-2.5 py-1 rounded-lg text-xs text-[--ng-text-muted] hover:text-white glass-card !border-[--ng-glass-border] hover:!border-slate-500/50 transition-colors">
+        &raquo;&raquo;
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  if (!window._pageIntervals) window._pageIntervals = [];
+
+  // ── Rate chart ───────────────────────────────────────────────────────
+  const rateData = {{ rate_chart | safe }};
+  const rateCtx = document.getElementById('rateChart');
+  if (rateCtx && rateData.labels && rateData.labels.length > 0) {
+    new Chart(rateCtx.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: rateData.labels,
+        datasets: [
+          { label: 'Errors', data: rateData.err, backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 2 },
+          { label: 'Warnings', data: rateData.warn, backgroundColor: 'rgba(234,179,8,0.5)', borderRadius: 2 },
+          { label: 'Info', data: rateData.info, backgroundColor: 'rgba(59,130,246,0.35)', borderRadius: 2 },
+          { label: 'Debug', data: rateData.debug, backgroundColor: 'rgba(100,116,139,0.2)', borderRadius: 2 },
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false,
+          backgroundColor: 'rgba(15,20,35,0.95)', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+          titleColor: '#94a3b8', bodyColor: '#e2e8f0' }
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: '#475569', maxTicksLimit: 20, font: { size: 10 } }, grid: { display: false } },
+          y: { stacked: true, ticks: { color: '#475569', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true }
+        },
+        animation: false,
+      }
+    });
+  }
+
+  // ── Auto-refresh (paused during live mode) ───────────────────────────
+  const REFRESH = 10;
+  let refreshLeft = REFRESH;
+  let refreshPaused = false;
+  const bar = document.getElementById('syslog-refresh-bar');
+  if (bar) {
+    window._pageIntervals.push(setInterval(() => {
+      if (refreshPaused) return;
+      refreshLeft--;
+      bar.style.width = ((REFRESH - refreshLeft) / REFRESH * 100) + '%';
+      if (refreshLeft <= 0) { refreshLeft = REFRESH; location.reload(); }
+    }, 1000));
+  }
+
+  // ── Live tail ────────────────────────────────────────────────────────
+  let liveActive = false;
+  let eventSource = null;
+  let liveCount = 0;
+
+  const SEV_COLORS = {
+    0:'bg-red-500/20 text-red-400', 1:'bg-red-500/20 text-red-400', 2:'bg-red-500/20 text-red-400',
+    3:'bg-orange-500/20 text-orange-400', 4:'bg-yellow-500/20 text-yellow-400',
+    5:'bg-blue-500/15 text-blue-400', 6:'bg-blue-500/15 text-blue-400',
+    7:'bg-slate-500/15 text-slate-500'
+  };
+  const SEV_ROW = {
+    0:'bg-red-500/[0.04]', 1:'bg-red-500/[0.04]', 2:'bg-red-500/[0.04]',
+    3:'bg-orange-500/[0.03]', 4:'bg-yellow-500/[0.02]'
+  };
+
+  function toggleLive() {
+    liveActive = !liveActive;
+    const btn = document.getElementById('live-toggle');
+    const dot = document.getElementById('live-dot');
+    const label = document.getElementById('live-label');
+    const container = document.getElementById('live-container');
+    const refreshWrap = document.getElementById('refresh-wrap');
+
+    if (liveActive) {
+      btn.classList.replace('border-slate-600/30', 'border-emerald-500/30');
+      btn.classList.replace('text-slate-400', 'text-emerald-400');
+      dot.classList.replace('bg-slate-500', 'bg-emerald-400');
+      dot.classList.add('animate-pulse');
+      label.textContent = 'Live';
+      container.classList.remove('hidden');
+      refreshWrap.classList.add('hidden');
+      refreshPaused = true;
+
+      // Build SSE URL with current filters
+      const params = new URLSearchParams();
+      const sev = document.querySelector('[name="severity"]')?.value;
+      const host = document.querySelector('[name="host"]')?.value;
+      const app = document.querySelector('[name="app"]')?.value;
+      if (sev) params.set('severity', sev);
+      if (host) params.set('host', host);
+      if (app) params.set('app', app);
+
+      eventSource = new EventSource('/syslog/stream?' + params.toString());
+      eventSource.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        liveCount++;
+        document.getElementById('live-count').textContent = liveCount + ' messages';
+
+        const sev = msg.severity ?? 6;
+        const rowClass = SEV_ROW[sev] || '';
+        const sevClass = SEV_COLORS[sev] || 'bg-slate-500/15 text-slate-500';
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-white/[0.03] transition-colors ' + rowClass;
+        tr.innerHTML = `
+          <td class="px-4 py-2 text-[--ng-text-muted] text-xs tabular-nums whitespace-nowrap font-mono w-[150px]">${msg.timestamp}</td>
+          <td class="px-4 py-2 w-[80px]"><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${sevClass}">${msg.severity_label}</span></td>
+          <td class="px-4 py-2 text-[--ng-text-secondary] text-xs truncate max-w-[150px]">${msg.hostname || '...'}</td>
+          <td class="px-4 py-2 text-[--ng-text-muted] text-xs font-mono truncate max-w-[120px]">${msg.source_ip}</td>
+          <td class="px-4 py-2 text-[--ng-text-muted] text-xs truncate max-w-[100px]">${msg.app_name ? '<span class="px-1.5 py-0.5 rounded bg-white/5 text-[--ng-text-secondary]">'+msg.app_name+'</span>' : ''}</td>
+          <td class="px-4 py-2 text-xs font-mono break-all">
+            ${msg.is_new_template ? '<span class="px-1 py-0 rounded text-[8px] bg-emerald-500/20 text-emerald-400 mr-1">NEW</span>' : ''}
+            ${(msg.tags||[]).map(t => '<span class="px-1 py-0 rounded text-[8px] bg-indigo-500/15 text-indigo-400 mr-0.5">' + t + '</span>').join('')}
+            <span class="text-[--ng-text-primary] line-clamp-2 ${msg.noise_score > 70 ? 'opacity-40' : ''}">${msg.message}</span>
+          </td>
+        `;
+        const tbody = document.getElementById('live-rows');
+        tbody.insertBefore(tr, tbody.firstChild);
+        // Keep max 200 rows
+        while (tbody.children.length > 200) tbody.lastChild.remove();
+      };
+      eventSource.onerror = () => {
+        if (liveActive) {
+          // Reconnect after brief delay
+          setTimeout(() => { if (liveActive) toggleLive(); toggleLive(); }, 2000);
+        }
+      };
+    } else {
+      btn.classList.replace('border-emerald-500/30', 'border-slate-600/30');
+      btn.classList.replace('text-emerald-400', 'text-slate-400');
+      dot.classList.replace('bg-emerald-400', 'bg-slate-500');
+      dot.classList.remove('animate-pulse');
+      label.textContent = 'Live';
+      container.classList.add('hidden');
+      refreshWrap.classList.remove('hidden');
+      refreshPaused = false;
+      refreshLeft = REFRESH;
+
+      if (eventSource) { eventSource.close(); eventSource = null; }
+    }
+  }
+
+  // ── Search keyboard shortcut ─────────────────────────────────────────
+  const searchInput = document.getElementById('syslog-search');
+  if (searchInput) {
+    searchInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('syslog-filter').submit(); }
+    });
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) {
+      e.preventDefault();
+      if (searchInput) searchInput.focus();
+    }
+    // L to toggle live
+    if (e.key === 'l' && !['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) {
+      e.preventDefault();
+      toggleLive();
+    }
+  });
+
+  // Cleanup on SPA navigation
+  window.addEventListener('beforeunload', () => {
+    if (eventSource) eventSource.close();
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,39 @@
+{# Widget: Integrations health overview #}
+<div class="grid-stack-item" gs-id="integrations" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="3" gs-min-w="3">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    {% if integration_health %}
+    <div class="flex items-center gap-2 mb-3 cursor-pointer section-header" data-section="integrations">
+      <h2 class="metric-label !text-[10px]">Integrations</h2>
+      {% set int_errors = integration_health | selectattr('ok', 'equalto', false) | list | length %}
+      {% if int_errors > 0 %}
+      <span class="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-ng-critical/15 text-ng-critical">{{ int_errors }} error{{ 's' if int_errors != 1 }}</span>
+      {% endif %}
+      <svg class="w-3.5 h-3.5 text-[--ng-text-muted] section-chevron transition-transform ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </div>
+    <div class="flex flex-wrap gap-2 section-body">
+      {% for i in integration_health %}
+      <a href="{{ i.url }}"
+         class="glass-card flex items-center gap-2 !px-3 !py-2 !rounded-lg
+           {% if i.ok is none %}
+           {% elif i.ok %}!border-ng-success/15 !bg-ng-success/[0.03]
+           {% else %}!border-ng-critical/20 !bg-ng-critical/[0.04]{% endif %}">
+        <span class="w-2 h-2 rounded-full shrink-0
+          {% if i.ok is none %}bg-[--ng-text-muted]
+          {% elif i.ok %}bg-ng-success glow-success
+          {% else %}bg-ng-critical node-critical{% endif %}"></span>
+        <div class="min-w-0">
+          <p class="text-[--ng-text-primary] text-xs font-medium leading-none">{{ i.name }}</p>
+          <p class="text-[--ng-text-muted] text-[10px] font-mono mt-0.5">{{ i.label }}</p>
+        </div>
+        {% if i.cached_at %}
+        <span class="text-[--ng-text-muted] text-[10px] font-mono ml-1 shrink-0">{{ i.cached_at|localtime("%H:%M") }}</span>
+        {% endif %}
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">No integrations configured</p>
+    {% endif %}
+  </div>
+</div>

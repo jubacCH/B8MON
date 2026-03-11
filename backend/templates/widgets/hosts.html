@@ -1,0 +1,55 @@
+{# Widget: All hosts grid #}
+<div class="grid-stack-item" gs-id="hosts" gs-x="{{ w.x }}" gs-y="{{ w.y }}" gs-w="{{ w.w }}" gs-h="{{ w.h }}" gs-min-h="3" gs-min-w="4">
+  <div class="grid-stack-item-content p-4 relative">
+    {{ widget_remove_btn() }}
+    {% if host_stats %}
+    <div class="flex items-center gap-2 mb-3">
+      <h2 class="metric-label !text-[10px]">{% if offline_hosts %}All Hosts{% else %}Hosts{% endif %} ({{ host_stats|length }})</h2>
+    </div>
+    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2" id="host-grid">
+      {% for s in host_stats | sort(attribute='uptime_pct') %}
+      <a href="/ping/{{ s.host.id }}"
+         class="glass-card !px-3 !py-2.5 !rounded-lg
+           {% if s.host.maintenance %}!border-ng-warning/15 !bg-ng-warning/[0.04]
+           {% elif s.online %}!border-ng-success/12 !bg-ng-success/[0.03]
+           {% elif s.online is false %}!border-ng-critical/25 !bg-ng-critical/[0.06]
+           {% endif %}"
+         data-host-id="{{ s.host.id }}">
+        <div class="flex items-center justify-between gap-1 mb-1">
+          <p class="text-[--ng-text-primary] font-semibold text-xs leading-tight truncate">{{ s.host.name }}</p>
+          <span class="w-1.5 h-1.5 rounded-full shrink-0
+            {% if s.host.maintenance %}bg-ng-warning
+            {% elif s.online %}bg-ng-success
+            {% elif s.online is false %}bg-ng-critical
+            {% else %}bg-[--ng-text-muted]{% endif %}
+            {% if s.online and not s.host.maintenance %}glow-success{% endif %}
+            status-dot-{{ s.host.id }}"></span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-mono
+            {% if s.host.maintenance %}text-ng-warning
+            {% elif s.online %}text-ng-success
+            {% elif s.online is false %}text-ng-critical
+            {% else %}text-[--ng-text-muted]{% endif %}">
+            {% if s.host.maintenance %}Maint.{% elif s.online %}Online{% elif s.online is false %}Offline{% else %}—{% endif %}
+          </span>
+          <span class="latency-val-{{ s.host.id }} text-[10px] font-mono tabular-nums
+            {% if s.latency is not none %}text-[--ng-text-secondary]{% else %}text-[--ng-text-muted]{% endif %}">
+            {% if s.latency is not none %}{{ s.latency }}ms{% else %}—{% endif %}
+          </span>
+        </div>
+        {% set hp = ((1 - s.health_score) * 100) | round | int %}
+        <div class="flex items-center gap-1.5 mt-1.5">
+          <div class="metric-bar flex-1">
+            <div class="metric-bar-fill {% if hp < 70 %}!bg-ng-critical{% elif hp < 90 %}!bg-ng-warning{% endif %}" style="width:{{ hp }}%"></div>
+          </div>
+          <span class="text-[9px] font-mono tabular-nums w-7 text-right {% if hp >= 90 %}text-ng-success{% elif hp >= 70 %}text-ng-warning{% else %}text-ng-critical{% endif %}">{{ hp }}%</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-[--ng-text-muted] text-xs">No hosts configured</p>
+    {% endif %}
+  </div>
+</div>

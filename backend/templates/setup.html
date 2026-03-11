@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Setup – NODEGLOW</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/nodeglow.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'ng-bg':       '#0B1120',
+            'ng-surface':  '#0F172A',
+            'ng-elevated': '#1E293B',
+            'ng-primary':  '#38BDF8',
+            'ng-accent':   '#A78BFA',
+            'ng-mint':     '#34D399',
+            'ng-success':  '#34D399',
+            'ng-warning':  '#FBBF24',
+            'ng-critical': '#FB7185',
+          },
+          fontFamily: {
+            display: ['"Exo 2"', 'Rajdhani', 'sans-serif'],
+            body:    ['Inter', '"Helvetica Neue"', 'sans-serif'],
+            mono:    ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-screen flex items-center justify-center px-4 font-body">
+
+  <!-- Ambient glow orbs -->
+  <div class="ambient-orb ambient-orb-blue"></div>
+  <div class="ambient-orb ambient-orb-violet"></div>
+
+  <div class="relative w-full max-w-sm z-10">
+
+    <!-- Brand block -->
+    <div class="flex flex-col items-center mb-8">
+      <div class="mb-4">
+        <svg width="56" height="56" viewBox="0 0 32 32" fill="none">
+          <defs>
+            <filter id="setup-glow"><feGaussianBlur stdDeviation="1.2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <circle cx="16" cy="16" r="11" fill="#38BDF8" opacity="0.05"/>
+          <circle cx="16" cy="16" r="6.5" fill="#38BDF8" opacity="0.7" filter="url(#setup-glow)"/>
+          <circle cx="14.5" cy="14.5" r="2" fill="white" opacity="0.3"/>
+          <circle cx="5" cy="8" r="2.5" fill="#A78BFA" opacity="0.5"/>
+          <circle cx="27" cy="8" r="2.5" fill="#34D399" opacity="0.5"/>
+          <circle cx="5" cy="24" r="2" fill="#34D399" opacity="0.4"/>
+          <circle cx="27" cy="24" r="2" fill="#A78BFA" opacity="0.4"/>
+          <line x1="16" y1="16" x2="5" y2="8" stroke="#38BDF8" stroke-width="0.5" opacity="0.18"/>
+          <line x1="16" y1="16" x2="27" y2="8" stroke="#38BDF8" stroke-width="0.5" opacity="0.18"/>
+          <line x1="16" y1="16" x2="5" y2="24" stroke="#A78BFA" stroke-width="0.4" opacity="0.12"/>
+          <line x1="16" y1="16" x2="27" y2="24" stroke="#A78BFA" stroke-width="0.4" opacity="0.12"/>
+        </svg>
+      </div>
+      <h1 class="ng-display text-lg tracking-[6px] text-[--ng-text-primary]">NODEGLOW</h1>
+      <p class="font-mono text-[10px] text-[--ng-text-muted] tracking-[3px] mt-1">INITIAL SETUP</p>
+    </div>
+
+    <!-- Card -->
+    <div class="glass-elevated p-7">
+      <h2 class="text-base font-semibold text-[--ng-text-primary] ng-heading mb-0.5">Welcome</h2>
+      <p class="text-[--ng-text-muted] text-xs font-mono mb-6">Configure your NODEGLOW instance to get started.</p>
+
+      <form method="post" action="/setup/complete" class="space-y-4">
+        <div>
+          <label class="block text-xs text-[--ng-text-muted] font-mono mb-1.5">Site name</label>
+          <input type="text" name="site_name" value="NODEGLOW"
+                 class="ng-input">
+        </div>
+        <div>
+          <label class="block text-xs text-[--ng-text-muted] font-mono mb-1.5">Admin username</label>
+          <input type="text" name="username" value="admin" required autocomplete="username"
+                 class="ng-input">
+        </div>
+        <div>
+          <label class="block text-xs text-[--ng-text-muted] font-mono mb-1.5">Admin password</label>
+          <input type="password" name="password" required minlength="6" autocomplete="new-password"
+                 class="ng-input" placeholder="Minimum 6 characters">
+        </div>
+        <button type="submit" class="ng-btn ng-btn-primary w-full py-2.5">
+          Get started
+        </button>
+      </form>
+    </div>
+
+  </div>
+</body>
+</html>

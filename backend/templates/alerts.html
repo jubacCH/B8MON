@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Alerts – {{ request.state.site_name }}{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="ng-heading text-2xl text-[--ng-text-primary]">Alerts</h1>
+      <p class="text-slate-500 text-sm mt-0.5">All current issues and warnings</p>
+    </div>
+    {% if alerts %}
+    <div class="flex items-center gap-2">
+      {% set crit = alerts | selectattr('severity', 'equalto', 'critical') | list | length %}
+      {% set warn = alerts | selectattr('severity', 'equalto', 'warning') | list | length %}
+      {% if crit > 0 %}
+      <span class="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-medium">
+        {{ crit }} Critical
+      </span>
+      {% endif %}
+      {% if warn > 0 %}
+      <span class="px-3 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm font-medium">
+        {{ warn }} Warning{{ 's' if warn != 1 }}
+      </span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% if not alerts %}
+  <!-- All clear -->
+  <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-12 text-center">
+    <div class="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
+      <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+      </svg>
+    </div>
+    <p class="text-emerald-400 font-semibold text-lg">All clear</p>
+    <p class="text-slate-500 text-sm mt-1">No active issues found.</p>
+  </div>
+
+  {% else %}
+
+  <!-- Alert list -->
+  <div class="space-y-2">
+    {% for alert in alerts %}
+    <a href="{{ alert.url }}"
+       class="flex items-start gap-4 px-5 py-4 rounded-xl border transition-colors
+         {% if alert.severity == 'critical' %}bg-red-500/6 border-red-500/25 hover:border-red-500/50
+         {% else %}bg-yellow-500/5 border-yellow-500/20 hover:border-yellow-500/40{% endif %}">
+
+      <!-- Severity dot -->
+      <div class="mt-0.5 shrink-0">
+        <span class="w-2.5 h-2.5 rounded-full inline-block
+          {% if alert.severity == 'critical' %}bg-red-400 animate-pulse{% else %}bg-yellow-400{% endif %}"></span>
+      </div>
+
+      <!-- Content -->
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide
+            {% if alert.severity == 'critical' %}bg-red-500/15 text-red-400{% else %}bg-yellow-500/15 text-yellow-400{% endif %}">
+            {{ alert.category }}
+          </span>
+          <span class="text-white font-semibold text-sm">{{ alert.name }}</span>
+        </div>
+        <p class="text-slate-400 text-xs mt-1 truncate">{{ alert.detail }}</p>
+      </div>
+
+      <!-- Time -->
+      {% if alert.time %}
+      <div class="shrink-0 text-right">
+        <p class="text-slate-500 text-xs tabular-nums">{{ alert.time|localtime("%d.%m. %H:%M") }}</p>
+      </div>
+      {% endif %}
+
+      <!-- Arrow -->
+      <svg class="w-4 h-4 text-slate-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+      </svg>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

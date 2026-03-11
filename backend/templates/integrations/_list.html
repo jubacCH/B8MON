@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}{{ integration.display_name }}{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+<div class="flex items-center justify-between mb-6">
+    <h1 class="ng-heading text-2xl text-[--ng-text-primary]">{{ integration.display_name }}</h1>
+    <button onclick="document.getElementById('addModal').classList.remove('hidden')"
+            class="ng-btn ng-btn-primary">
+        + Add {{ integration.display_name }}
+    </button>
+</div>
+
+{% if saved == "1" %}
+<div class="bg-[--ng-success]/10 border border-[--ng-success]/20 text-[--ng-success] px-4 py-2 rounded-lg mb-4 text-sm">
+    Saved successfully.
+</div>
+{% elif saved == "deleted" %}
+<div class="bg-[--ng-critical]/10 border border-[--ng-critical]/20 text-[--ng-critical] px-4 py-2 rounded-lg mb-4 text-sm">
+    Instance deleted.
+</div>
+{% endif %}
+
+{% if instances %}
+<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    {% for inst in instances %}
+    <div class="glass-card p-5 flex flex-col">
+        <a href="/integration/{{ integration.name }}/{{ inst.config.id }}" class="block flex-1">
+            <div class="flex items-center gap-3 mb-3">
+                {% if integration.icon_svg %}
+                <span class="w-6 h-6 text-[--ng-text-secondary]">{{ integration.icon_svg | safe }}</span>
+                {% elif integration.icon %}
+                <img src="https://cdn.simpleicons.org/{{ integration.icon }}/94a3b8" class="w-6 h-6" alt="">
+                {% endif %}
+                <h3 class="font-medium text-[--ng-text-primary] truncate">{{ inst.config.name }}</h3>
+            </div>
+            <div class="flex items-center gap-2 text-sm">
+                {% if inst.snap and inst.snap.ok %}
+                <span class="w-2 h-2 rounded-full bg-ng-success"></span>
+                <span class="text-ng-success">Connected</span>
+                {% elif inst.snap and not inst.snap.ok %}
+                <span class="w-2 h-2 rounded-full bg-ng-critical"></span>
+                <span class="text-ng-critical">Error</span>
+                {% else %}
+                <span class="w-2 h-2 rounded-full bg-gray-500"></span>
+                <span class="text-[--ng-text-secondary]">No data</span>
+                {% endif %}
+            </div>
+            {% if inst.snap %}
+            <p class="text-xs text-[--ng-text-muted] mt-2">Last check: {{ inst.snap.timestamp|localtime('%H:%M:%S') if inst.snap.timestamp else '—' }}</p>
+            {% endif %}
+        </a>
+        <div class="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.06]">
+            <form method="post" action="/integration/{{ integration.name }}/{{ inst.config.id }}/refresh" class="inline">
+                <button type="submit" class="text-xs text-[--ng-text-muted] hover:text-ng-primary transition-colors flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Refresh
+                </button>
+            </form>
+            <span class="text-[--ng-text-muted] text-xs">|</span>
+            <a href="/integration/{{ integration.name }}/{{ inst.config.id }}" class="text-xs text-[--ng-text-muted] hover:text-ng-primary transition-colors">Details</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-16 text-[--ng-text-secondary]">
+    <p class="text-lg mb-2">No {{ integration.display_name }} instances configured</p>
+    <p class="text-sm">Click the button above to add one.</p>
+</div>
+{% endif %}
+
+<!-- Add Modal -->
+<div id="addModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+    <div class="glass-elevated rounded-xl p-6 w-full max-w-lg mx-4">
+        <h2 class="ng-heading text-lg text-[--ng-text-primary] mb-4">Add {{ integration.display_name }}</h2>
+        <form method="post" action="/integration/{{ integration.name }}/add" class="space-y-4">
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">Name</label>
+                <input type="text" name="name" required
+                       class="ng-input"
+                       placeholder="{{ integration.display_name }} Instance">
+            </div>
+            {% for field in integration.config_fields %}
+            <div>
+                <label class="block text-sm text-[--ng-text-secondary] mb-1">{{ field.label }}</label>
+                {% if field.field_type == "checkbox" %}
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="{{ field.key }}" value="on"
+                           {% if field.default %}checked{% endif %}
+                           class="rounded bg-white/[0.03] border-[--ng-glass-border] accent-[--ng-primary]">
+                    <span class="text-sm text-[--ng-text-primary]">{{ field.label }}</span>
+                </label>
+                {% elif field.field_type == "select" %}
+                <select name="{{ field.key }}"
+                        class="ng-input">
+                    {% for opt in field.options %}
+                    <option value="{{ opt.value }}" {% if opt.value == field.default %}selected{% endif %}>
+                        {{ opt.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+                {% elif field.field_type == "password" %}
+                <input type="password" name="{{ field.key }}"
+                       {% if field.required %}required{% endif %}
+                       class="ng-input"
+                       placeholder="{{ field.placeholder }}">
+                {% elif field.field_type == "number" %}
+                <input type="number" name="{{ field.key }}"
+                       {% if field.required %}required{% endif %}
+                       value="{{ field.default or '' }}"
+                       class="ng-input"
+                       placeholder="{{ field.placeholder }}">
+                {% else %}
+                <input type="{{ field.field_type or 'text' }}" name="{{ field.key }}"
+                       {% if field.required %}required{% endif %}
+                       class="ng-input"
+                       placeholder="{{ field.placeholder }}">
+                {% endif %}
+            </div>
+            {% endfor %}
+            <div class="flex justify-end gap-3 pt-2">
+                <button type="button" onclick="document.getElementById('addModal').classList.add('hidden')"
+                        class="ng-btn ng-btn-ghost">Cancel</button>
+                <button type="submit"
+                        class="ng-btn ng-btn-primary">
+                    Save
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+</div>
+{% endblock %}

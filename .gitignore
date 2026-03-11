@@ -1,0 +1,18 @@
+# Data / secrets
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+
+# PyInstaller
+backend/static/build/
+backend/static/dist/
+*.spec
+
+# macOS
+.DS_Store
