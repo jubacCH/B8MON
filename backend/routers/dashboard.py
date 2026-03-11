@@ -466,39 +466,34 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     )).scalars().all()
 
     # ── Syslog stats (last 24h) ──────────────────────────────────────────────
-    from models.syslog import SyslogMessage, SEVERITY_LABELS
+    from models.syslog import SEVERITY_LABELS
+    from services.clickhouse_client import query as ch_query, query_scalar as ch_scalar
     syslog_stats = {"total": 0, "by_severity": {}, "top_sources": [], "error_rate_1h": 0}
     try:
-        syslog_stats["total"] = (await db.execute(
-            select(func.count(SyslogMessage.id))
-            .where(SyslogMessage.timestamp >= window_24h)
-        )).scalar() or 0
+        syslog_stats["total"] = int(await ch_scalar(
+            "SELECT count() FROM syslog_messages WHERE timestamp >= {t:DateTime64(3)}",
+            {"t": window_24h},
+        ) or 0)
 
-        sev_rows = (await db.execute(
-            select(SyslogMessage.severity, func.count(SyslogMessage.id).label("cnt"))
-            .where(SyslogMessage.timestamp >= window_24h)
-            .group_by(SyslogMessage.severity)
-            .order_by(SyslogMessage.severity)
-        )).all()
+        sev_rows = await ch_query(
+            "SELECT severity, count() AS cnt FROM syslog_messages WHERE timestamp >= {t:DateTime64(3)} GROUP BY severity ORDER BY severity",
+            {"t": window_24h},
+        )
         syslog_stats["by_severity"] = {
-            row.severity: {"count": row.cnt, "label": SEVERITY_LABELS.get(row.severity, f"Sev {row.severity}")}
-            for row in sev_rows if row.severity is not None
+            r["severity"]: {"count": r["cnt"], "label": SEVERITY_LABELS.get(r["severity"], f"Sev {r['severity']}")}
+            for r in sev_rows if r["severity"] is not None
         }
 
-        src_rows = (await db.execute(
-            select(SyslogMessage.source_ip, func.count(SyslogMessage.id).label("cnt"))
-            .where(SyslogMessage.timestamp >= window_24h)
-            .group_by(SyslogMessage.source_ip)
-            .order_by(func.count(SyslogMessage.id).desc())
-            .limit(5)
-        )).all()
-        syslog_stats["top_sources"] = [{"ip": row.source_ip, "count": row.cnt} for row in src_rows]
+        src_rows = await ch_query(
+            "SELECT source_ip, count() AS cnt FROM syslog_messages WHERE timestamp >= {t:DateTime64(3)} GROUP BY source_ip ORDER BY cnt DESC LIMIT 5",
+            {"t": window_24h},
+        )
+        syslog_stats["top_sources"] = [{"ip": r["source_ip"], "count": r["cnt"]} for r in src_rows]
 
-        window_1h = now - timedelta(hours=1)
-        syslog_stats["error_rate_1h"] = (await db.execute(
-            select(func.count(SyslogMessage.id))
-            .where(SyslogMessage.severity <= 3, SyslogMessage.timestamp >= window_1h)
-        )).scalar() or 0
+        syslog_stats["error_rate_1h"] = int(await ch_scalar(
+            "SELECT count() FROM syslog_messages WHERE severity <= 3 AND timestamp >= {t:DateTime64(3)}",
+            {"t": now - timedelta(hours=1)},
+        ) or 0)
     except Exception:
         pass
 
@@ -684,20 +679,20 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         pass
 
     # ── Nodeglow uptime ────────────────────────────────────────────────────────
-    vigil_uptime = ""
+    nodeglow_uptime = ""
     try:
         import os
-        _start = float(os.environ.get("VIGIL_START_TIME", "0"))
+        _start = float(os.environ.get("NODEGLOW_START_TIME", "0"))
         if _start > 0:
             delta = now.timestamp() - _start
         else:
             delta = 0
         if delta > 86400:
-            vigil_uptime = f"{int(delta // 86400)}d {int((delta % 86400) // 3600)}h"
+            nodeglow_uptime = f"{int(delta // 86400)}d {int((delta % 86400) // 3600)}h"
         elif delta > 3600:
-            vigil_uptime = f"{int(delta // 3600)}h {int((delta % 3600) // 60)}m"
+            nodeglow_uptime = f"{int(delta // 3600)}h {int((delta % 3600) // 60)}m"
         elif delta > 0:
-            vigil_uptime = f"{int(delta // 60)}m"
+            nodeglow_uptime = f"{int(delta // 60)}m"
     except Exception:
         pass
 
@@ -726,13 +721,11 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
 
     syslog_errors_by_host: dict[int, int] = {}
     try:
-        syslog_err_rows = (await db.execute(
-            select(SyslogMessage.host_id, func.count(SyslogMessage.id).label("cnt"))
-            .where(SyslogMessage.host_id.isnot(None), SyslogMessage.severity <= 3,
-                   SyslogMessage.timestamp >= window_24h)
-            .group_by(SyslogMessage.host_id)
-        )).all()
-        syslog_errors_by_host = {row.host_id: row.cnt for row in syslog_err_rows}
+        syslog_err_rows = await ch_query(
+            "SELECT host_id, count() AS cnt FROM syslog_messages WHERE host_id IS NOT NULL AND severity <= 3 AND timestamp >= {t:DateTime64(3)} GROUP BY host_id",
+            {"t": window_24h},
+        )
+        syslog_errors_by_host = {int(r["host_id"]): r["cnt"] for r in syslog_err_rows if r["host_id"] is not None}
     except Exception:
         pass
 
@@ -867,7 +860,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         "uptime_ranking": uptime_ranking,
         "heatmap_data": heatmap_data,
         "heatmap_days": heatmap_days,
-        "vigil_uptime": vigil_uptime,
+        "nodeglow_uptime": nodeglow_uptime,
         "active_page": "dashboard",
     })
 

@@ -1,0 +1,12 @@
+<clickhouse>
+    <!-- Homelab-friendly memory limits. For larger deployments, increase these. -->
+    <max_server_memory_usage_to_ram_ratio>0.3</max_server_memory_usage_to_ram_ratio>
+    <mark_cache_size>268435456</mark_cache_size>
+    <uncompressed_cache_size>536870912</uncompressed_cache_size>
+    <background_pool_size>2</background_pool_size>
+    <background_merges_mutations_concurrency_ratio>1</background_merges_mutations_concurrency_ratio>
+    <max_concurrent_queries>20</max_concurrent_queries>
+    <logger>
+        <level>warning</level>
+    </logger>
+</clickhouse>

@@ -43,18 +43,18 @@ async def login(
     await db.commit()
     response = RedirectResponse(url="/", status_code=303)
     is_https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
-    response.set_cookie("vigil_session", token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", secure=is_https)
+    response.set_cookie("nodeglow_session", token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", secure=is_https)
     return response
 
 
 @router.get("/logout")
 async def logout(request: Request, db: AsyncSession = Depends(get_db)):
-    token = request.cookies.get("vigil_session")
+    token = request.cookies.get("nodeglow_session")
     if token:
         session = await db.get(Session, token)
         if session:
             await db.delete(session)
             await db.commit()
     response = RedirectResponse(url="/login", status_code=303)
-    response.delete_cookie("vigil_session")
+    response.delete_cookie("nodeglow_session")
     return response

@@ -217,77 +217,29 @@ async def agent_logs(request: Request):
     except Exception:
         host_id = None
 
-    # Insert logs into SyslogMessage table (with dedup to avoid agent overlap)
-    from models.syslog import SyslogMessage
-    from sqlalchemy import and_
+    # Feed logs through the syslog pipeline (_enqueue handles ClickHouse write + live tail)
+    from services.syslog import _enqueue
     count = 0
-    try:
-        async with AsyncSessionLocal() as db:
-            for entry in logs[:500]:  # cap at 500 per request
-                ts_str = entry.get("timestamp", "")
-                try:
-                    ts = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%SZ")
-                except Exception:
-                    ts = datetime.utcnow()
+    for entry in logs[:500]:
+        ts_str = entry.get("timestamp", "")
+        try:
+            ts = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            ts = datetime.utcnow()
 
-                app_name = entry.get("app_name", "")
-                message = entry.get("message", "")[:2000]
-
-                # Dedup: skip if exact same timestamp+app+severity already exists for this host
-                exists = (await db.execute(
-                    select(SyslogMessage.id)
-                    .where(and_(
-                        SyslogMessage.timestamp == ts,
-                        SyslogMessage.hostname == hostname,
-                        SyslogMessage.app_name == app_name,
-                        SyslogMessage.severity == entry.get("severity", 6),
-                    ))
-                    .limit(1)
-                )).scalar()
-                if exists:
-                    continue
-
-                msg = SyslogMessage(
-                    timestamp=ts,
-                    received_at=datetime.utcnow(),
-                    source_ip=source_ip,
-                    hostname=hostname,
-                    facility=entry.get("facility"),
-                    severity=entry.get("severity", 6),
-                    app_name=app_name,
-                    message=message,
-                    host_id=host_id,
-                )
-                db.add(msg)
-                count += 1
-
-            await db.commit()
-    except Exception as e:
-        logger.error("Failed to store agent logs: %s", e)
-        return JSONResponse({"error": "DB error"}, status_code=500)
-
-    # Broadcast to live tail subscribers (without re-inserting to DB)
-    try:
-        from services.syslog import _subscribers
-        import asyncio
-        for entry in logs[:50]:
-            msg_data = {
-                "timestamp": datetime.utcnow(),
-                "source_ip": source_ip,
-                "hostname": hostname,
-                "facility": entry.get("facility"),
-                "severity": entry.get("severity", 6),
-                "app_name": entry.get("app_name", ""),
-                "message": entry.get("message", "")[:500],
-                "host_id": host_id,
-            }
-            for q in _subscribers[:]:
-                try:
-                    q.put_nowait(msg_data)
-                except asyncio.QueueFull:
-                    pass
-    except Exception:
-        pass  # live tail is optional
+        parsed = {
+            "timestamp": ts,
+            "received_at": datetime.utcnow(),
+            "source_ip": source_ip,
+            "hostname": hostname,
+            "facility": entry.get("facility"),
+            "severity": entry.get("severity", 6),
+            "app_name": entry.get("app_name", ""),
+            "message": entry.get("message", "")[:2000],
+            "host_id": host_id,
+        }
+        await _enqueue(parsed)
+        count += 1
 
     logger.debug("Agent %s sent %d log entries", hostname, count)
     return {"ok": True, "count": count}
@@ -421,11 +373,7 @@ async def agent_delete(request: Request, agent_id: int):
             )
             ping_host = ph.scalar_one_or_none()
             if ping_host:
-                # Nullify syslog references before deleting
-                from models.syslog import SyslogMessage
-                await db.execute(
-                    update(SyslogMessage).where(SyslogMessage.host_id == ping_host.id).values(host_id=None)
-                )
+                # ClickHouse syslog rows keep host_id as-is; TTL will expire them naturally
                 await db.execute(delete(PingResult).where(PingResult.host_id == ping_host.id))
                 await db.execute(delete(PingHost).where(PingHost.id == ping_host.id))
         await db.execute(delete(AgentSnapshot).where(AgentSnapshot.agent_id == agent_id))
@@ -669,13 +617,19 @@ Start-Sleep -Seconds 2
 # Also stop via scheduled task
 Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 
-Write-Host "  [2/6] Creating install directory..."
+Write-Host "  [2/7] Creating install directory..."
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+# Grant full control to local users so updates work without elevation
+icacls $InstallDir /grant "Users:(OI)(CI)F" /T /Q 2>$null
+icacls $InstallDir /grant "Benutzer:(OI)(CI)F" /T /Q 2>$null
 
 # Clean up old files
 Remove-Item -Path "$InstallDir\\nodeglow-agent.exe.old" -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "$InstallDir\\nodeglow-agent.exe.new" -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "$InstallDir\\nodeglow-agent-v2.exe" -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "$InstallDir\\tmp*.exe" -Force -ErrorAction SilentlyContinue
 
-Write-Host "  [3/6] Enrolling agent ($Hostname)..."
+Write-Host "  [3/7] Enrolling agent ($Hostname)..."
 $body = @{{
     enrollment_key = $EnrollmentKey
     hostname = $Hostname
@@ -691,10 +645,10 @@ if (-not $response.token) {{
 $Token = $response.token
 Write-Host "  Enrolled successfully."
 
-Write-Host "  [4/6] Downloading agent..."
+Write-Host "  [4/7] Downloading agent..."
 Invoke-WebRequest -Uri "$Server/agents/download/windows" -OutFile "$InstallDir\\nodeglow-agent.exe" -UseBasicParsing
 
-Write-Host "  [5/6] Writing configuration..."
+Write-Host "  [5/7] Writing configuration..."
 @"
 {{
   "server": "$Server",
@@ -703,10 +657,45 @@ Write-Host "  [5/6] Writing configuration..."
 }}
 "@ | Set-Content -Path "$InstallDir\\config.json" -Encoding ASCII -Force
 
-Write-Host "  [6/6] Creating scheduled task..."
-$Action = New-ScheduledTaskAction -Execute "$InstallDir\\nodeglow-agent.exe" -WorkingDirectory $InstallDir
+Write-Host "  [6/7] Creating restart wrapper..."
+# Write a wrapper batch script that restarts the agent automatically
+$WrapperContent = @"
+@echo off
+title Nodeglow Agent
+cd /d "$InstallDir"
+
+:loop
+rem Apply staged update if present (.new file from deferred swap)
+if exist "nodeglow-agent.exe.new" (
+    echo Applying staged update...
+    del /f "nodeglow-agent.exe.old" 2>nul
+    ren "nodeglow-agent.exe" "nodeglow-agent.exe.old"
+    ren "nodeglow-agent.exe.new" "nodeglow-agent.exe"
+)
+
+echo Starting Nodeglow Agent...
+"nodeglow-agent.exe"
+set EXIT_CODE=%ERRORLEVEL%
+
+rem Clean up old version
+del /f "nodeglow-agent.exe.old" 2>nul
+
+if %EXIT_CODE%==42 (
+    echo Agent requested restart for update...
+    timeout /t 2 /nobreak >nul
+    goto loop
+)
+
+echo Agent exited with code %EXIT_CODE%, restarting in 10s...
+timeout /t 10 /nobreak >nul
+goto loop
+"@
+$WrapperContent | Set-Content -Path "$InstallDir\\nodeglow-wrapper.bat" -Encoding ASCII -Force
+
+Write-Host "  [7/7] Creating scheduled task..."
+$Action = New-ScheduledTaskAction -Execute "$InstallDir\\nodeglow-wrapper.bat" -WorkingDirectory $InstallDir
 $Trigger = New-ScheduledTaskTrigger -AtStartup
-$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Days 365)
+$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Days 365)
 $Principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
 Write-Host "  Testing connection..."

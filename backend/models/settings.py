@@ -33,7 +33,7 @@ class Session(Base):
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 async def get_current_user(request, db: AsyncSession):
-    token = request.cookies.get("vigil_session")
+    token = request.cookies.get("nodeglow_session")
     if not token:
         return None
     now = datetime.utcnow()

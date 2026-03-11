@@ -22,7 +22,7 @@ from models.api_key import ApiKey
 from models.base import get_db
 from models.incident import Incident, IncidentEvent
 from models.integration import IntegrationConfig, Snapshot
-from models.syslog import SyslogMessage
+from services.clickhouse_client import query as ch_query, _where_clauses as ch_where
 from services import ping as ping_svc
 from services import snapshot as snap_svc
 
@@ -592,29 +592,37 @@ async def query_syslog(
     limit: int = Query(100, ge=1, le=1000),
 ):
     since = datetime.utcnow() - timedelta(hours=hours)
-    q = select(SyslogMessage).where(SyslogMessage.timestamp >= since)
-    if host_id is not None:
-        q = q.where(SyslogMessage.host_id == host_id)
+    where, params = ch_where(
+        since,
+        sev=None,
+        host_id=host_id,
+        q=search or "",
+    )
+    extra = ""
     if severity is not None:
-        q = q.where(SyslogMessage.severity <= severity)
-    if search:
-        q = q.where(SyslogMessage.message.ilike(f"%{search}%"))
-    q = q.order_by(SyslogMessage.timestamp.desc()).limit(limit)
+        extra = f" AND severity <= {int(severity)}"
 
-    result = await db.execute(q)
+    rows = await ch_query(
+        f"""SELECT timestamp, source_ip, hostname, facility, severity,
+                   app_name, message, host_id, tags, noise_score
+            FROM syslog_messages
+            WHERE {where}{extra}
+            ORDER BY timestamp DESC
+            LIMIT {int(limit)}""",
+        params,
+    )
     return [
         {
-            "id": m.id,
-            "timestamp": m.timestamp.isoformat(),
-            "source_ip": m.source_ip,
-            "hostname": m.hostname,
-            "facility": m.facility,
-            "severity": m.severity,
-            "app_name": m.app_name,
-            "message": m.message,
-            "host_id": m.host_id,
-            "tags": m.tags,
-            "noise_score": m.noise_score,
+            "timestamp": r["timestamp"].isoformat() if hasattr(r["timestamp"], "isoformat") else str(r["timestamp"]),
+            "source_ip": r["source_ip"],
+            "hostname": r["hostname"],
+            "facility": r["facility"],
+            "severity": r["severity"],
+            "app_name": r["app_name"],
+            "message": r["message"],
+            "host_id": r["host_id"],
+            "tags": r["tags"],
+            "noise_score": r["noise_score"],
         }
-        for m in result.scalars().all()
+        for r in rows
     ]

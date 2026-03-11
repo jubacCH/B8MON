@@ -13,3 +13,4 @@ aiosmtplib==3.0.1
 speedtest-cli==2.1.3
 alembic==1.14.1
 psutil==6.1.1
+clickhouse-connect==0.8.9

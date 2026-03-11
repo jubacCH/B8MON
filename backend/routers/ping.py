@@ -17,7 +17,7 @@ from models.agent import Agent, AgentSnapshot
 from models.credential import Credential
 from models.integration import IntegrationConfig, Snapshot
 from models.snmp import SnmpHostConfig, SnmpResult
-from models.syslog import SyslogMessage
+from services.clickhouse_client import query_scalar as ch_scalar, _where_clauses as ch_where
 from services import integration as int_svc
 from services import snapshot as snap_svc
 
@@ -413,20 +413,20 @@ async def ping_detail(host_id: int, request: Request, db: AsyncSession = Depends
     syslog_count = 0
     try:
         since_24h = datetime.utcnow() - timedelta(hours=24)
-        syslog_filter = SyslogMessage.host_id == host.id
-        # Also match by IP or hostname for messages without host_id
         raw_host = host.hostname
         for prefix in ("https://", "http://"):
             if raw_host.startswith(prefix):
                 raw_host = raw_host[len(prefix):]
         raw_host = raw_host.split("/")[0].split(":")[0]
-        syslog_filter = syslog_filter | (SyslogMessage.source_ip == raw_host)
-        if host.name:
-            syslog_filter = syslog_filter | (SyslogMessage.hostname.ilike(host.name))
-        syslog_count = (await db.execute(
-            select(func.count(SyslogMessage.id))
-            .where(syslog_filter, SyslogMessage.timestamp >= since_24h)
-        )).scalar() or 0
+        where, params = ch_where(
+            since_24h,
+            host_id=host.id,
+            host_source_ip=raw_host,
+            host_name=host.name or "",
+        )
+        syslog_count = int(await ch_scalar(
+            f"SELECT count() FROM syslog_messages WHERE {where}", params
+        ) or 0)
     except Exception:
         pass
 

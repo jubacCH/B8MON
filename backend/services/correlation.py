@@ -17,7 +17,7 @@ from sqlalchemy import func, select, and_
 
 from models.base import AsyncSessionLocal
 from models.ping import PingHost, PingResult
-from models.syslog import SyslogMessage
+from services.clickhouse_client import query_scalar as ch_scalar
 from models.integration import IntegrationConfig, Snapshot
 from models.incident import Incident, IncidentEvent
 
@@ -119,13 +119,10 @@ async def _rule_host_down_syslog(db):
 
     for host in offline_hosts:
         # Check for error-level syslog messages from this host
-        syslog_count = (await db.execute(
-            select(func.count(SyslogMessage.id)).where(
-                SyslogMessage.host_id == host.id,
-                SyslogMessage.severity <= 3,  # error and above
-                SyslogMessage.timestamp >= window,
-            )
-        )).scalar() or 0
+        syslog_count = int(await ch_scalar(
+            "SELECT count() FROM syslog_messages WHERE host_id = {hid:Int32} AND severity <= 3 AND timestamp >= {t:DateTime64(3)}",
+            {"hid": host.id, "t": window},
+        ) or 0)
 
         if syslog_count > 0:
             await _find_or_create_incident(
@@ -249,23 +246,19 @@ async def _rule_syslog_spike(db):
     window_1h = now - timedelta(hours=1)
 
     # Count errors (severity <= 3) in last 5min
-    recent_errors = (await db.execute(
-        select(func.count(SyslogMessage.id)).where(
-            SyslogMessage.severity <= 3,
-            SyslogMessage.timestamp >= window_5m,
-        )
-    )).scalar() or 0
+    recent_errors = int(await ch_scalar(
+        "SELECT count() FROM syslog_messages WHERE severity <= 3 AND timestamp >= {t:DateTime64(3)}",
+        {"t": window_5m},
+    ) or 0)
 
     if recent_errors < 10:  # minimum threshold
         return
 
     # Count errors in last hour (baseline)
-    hourly_errors = (await db.execute(
-        select(func.count(SyslogMessage.id)).where(
-            SyslogMessage.severity <= 3,
-            SyslogMessage.timestamp >= window_1h,
-        )
-    )).scalar() or 0
+    hourly_errors = int(await ch_scalar(
+        "SELECT count() FROM syslog_messages WHERE severity <= 3 AND timestamp >= {t:DateTime64(3)}",
+        {"t": window_1h},
+    ) or 0)
 
     # Expected 5min rate = hourly / 12
     baseline_5m = max(1, hourly_errors / 12)
@@ -335,13 +328,10 @@ async def _auto_resolve(db):
             for host in offline_hosts:
                 h = _host_ids_hash([host.id])
                 if h == incident.host_ids_hash:
-                    syslog_count = (await db.execute(
-                        select(func.count(SyslogMessage.id)).where(
-                            SyslogMessage.host_id == host.id,
-                            SyslogMessage.severity <= 3,
-                            SyslogMessage.timestamp >= window,
-                        )
-                    )).scalar() or 0
+                    syslog_count = int(await ch_scalar(
+                        "SELECT count() FROM syslog_messages WHERE host_id = {hid:Int32} AND severity <= 3 AND timestamp >= {t:DateTime64(3)}",
+                        {"hid": host.id, "t": window},
+                    ) or 0)
                     if syslog_count > 0:
                         should_resolve = False
                         break

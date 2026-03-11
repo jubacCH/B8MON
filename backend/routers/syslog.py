@@ -2,31 +2,72 @@
 import asyncio
 import json
 import re
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from templating import templates, localtime
-from sqlalchemy import delete, func, or_, select, text
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import PingHost, get_db
-from models.syslog import (
-    FACILITY_LABELS, RETENTION_DAYS, SEVERITY_LABELS,
-    SyslogMessage, SyslogView,
-)
+from models.syslog import FACILITY_LABELS, RETENTION_DAYS, SEVERITY_LABELS, SyslogView
+from services.clickhouse_client import query as ch_query, query_scalar as ch_scalar, _where_clauses
 
 router = APIRouter(prefix="/syslog")
 
 _PER_PAGE = 100
 
-_SORT_COLUMNS = {
-    "time": SyslogMessage.timestamp,
-    "severity": SyslogMessage.severity,
-    "host": SyslogMessage.hostname,
-    "app": SyslogMessage.app_name,
-    "source": SyslogMessage.source_ip,
+_SORT_COLS = {
+    "time": "timestamp",
+    "severity": "severity",
+    "host": "hostname",
+    "app": "app_name",
+    "source": "source_ip",
 }
+
+
+# ── Row dataclass (drop-in for ORM objects in templates) ─────────────────────
+
+@dataclass
+class SyslogRow:
+    timestamp: datetime
+    received_at: datetime
+    source_ip: str
+    hostname: str
+    host_id: Optional[int]
+    facility: Optional[int]
+    severity: int
+    app_name: str
+    message: str
+    template_hash: str
+    tags: str
+    noise_score: int
+    _dedup_count: int = field(default=1, repr=False)
+    _dedup_last: Optional[datetime] = field(default=None, repr=False)
+    _fields: dict = field(default_factory=dict, repr=False)
+    _noise_score: int = field(default=50, repr=False)
+    _tags: list = field(default_factory=list, repr=False)
+    _template_hash: str = field(default="", repr=False)
+
+
+def _row(d: dict) -> SyslogRow:
+    return SyslogRow(
+        timestamp=d.get("timestamp") or datetime.utcnow(),
+        received_at=d.get("received_at") or datetime.utcnow(),
+        source_ip=d.get("source_ip") or "",
+        hostname=d.get("hostname") or "",
+        host_id=d.get("host_id"),
+        facility=d.get("facility"),
+        severity=d.get("severity") if d.get("severity") is not None else 6,
+        app_name=d.get("app_name") or "",
+        message=d.get("message") or "",
+        template_hash=d.get("template_hash") or "",
+        tags=d.get("tags") or "",
+        noise_score=d.get("noise_score") if d.get("noise_score") is not None else 50,
+    )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -34,7 +75,6 @@ _SORT_COLUMNS = {
 def _extract_fields(message: str) -> dict:
     """Extract structured fields from CEF or key=value messages."""
     fields = {}
-    # CEF format: CEF:version|vendor|product|version|event_id|name|severity|extensions
     cef = re.match(
         r"CEF:\d+\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|(.*)",
         message,
@@ -46,7 +86,6 @@ def _extract_fields(message: str) -> dict:
         for m in re.finditer(r"(\w[\w.-]*)=((?:\"[^\"]*\"|\S+))", cef.group(7)):
             fields[m.group(1)] = m.group(2).strip('"')
     else:
-        # Generic key=value extraction
         for m in re.finditer(r"(\w[\w.-]*)=((?:\"[^\"]*\"|\S+))", message):
             key, val = m.group(1), m.group(2).strip('"')
             if len(key) > 2 and not key.isdigit():
@@ -54,11 +93,11 @@ def _extract_fields(message: str) -> dict:
     return fields
 
 
-def _dedup_messages(messages):
+def _dedup_messages(messages: list[SyslogRow]) -> list[SyslogRow]:
     """Group consecutive identical messages (same source_ip + message + severity)."""
     if not messages:
         return messages
-    result = []
+    result: list[SyslogRow] = []
     for msg in messages:
         if (
             result
@@ -66,7 +105,7 @@ def _dedup_messages(messages):
             and result[-1].message == msg.message
             and result[-1].severity == msg.severity
         ):
-            result[-1]._dedup_count = getattr(result[-1], "_dedup_count", 1) + 1
+            result[-1]._dedup_count += 1
             result[-1]._dedup_last = msg.timestamp
         else:
             msg._dedup_count = 1
@@ -76,7 +115,6 @@ def _dedup_messages(messages):
 
 
 def _build_ip_map(ping_hosts) -> dict[str, int]:
-    """Build IP/hostname → PingHost.id map for clickable links."""
     ip_to_host_id: dict[str, int] = {}
     for ph in ping_hosts:
         raw = ph.hostname
@@ -108,124 +146,107 @@ async def syslog_page(
 ):
     sev = int(severity) if severity not in ("", None) else None
     fac = int(facility) if facility not in ("", None) else None
-
     since = datetime.utcnow() - timedelta(hours=hours)
 
-    # Base query
-    query = select(SyslogMessage).where(SyslogMessage.timestamp >= since)
-    count_query = select(func.count(SyslogMessage.id)).where(SyslogMessage.timestamp >= since)
+    where, params = _where_clauses(since, sev=sev, fac=fac, host=host, app=app, q=q)
 
-    # Filters
-    if sev is not None:
-        query = query.where(SyslogMessage.severity == sev)
-        count_query = count_query.where(SyslogMessage.severity == sev)
-    if fac is not None:
-        query = query.where(SyslogMessage.facility == fac)
-        count_query = count_query.where(SyslogMessage.facility == fac)
-    if host:
-        hf = (SyslogMessage.hostname.ilike(f"%{host}%")) | (SyslogMessage.source_ip.ilike(f"%{host}%"))
-        query = query.where(hf)
-        count_query = count_query.where(hf)
-    if app:
-        query = query.where(SyslogMessage.app_name.ilike(f"%{app}%"))
-        count_query = count_query.where(SyslogMessage.app_name.ilike(f"%{app}%"))
-    if q:
-        fts = SyslogMessage.search_vector.op("@@")(func.plainto_tsquery("english", q))
-        query = query.where(fts)
-        count_query = count_query.where(fts)
-
-    # Count + paginate
-    total = (await db.execute(count_query)).scalar() or 0
+    total = await ch_scalar(f"SELECT count() FROM syslog_messages WHERE {where}", params) or 0
+    total = int(total)
     total_pages = max(1, (total + _PER_PAGE - 1) // _PER_PAGE)
     page = min(page, total_pages)
 
-    # Sort
-    sort_col = _SORT_COLUMNS.get(sort, SyslogMessage.timestamp)
-    query = query.order_by(sort_col.asc() if order == "asc" else sort_col.desc())
+    sort_col = _SORT_COLS.get(sort, "timestamp")
+    sort_dir = "ASC" if order == "asc" else "DESC"
+    offset = (page - 1) * _PER_PAGE
 
-    # Fetch + dedup
-    messages = (await db.execute(query.offset((page - 1) * _PER_PAGE).limit(_PER_PAGE))).scalars().all()
-    messages = _dedup_messages(messages)
+    rows = await ch_query(
+        f"""SELECT timestamp, received_at, source_ip, hostname, host_id,
+                   facility, severity, app_name, message,
+                   template_hash, tags, noise_score
+            FROM syslog_messages
+            WHERE {where}
+            ORDER BY {sort_col} {sort_dir}
+            LIMIT {_PER_PAGE} OFFSET {offset}""",
+        params,
+    )
+    messages = _dedup_messages([_row(r) for r in rows])
 
-    # Extract structured fields + intelligence enrichment for each message
+    # Intelligence enrichment (template noise scores from PostgreSQL)
     try:
         from services.log_intelligence import extract_template, auto_tag
         from models.log_template import LogTemplate
-        # Load noise scores for templates in this batch
         _tpl_hashes = set()
         for msg in messages:
             _, h = extract_template(msg.message)
             msg._template_hash = h
             _tpl_hashes.add(h)
-        _noise_map = {}
-        _tags_map = {}
+        _noise_map: dict = {}
+        _tags_map: dict = {}
         if _tpl_hashes:
             _tpl_rows = (await db.execute(
                 select(LogTemplate.template_hash, LogTemplate.noise_score, LogTemplate.tags)
                 .where(LogTemplate.template_hash.in_(_tpl_hashes))
             )).all()
-            for row in _tpl_rows:
-                _noise_map[row.template_hash] = row.noise_score
-                _tags_map[row.template_hash] = row.tags
+            for r in _tpl_rows:
+                _noise_map[r.template_hash] = r.noise_score
+                _tags_map[r.template_hash] = r.tags
     except Exception:
-        pass
+        _noise_map = {}
+        _tags_map = {}
 
     for msg in messages:
         msg._fields = _extract_fields(msg.message)
-        h = getattr(msg, '_template_hash', None)
+        h = msg._template_hash
         msg._noise_score = _noise_map.get(h, 50) if h else 50
         db_tags = _tags_map.get(h, "") if h else ""
-        msg._tags = [t.strip() for t in db_tags.split(",") if t.strip()] if db_tags else auto_tag(msg.message)
+        try:
+            from services.log_intelligence import auto_tag
+            msg._tags = [t.strip() for t in db_tags.split(",") if t.strip()] if db_tags else auto_tag(msg.message)
+        except Exception:
+            msg._tags = []
 
     # Severity counts for header pills
-    severity_counts = dict((await db.execute(
-        select(SyslogMessage.severity, func.count(SyslogMessage.id))
-        .where(SyslogMessage.timestamp >= since)
-        .group_by(SyslogMessage.severity)
-    )).all())
+    sev_rows = await ch_query(
+        f"SELECT severity, count() AS cnt FROM syslog_messages WHERE {where} GROUP BY severity",
+        params,
+    )
+    severity_counts = {r["severity"]: r["cnt"] for r in sev_rows}
 
-    # Known hosts for filter dropdown
-    known_hosts = (await db.execute(
-        select(SyslogMessage.source_ip, SyslogMessage.hostname)
-        .where(SyslogMessage.timestamp >= since)
-        .group_by(SyslogMessage.source_ip, SyslogMessage.hostname)
-        .order_by(SyslogMessage.source_ip).limit(200)
-    )).all()
+    # Known hosts dropdown
+    host_rows = await ch_query(
+        f"""SELECT source_ip, hostname FROM syslog_messages
+            WHERE {where} GROUP BY source_ip, hostname
+            ORDER BY source_ip LIMIT 200""",
+        params,
+    )
+    known_hosts = [(r["source_ip"], r["hostname"]) for r in host_rows]
 
-    # Known apps for filter dropdown
-    known_apps = [r[0] for r in (await db.execute(
-        select(SyslogMessage.app_name)
-        .where(SyslogMessage.timestamp >= since, SyslogMessage.app_name.isnot(None))
-        .group_by(SyslogMessage.app_name).order_by(SyslogMessage.app_name).limit(100)
-    )).all()]
+    # Known apps dropdown
+    app_rows = await ch_query(
+        f"""SELECT app_name FROM syslog_messages
+            WHERE {where} AND app_name != ''
+            GROUP BY app_name ORDER BY app_name LIMIT 100""",
+        params,
+    )
+    known_apps = [r["app_name"] for r in app_rows]
 
     # IP → host_id map
     ping_hosts = (await db.execute(select(PingHost))).scalars().all()
     ip_to_host_id = _build_ip_map(ping_hosts)
 
-    # Log-rate chart data: messages per 5-min bucket for the selected time range
-    # Use at most 60 buckets
     bucket_minutes = max(5, (hours * 60) // 60)
-    rate_data = await _build_rate_chart(db, since, bucket_minutes)
+    rate_data = await _build_rate_chart(since, bucket_minutes)
 
-    # Saved views
-    saved_views = (await db.execute(
-        select(SyslogView).order_by(SyslogView.name)
-    )).scalars().all()
+    saved_views = (await db.execute(select(SyslogView).order_by(SyslogView.name))).scalars().all()
+    alert_spike = await _check_severity_spike()
 
-    # Severity alert: check if error rate is spiking
-    alert_spike = await _check_severity_spike(db)
-
-    # Intelligence: baseline anomalies + new templates
     intelligence = {"anomalies": [], "new_templates": [], "precursors": []}
     try:
         from models.log_template import LogTemplate, PrecursorPattern
         from services.log_intelligence import detect_baseline_anomalies
 
-        # Baseline anomalies (current hour vs learned baseline)
         intelligence["anomalies"] = await detect_baseline_anomalies(db)
 
-        # Recently discovered templates (last 24h, noise_score < 30)
         new_tpls = (await db.execute(
             select(LogTemplate)
             .where(LogTemplate.first_seen >= since, LogTemplate.noise_score < 30)
@@ -238,7 +259,6 @@ async def syslog_page(
             for t in new_tpls
         ]
 
-        # Active precursors (high-confidence patterns)
         precs = (await db.execute(
             select(PrecursorPattern, LogTemplate)
             .join(LogTemplate, PrecursorPattern.template_id == LogTemplate.id)
@@ -272,7 +292,6 @@ async def syslog_page(
         "retention_days": RETENTION_DAYS,
         "alert_spike": alert_spike,
         "intelligence": intelligence,
-        # Current filter/sort values
         "f_severity": sev,
         "f_facility": fac,
         "f_host": host or "",
@@ -284,71 +303,53 @@ async def syslog_page(
     })
 
 
-# ── Log-rate chart data ──────────────────────────────────────────────────────
+# ── Log-rate chart ────────────────────────────────────────────────────────────
 
-async def _build_rate_chart(db: AsyncSession, since: datetime, bucket_min: int) -> dict:
-    """Build rate chart data: {labels: [...], datasets: {0: [...], ...}}."""
+async def _build_rate_chart(since: datetime, bucket_min: int) -> dict:
     try:
-        rows = (await db.execute(
-            text("""
-                SELECT
-                    date_trunc('hour', timestamp)
-                    + (EXTRACT(MINUTE FROM timestamp)::int / :bm * :bm) * interval '1 minute' AS bucket,
-                    COALESCE(severity, 6) AS sev,
-                    count(*)
-                FROM syslog_messages
-                WHERE timestamp >= :since
-                GROUP BY 1, 2
-                ORDER BY 1
-            """),
+        rows = await ch_query(
+            """SELECT
+                   toStartOfInterval(timestamp, INTERVAL {bm:UInt32} MINUTE) AS bucket,
+                   severity AS sev,
+                   count() AS cnt
+               FROM syslog_messages
+               WHERE timestamp >= {since:DateTime64(3)}
+               GROUP BY bucket, sev
+               ORDER BY bucket""",
             {"since": since, "bm": bucket_min},
-        )).all()
+        )
     except Exception:
-        return {"labels": [], "datasets": {}}
+        return {"labels": [], "err": [], "warn": [], "info": [], "debug": []}
 
-    # Build time labels and per-severity counts
-    buckets = {}
-    for bucket_ts, sev, cnt in rows:
-        ts_str = localtime(bucket_ts, "%H:%M") if bucket_ts else "?"
+    buckets: dict = {}
+    for r in rows:
+        ts_str = localtime(r["bucket"], "%H:%M") if r["bucket"] else "?"
         if ts_str not in buckets:
             buckets[ts_str] = {}
-        buckets[ts_str][int(sev)] = buckets[ts_str].get(int(sev), 0) + cnt
+        buckets[ts_str][int(r["sev"])] = buckets[ts_str].get(int(r["sev"]), 0) + r["cnt"]
 
     labels = list(buckets.keys())
-    # Group into: errors (0-3), warnings (4), info (5-6), debug (7)
-    err = [sum(buckets[l].get(s, 0) for s in range(4)) for l in labels]
-    warn = [buckets[l].get(4, 0) for l in labels]
-    info = [sum(buckets[l].get(s, 0) for s in (5, 6)) for l in labels]
+    err   = [sum(buckets[l].get(s, 0) for s in range(4)) for l in labels]
+    warn  = [buckets[l].get(4, 0) for l in labels]
+    info  = [sum(buckets[l].get(s, 0) for s in (5, 6)) for l in labels]
     debug = [buckets[l].get(7, 0) for l in labels]
-
-    return {
-        "labels": labels,
-        "err": err,
-        "warn": warn,
-        "info": info,
-        "debug": debug,
-    }
+    return {"labels": labels, "err": err, "warn": warn, "info": info, "debug": debug}
 
 
-# ── Severity spike detection ─────────────────────────────────────────────────
+# ── Severity spike detection ──────────────────────────────────────────────────
 
-async def _check_severity_spike(db: AsyncSession) -> dict | None:
-    """Check if error rate in last 5min is 5x above 1h average."""
+async def _check_severity_spike() -> dict | None:
     try:
         now = datetime.utcnow()
-        # Errors in last 5 minutes
-        recent = (await db.execute(
-            select(func.count(SyslogMessage.id))
-            .where(SyslogMessage.severity <= 3, SyslogMessage.timestamp >= now - timedelta(minutes=5))
-        )).scalar() or 0
-
-        # Average errors per 5-min window in last hour
-        hour_total = (await db.execute(
-            select(func.count(SyslogMessage.id))
-            .where(SyslogMessage.severity <= 3, SyslogMessage.timestamp >= now - timedelta(hours=1))
-        )).scalar() or 0
-        avg_per_5min = hour_total / 12  # 12 five-minute windows in an hour
-
+        recent = int(await ch_scalar(
+            "SELECT count() FROM syslog_messages WHERE severity <= 3 AND timestamp >= {t:DateTime64(3)}",
+            {"t": now - timedelta(minutes=5)},
+        ) or 0)
+        hour_total = int(await ch_scalar(
+            "SELECT count() FROM syslog_messages WHERE severity <= 3 AND timestamp >= {t:DateTime64(3)}",
+            {"t": now - timedelta(hours=1)},
+        ) or 0)
+        avg_per_5min = hour_total / 12
         if avg_per_5min > 0 and recent >= 5 and recent > avg_per_5min * 5:
             return {"recent": recent, "avg": round(avg_per_5min, 1), "ratio": round(recent / avg_per_5min, 1)}
     except Exception:
@@ -356,7 +357,7 @@ async def _check_severity_spike(db: AsyncSession) -> dict | None:
     return None
 
 
-# ── SSE Live tail ────────────────────────────────────────────────────────────
+# ── SSE Live tail ─────────────────────────────────────────────────────────────
 
 @router.get("/stream")
 async def syslog_stream(
@@ -364,7 +365,6 @@ async def syslog_stream(
     host: str = Query(""),
     app: str = Query(""),
 ):
-    """Server-Sent Events endpoint for live syslog tail."""
     from services.syslog import subscribe, unsubscribe
 
     sev_filter = int(severity) if severity not in ("", None) else None
@@ -379,7 +379,6 @@ async def syslog_stream(
                     yield ": keepalive\n\n"
                     continue
 
-                # Apply filters
                 if sev_filter is not None and msg.get("severity") != sev_filter:
                     continue
                 if host and host.lower() not in (msg.get("source_ip", "").lower() + msg.get("hostname", "").lower()):
@@ -387,7 +386,6 @@ async def syslog_stream(
                 if app and app.lower() not in (msg.get("app_name") or "").lower():
                     continue
 
-                # Format as SSE
                 data = {
                     "timestamp": localtime(msg["timestamp"], "%m-%d %H:%M:%S") if isinstance(msg["timestamp"], datetime) else str(msg["timestamp"]),
                     "severity": msg.get("severity"),
@@ -415,19 +413,14 @@ async def syslog_stream(
     )
 
 
-# ── Saved views CRUD ─────────────────────────────────────────────────────────
+# ── Saved views CRUD ──────────────────────────────────────────────────────────
 
 @router.post("/views", response_class=HTMLResponse)
-async def save_view(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """Save current filters as a named view."""
+async def save_view(request: Request, db: AsyncSession = Depends(get_db)):
     form = await request.form()
     name = form.get("view_name", "").strip()
     if not name:
         return HTMLResponse("Name required", status_code=400)
-
     filters = {
         "severity": form.get("severity", ""),
         "facility": form.get("facility", ""),
@@ -436,27 +429,20 @@ async def save_view(
         "q": form.get("q", ""),
         "hours": form.get("hours", "24"),
     }
-    view = SyslogView(name=name, filters_json=json.dumps(filters))
-    db.add(view)
+    db.add(SyslogView(name=name, filters_json=json.dumps(filters)))
     await db.commit()
-
-    # Redirect back to syslog with current filters
     qs = "&".join(f"{k}={v}" for k, v in filters.items() if v)
     return HTMLResponse("", status_code=303, headers={"Location": f"/syslog?{qs}"})
 
 
 @router.post("/views/{view_id}/delete", response_class=HTMLResponse)
-async def delete_view(
-    view_id: int,
-    db: AsyncSession = Depends(get_db),
-):
-    """Delete a saved view."""
+async def delete_view(view_id: int, db: AsyncSession = Depends(get_db)):
     await db.execute(delete(SyslogView).where(SyslogView.id == view_id))
     await db.commit()
     return HTMLResponse("", status_code=303, headers={"Location": "/syslog"})
 
 
-# ── Host detail tab ──────────────────────────────────────────────────────────
+# ── Host detail tab ───────────────────────────────────────────────────────────
 
 @router.get("/api/host/{host_id}", response_class=HTMLResponse)
 async def syslog_by_host(
@@ -465,66 +451,67 @@ async def syslog_by_host(
     db: AsyncSession = Depends(get_db),
     hours: int = Query(24),
     page: int = Query(1, ge=1),
-    sev: str = Query(""),        # comma-separated severity filter, e.g. "2,3,4"
-    app: str = Query(""),        # app_name substring filter
-    q: str = Query(""),          # message search
-    sort: str = Query("desc"),   # "asc" or "desc"
+    sev: str = Query(""),
+    app: str = Query(""),
+    q: str = Query(""),
+    sort: str = Query("desc"),
 ):
-    """Return syslog messages for a specific PingHost (used in host detail tab)."""
     since = datetime.utcnow() - timedelta(hours=hours)
 
-    # Build filter: match by host_id OR by source_ip/hostname
-    host_filter = SyslogMessage.host_id == host_id
+    # Resolve source_ip / hostname from PingHost for wider matching
+    host_source_ip = ""
+    host_name = ""
     ping_host = (await db.execute(select(PingHost).where(PingHost.id == host_id))).scalar()
     if ping_host:
         raw = ping_host.hostname
         for prefix in ("https://", "http://"):
             if raw.startswith(prefix):
                 raw = raw[len(prefix):]
-        raw = raw.split("/")[0].split(":")[0]
-        host_filter = or_(host_filter, SyslogMessage.source_ip == raw)
-        if ping_host.name:
-            host_filter = or_(host_filter, SyslogMessage.hostname.ilike(ping_host.name))
+        host_source_ip = raw.split("/")[0].split(":")[0]
+        host_name = ping_host.name or ""
 
-    filters = [host_filter, SyslogMessage.timestamp >= since]
-
-    # Severity filter
+    sev_list = None
     if sev:
         try:
             sev_list = [int(s.strip()) for s in sev.split(",") if s.strip()]
-            if sev_list:
-                filters.append(SyslogMessage.severity.in_(sev_list))
         except ValueError:
             pass
 
-    # App filter
-    if app:
-        filters.append(SyslogMessage.app_name.ilike(f"%{app}%"))
+    where, params = _where_clauses(
+        since,
+        host_id=host_id,
+        host_source_ip=host_source_ip,
+        host_name=host_name,
+        sev_list=sev_list,
+        app=app,
+        q=q,
+    )
+    sort_dir = "ASC" if sort == "asc" else "DESC"
+    offset = (page - 1) * _PER_PAGE
 
-    # Message search
-    if q:
-        filters.append(SyslogMessage.message.ilike(f"%{q}%"))
-
-    sort_order = SyslogMessage.timestamp.asc() if sort == "asc" else SyslogMessage.timestamp.desc()
-
-    query = select(SyslogMessage).where(*filters).order_by(sort_order)
-    count_query = select(func.count(SyslogMessage.id)).where(*filters)
-
-    total = (await db.execute(count_query)).scalar() or 0
+    total = int(await ch_scalar(f"SELECT count() FROM syslog_messages WHERE {where}", params) or 0)
     total_pages = max(1, (total + _PER_PAGE - 1) // _PER_PAGE)
     page = min(page, total_pages)
 
-    messages = (await db.execute(
-        query.offset((page - 1) * _PER_PAGE).limit(_PER_PAGE)
-    )).scalars().all()
+    rows = await ch_query(
+        f"""SELECT timestamp, received_at, source_ip, hostname, host_id,
+                   facility, severity, app_name, message,
+                   template_hash, tags, noise_score
+            FROM syslog_messages
+            WHERE {where}
+            ORDER BY timestamp {sort_dir}
+            LIMIT {_PER_PAGE} OFFSET {offset}""",
+        params,
+    )
+    messages = [_row(r) for r in rows]
 
-    # Collect distinct app names for the filter dropdown
-    app_names = (await db.execute(
-        select(SyslogMessage.app_name)
-        .where(host_filter, SyslogMessage.timestamp >= since, SyslogMessage.app_name.isnot(None))
-        .distinct()
-        .order_by(SyslogMessage.app_name)
-    )).scalars().all()
+    app_rows = await ch_query(
+        f"""SELECT DISTINCT app_name FROM syslog_messages
+            WHERE {where} AND app_name != ''
+            ORDER BY app_name LIMIT 100""",
+        params,
+    )
+    app_names = [r["app_name"] for r in app_rows]
 
     return templates.TemplateResponse("partials/syslog_table.html", {
         "request": request,
@@ -539,11 +526,11 @@ async def syslog_by_host(
         "f_app": app,
         "f_q": q,
         "f_sort": sort,
-        "app_names": [a for a in app_names if a],
+        "app_names": app_names,
     })
 
 
-# ── Template Browser ─────────────────────────────────────────────────────────
+# ── Template Browser ──────────────────────────────────────────────────────────
 
 @router.get("/templates", response_class=HTMLResponse)
 async def template_browser(
@@ -553,7 +540,6 @@ async def template_browser(
     tag: str = Query(""),
     page: int = Query(1, ge=1),
 ):
-    """Browse learned log templates."""
     from models.log_template import LogTemplate, PrecursorPattern
 
     query = select(LogTemplate)
@@ -578,7 +564,6 @@ async def template_browser(
 
     tpls = (await db.execute(query.offset((page - 1) * per_page).limit(per_page))).scalars().all()
 
-    # Load precursor info for these templates
     tpl_ids = [t.id for t in tpls]
     precursor_map = {}
     if tpl_ids:
@@ -589,7 +574,6 @@ async def template_browser(
         for p in precs:
             precursor_map[p.template_id] = p
 
-    # All unique tags for filter
     all_tags_raw = (await db.execute(select(LogTemplate.tags).where(LogTemplate.tags != ""))).scalars().all()
     all_tags = sorted({t.strip() for raw in all_tags_raw for t in raw.split(",") if t.strip()})
 
@@ -607,56 +591,53 @@ async def template_browser(
     })
 
 
-# ── Smart Feed API ───────────────────────────────────────────────────────────
+# ── Smart Feed API ────────────────────────────────────────────────────────────
 
 @router.get("/api/smart-feed")
 async def smart_feed(
     db: AsyncSession = Depends(get_db),
     hours: int = Query(24),
-    min_score: int = Query(0),
     max_noise: int = Query(30),
 ):
-    """Return interesting log messages (low noise score, high severity, new templates)."""
     from models.log_template import LogTemplate
     from services.log_intelligence import extract_template
 
     since = datetime.utcnow() - timedelta(hours=hours)
+    where, params = _where_clauses(since)
 
-    # Get messages
-    messages = (await db.execute(
-        select(SyslogMessage)
-        .where(SyslogMessage.timestamp >= since)
-        .order_by(SyslogMessage.timestamp.desc())
-        .limit(500)
-    )).scalars().all()
+    rows = await ch_query(
+        f"""SELECT timestamp, received_at, source_ip, hostname, host_id,
+                   facility, severity, app_name, message,
+                   template_hash, tags, noise_score
+            FROM syslog_messages
+            WHERE {where}
+            ORDER BY timestamp DESC
+            LIMIT 500""",
+        params,
+    )
 
-    # Load template noise scores
-    tpl_scores = {}
+    tpl_scores: dict = {}
     tpls = (await db.execute(select(LogTemplate))).scalars().all()
     for t in tpls:
         tpl_scores[t.template_hash] = t.noise_score
 
-    # Score and filter messages
     results = []
-    for msg in messages:
-        _, h = extract_template(msg.message)
+    for r in rows:
+        _, h = extract_template(r.get("message", ""))
         noise = tpl_scores.get(h, 50)
         if noise > max_noise:
             continue
-
         results.append({
-            "id": msg.id,
-            "timestamp": localtime(msg.timestamp, "%m-%d %H:%M:%S"),
-            "severity": msg.severity,
-            "severity_label": SEVERITY_LABELS.get(msg.severity, "?"),
-            "hostname": msg.hostname or "",
-            "source_ip": msg.source_ip,
-            "app_name": msg.app_name or "",
-            "message": msg.message[:300],
+            "timestamp": localtime(r["timestamp"], "%m-%d %H:%M:%S"),
+            "severity": r["severity"],
+            "severity_label": SEVERITY_LABELS.get(r["severity"], "?"),
+            "hostname": r["hostname"] or "",
+            "source_ip": r["source_ip"],
+            "app_name": r["app_name"] or "",
+            "message": (r["message"] or "")[:300],
             "noise_score": noise,
-            "host_id": msg.host_id,
+            "host_id": r["host_id"],
         })
-
         if len(results) >= 100:
             break
 

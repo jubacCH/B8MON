@@ -9,11 +9,10 @@ import socket
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from models.base import AsyncSessionLocal
 from models.ping import PingHost
-from models.syslog import SyslogMessage
 
 log = logging.getLogger("nodeglow.syslog")
 
@@ -319,26 +318,30 @@ async def _enqueue(parsed: dict):
 
 
 async def _flush_buffer():
-    """Write buffered messages to DB. Called with lock held or from flush task."""
+    """Write buffered messages to ClickHouse. Called with lock held or from flush task."""
     global _buffer
     if not _buffer:
         return
     batch = _buffer[:]
     _buffer = []
 
-    # Fields used for live-tail display only, not DB columns
     _transient = {"is_new_template", "severity_label"}
+    cleaned = []
+    for msg in batch:
+        row = {k: v for k, v in msg.items() if k not in _transient}
+        if isinstance(row.get("tags"), list):
+            row["tags"] = ",".join(row["tags"]) if row["tags"] else ""
+        row.setdefault("tags", "")
+        row.setdefault("template_hash", "")
+        row.setdefault("noise_score", 50)
+        row.setdefault("received_at", datetime.utcnow())
+        cleaned.append(row)
+
     try:
-        async with AsyncSessionLocal() as db:
-            for msg in batch:
-                clean = {k: v for k, v in msg.items() if k not in _transient}
-                # Convert tags list to comma-separated string for DB
-                if isinstance(clean.get("tags"), list):
-                    clean["tags"] = ",".join(clean["tags"]) if clean["tags"] else None
-                db.add(SyslogMessage(**clean))
-            await db.commit()
+        from services.clickhouse_client import insert_batch
+        await insert_batch(cleaned)
     except Exception as e:
-        log.error("Failed to flush syslog buffer (%d msgs): %s", len(batch), e)
+        log.error("Failed to flush syslog buffer to ClickHouse (%d msgs): %s", len(cleaned), e)
 
 
 async def _flush_loop():

@@ -89,7 +89,7 @@ class Session(Base):
 
 
 async def get_current_user(request: "Request", db: AsyncSession) -> "User | None":
-    token = request.cookies.get("vigil_session")
+    token = request.cookies.get("nodeglow_session")
     if not token:
         return None
     now = datetime.utcnow()

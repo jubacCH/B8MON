@@ -24,7 +24,7 @@ from models.settings import (
 )
 from models.ping import PingHost, PingResult
 from models.integration import IntegrationConfig, Snapshot
-from models.syslog import SyslogMessage
+from models.syslog import SyslogView
 from models.incident import Incident, IncidentEvent
 from models.log_template import LogTemplate, HostBaseline, PrecursorPattern
 from models.agent import Agent, AgentSnapshot
@@ -44,28 +44,7 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # PostgreSQL: create tsvector trigger for syslog FTS
-    if "postgresql" in (DATABASE_URL or ""):
-        async with engine.begin() as conn:
-            await conn.execute(text("""
-                CREATE OR REPLACE FUNCTION syslog_search_vector_update() RETURNS trigger AS $$
-                BEGIN
-                    NEW.search_vector :=
-                        setweight(to_tsvector('english', COALESCE(NEW.hostname, '')), 'A') ||
-                        setweight(to_tsvector('english', COALESCE(NEW.app_name, '')), 'B') ||
-                        setweight(to_tsvector('english', COALESCE(NEW.message, '')), 'C');
-                    RETURN NEW;
-                END;
-                $$ LANGUAGE plpgsql;
-            """))
-            await conn.execute(text("""
-                DO $$ BEGIN
-                    CREATE TRIGGER syslog_search_vector_trigger
-                        BEFORE INSERT OR UPDATE ON syslog_messages
-                        FOR EACH ROW EXECUTE FUNCTION syslog_search_vector_update();
-                EXCEPTION WHEN duplicate_object THEN NULL;
-                END $$;
-            """))
+    # Syslog messages are stored in ClickHouse — no PostgreSQL trigger needed
 
 
 __all__ = [
@@ -75,7 +54,7 @@ __all__ = [
     "get_current_user", "get_setting", "set_setting", "is_setup_complete",
     "PingHost", "PingResult",
     "IntegrationConfig", "Snapshot",
-    "SyslogMessage",
+    "SyslogView",
     "Incident", "IncidentEvent",
     "LogTemplate", "HostBaseline", "PrecursorPattern",
     "Agent", "AgentSnapshot",

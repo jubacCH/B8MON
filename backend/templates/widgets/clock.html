@@ -4,10 +4,10 @@
     {{ widget_remove_btn() }}
     <p id="widget-clock-time" class="text-3xl font-mono font-medium text-[--ng-text-primary] tabular-nums leading-none"></p>
     <p id="widget-clock-date" class="text-xs text-[--ng-text-muted] font-mono mt-1.5 tabular-nums"></p>
-    {% if vigil_uptime %}
+    {% if nodeglow_uptime %}
     <div class="mt-3 pt-3 border-t border-white/[0.06] text-center">
       <p class="text-[--ng-text-muted] text-[10px] uppercase tracking-wider mb-1">Nodeglow Uptime</p>
-      <p class="text-[--ng-text-secondary] text-sm font-mono tabular-nums">{{ vigil_uptime }}</p>
+      <p class="text-[--ng-text-secondary] text-sm font-mono tabular-nums">{{ nodeglow_uptime }}</p>
     </div>
     {% endif %}
   </div>

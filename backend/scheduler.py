@@ -250,23 +250,8 @@ async def cleanup_old_results():
         await db.execute(delete(PingResult).where(PingResult.timestamp < ping_cutoff))
         # Integration snapshots
         await snap_svc.cleanup_all(db, int_ret)
-        # Syslog messages – smart retention by severity
-        from models.syslog import SyslogMessage, RETENTION_DAYS
+        # Syslog retention handled by ClickHouse TTL — no cleanup needed here
         total_deleted = 0
-        for sev, days in RETENTION_DAYS.items():
-            cutoff = datetime.utcnow() - timedelta(days=days)
-            r = await db.execute(
-                delete(SyslogMessage)
-                .where(SyslogMessage.severity == sev, SyslogMessage.timestamp < cutoff)
-            )
-            total_deleted += r.rowcount
-        # Also clean messages with NULL severity older than 7 days
-        null_cutoff = datetime.utcnow() - timedelta(days=7)
-        r = await db.execute(
-            delete(SyslogMessage)
-            .where(SyslogMessage.severity.is_(None), SyslogMessage.timestamp < null_cutoff)
-        )
-        total_deleted += r.rowcount
         # Agent snapshots: keep 7 days
         from models.agent import AgentSnapshot
         agent_cutoff = datetime.utcnow() - timedelta(days=7)

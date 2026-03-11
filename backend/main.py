@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     from models import init_db as init_new_db
     await init_new_db()
     await start_scheduler()
-    os.environ["VIGIL_START_TIME"] = str(time.time())
+    os.environ["NODEGLOW_START_TIME"] = str(time.time())
     from services.syslog import start_syslog_server, stop_syslog_server
     try:
         async with AsyncSessionLocal() as _db:

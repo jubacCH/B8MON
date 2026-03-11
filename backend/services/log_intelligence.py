@@ -18,7 +18,6 @@ from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.log_template import HostBaseline, LogTemplate, PrecursorPattern
-from models.syslog import SyslogMessage
 
 log = logging.getLogger("nodeglow.intelligence")
 
@@ -296,22 +295,31 @@ async def compute_baselines(db: AsyncSession):
     now = datetime.utcnow()
     week_ago = now - timedelta(days=7)
 
-    # Get hourly counts per source_ip
-    rows = (await db.execute(
-        select(
-            SyslogMessage.source_ip,
-            func.extract("dow", SyslogMessage.timestamp).label("dow"),
-            func.extract("hour", SyslogMessage.timestamp).label("hour"),
-            func.count(SyslogMessage.id).label("cnt"),
-        )
-        .where(SyslogMessage.timestamp >= week_ago)
-        .group_by(
-            SyslogMessage.source_ip,
-            func.extract("dow", SyslogMessage.timestamp),
-            func.extract("hour", SyslogMessage.timestamp),
-        )
-    )).all()
+    # Get hourly counts per source_ip from ClickHouse
+    from services.clickhouse_client import query as ch_query
+    ch_rows = await ch_query(
+        """SELECT source_ip,
+                  toDayOfWeek(timestamp) - 1 AS dow,
+                  toHour(timestamp)          AS hour,
+                  count()                    AS cnt
+           FROM syslog_messages
+           WHERE timestamp >= {t:DateTime64(3)}
+           GROUP BY source_ip, dow, hour""",
+        {"t": week_ago},
+    )
 
+    if not ch_rows:
+        return
+
+    # Wrap to match original field access pattern
+    class _Row:
+        def __init__(self, d):
+            self.source_ip = d["source_ip"]
+            self.dow = d["dow"]
+            self.hour = d["hour"]
+            self.cnt = d["cnt"]
+
+    rows = [_Row(r) for r in ch_rows]
     if not rows:
         return
 
@@ -364,15 +372,19 @@ async def detect_baseline_anomalies(db: AsyncSession) -> list[dict]:
     dow = now.weekday()  # 0=Mon
     window_start = now.replace(minute=0, second=0, microsecond=0)
 
-    # Current hour counts per source_ip
-    current_counts = (await db.execute(
-        select(
-            SyslogMessage.source_ip,
-            func.count(SyslogMessage.id).label("cnt"),
-        )
-        .where(SyslogMessage.timestamp >= window_start)
-        .group_by(SyslogMessage.source_ip)
-    )).all()
+    # Current hour counts per source_ip from ClickHouse
+    from services.clickhouse_client import query as ch_query
+
+    class _CRow:
+        def __init__(self, d):
+            self.source_ip = d["source_ip"]
+            self.cnt = d["cnt"]
+
+    ch_current = await ch_query(
+        "SELECT source_ip, count() AS cnt FROM syslog_messages WHERE timestamp >= {t:DateTime64(3)} GROUP BY source_ip",
+        {"t": window_start},
+    )
+    current_counts = [_CRow(r) for r in ch_current]
 
     if not current_counts:
         return []
@@ -460,17 +472,18 @@ async def learn_precursors(db: AsyncSession):
 
     for host_id, down_ts in down_events:
         window_start = down_ts - timedelta(minutes=5)
-        # Get syslog messages from this host in the window
-        syslog_msgs = (await db.execute(
-            select(SyslogMessage.message)
-            .where(
-                SyslogMessage.host_id == host_id,
-                SyslogMessage.timestamp >= window_start,
-                SyslogMessage.timestamp <= down_ts,
-                SyslogMessage.severity <= 4,  # warning and above
-            )
-            .limit(50)
-        )).scalars().all()
+        # Get syslog messages from this host in the window (ClickHouse)
+        from services.clickhouse_client import query as ch_query
+        msg_rows = await ch_query(
+            """SELECT message FROM syslog_messages
+               WHERE host_id = {hid:Int32}
+               AND timestamp >= {ts_start:DateTime64(3)}
+               AND timestamp <= {ts_end:DateTime64(3)}
+               AND severity <= 4
+               LIMIT 50""",
+            {"hid": host_id, "ts_start": window_start, "ts_end": down_ts},
+        )
+        syslog_msgs = [r["message"] for r in msg_rows]
 
         if syslog_msgs:
             total_down_events += 1

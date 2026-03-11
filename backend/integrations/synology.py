@@ -24,7 +24,7 @@ class SynologyAPI:
         resp = await client.get(f"{self.base}/webapi/auth.cgi", params={
             "api": "SYNO.API.Auth", "version": "3", "method": "login",
             "account": self.username, "passwd": self.password,
-            "session": "Vigil", "format": "sid",
+            "session": "Nodeglow", "format": "sid",
         })
         resp.raise_for_status()
         data = resp.json()
@@ -37,7 +37,7 @@ class SynologyAPI:
         try:
             await client.get(f"{self.base}/webapi/auth.cgi", params={
                 "api": "SYNO.API.Auth", "version": "1", "method": "logout",
-                "session": "Vigil", "_sid": sid,
+                "session": "Nodeglow", "_sid": sid,
             })
         except Exception:
             pass

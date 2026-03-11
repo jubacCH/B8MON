@@ -21,7 +21,7 @@ router = APIRouter()
 
 def _collect_system_info() -> dict:
     """Collect all psutil + OS data in one shot (runs in thread executor)."""
-    start_ts = float(os.environ.get("VIGIL_START_TIME", "0"))
+    start_ts = float(os.environ.get("NODEGLOW_START_TIME", "0"))
     now_ts = time.time()
     uptime_seconds = int(now_ts - start_ts) if start_ts > 0 else 0
 
