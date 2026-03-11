@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from datetime import datetime, timezone
 
 import httpx
 
@@ -69,6 +70,13 @@ class ProxmoxAPI:
         results = await asyncio.gather(*[_one(g) for g in guests])
         return {vmid: mac for vmid, mac in results if mac}
 
+    async def cluster_tasks(self, limit: int = 50) -> list[dict]:
+        """Fetch recent cluster-wide tasks."""
+        try:
+            return await self.get(f"/cluster/tasks?limit={limit}")
+        except Exception:
+            return []
+
     async def health_check(self) -> bool:
         try:
             await self.cluster_status()
@@ -80,7 +88,8 @@ class ProxmoxAPI:
 # ── Parser ────────────────────────────────────────────────────────────────────
 
 
-def parse_cluster_data(resources: list[dict], cluster_status: list[dict]) -> dict:
+def parse_cluster_data(resources: list[dict], cluster_status: list[dict],
+                       tasks: list[dict] | None = None) -> dict:
     quorum_ok = True
     cluster_name = "Proxmox Cluster"
     for item in cluster_status:
@@ -193,6 +202,28 @@ def parse_cluster_data(resources: list[dict], cluster_status: list[dict]) -> dic
         "mem_pct": round(mem_used_gb / mem_total_gb * 100, 1) if mem_total_gb else 0,
     }
 
+    # Parse tasks
+    parsed_tasks = []
+    for t in (tasks or []):
+        starttime = t.get("starttime") or 0
+        endtime = t.get("endtime")
+        status = t.get("status", "")
+        # Store as naive UTC datetime strings — localtime filter handles tz
+        start_dt = datetime.utcfromtimestamp(starttime) if starttime else None
+        parsed_tasks.append({
+            "starttime": start_dt.strftime("%Y-%m-%d %H:%M:%S") if start_dt else None,
+            "_sort": starttime,
+            "node": t.get("node", ""),
+            "user": t.get("user", ""),
+            "type": t.get("type", ""),
+            "id": t.get("id", ""),
+            "status": status if status else "running",
+            "ok": status == "OK" if status else None,
+        })
+    parsed_tasks.sort(key=lambda x: x["_sort"], reverse=True)
+    for t in parsed_tasks:
+        del t["_sort"]
+
     return {
         "quorum_ok": quorum_ok,
         "cluster_name": cluster_name,
@@ -200,6 +231,7 @@ def parse_cluster_data(resources: list[dict], cluster_status: list[dict]) -> dic
         "vms": vms,
         "containers": containers,
         "totals": totals,
+        "tasks": parsed_tasks,
     }
 
 
@@ -293,9 +325,12 @@ class ProxmoxIntegration(BaseIntegration):
     async def collect(self) -> CollectorResult:
         try:
             api = self._api()
-            resources = await api.cluster_resources()
-            status = await api.cluster_status()
-            data = parse_cluster_data(resources, status)
+            resources, status, tasks = await asyncio.gather(
+                api.cluster_resources(),
+                api.cluster_status(),
+                api.cluster_tasks(limit=50),
+            )
+            data = parse_cluster_data(resources, status, tasks)
             return CollectorResult(success=True, data=data)
         except Exception as exc:
             return CollectorResult(success=False, error=str(exc))
@@ -321,4 +356,5 @@ class ProxmoxIntegration(BaseIntegration):
             "totals": totals,
             "quorum_ok": data.get("quorum_ok", True),
             "cluster_name": data.get("cluster_name", ""),
+            "tasks": data.get("tasks", []),
         }

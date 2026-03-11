@@ -136,6 +136,44 @@
 </div>
 {% endif %}
 
+<!-- Recent Tasks -->
+{% if tasks %}
+<h2 class="metric-label !text-[10px] mb-3 mt-6">Recent Tasks ({{ tasks|length }})</h2>
+<div class="glass-card overflow-hidden">
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="border-b border-white/[0.06] text-[--ng-text-muted] text-[10px] uppercase tracking-wider">
+                <th class="px-4 py-2.5 text-left font-medium">Time</th>
+                <th class="px-4 py-2.5 text-left font-medium">Node</th>
+                <th class="px-4 py-2.5 text-left font-medium">Task</th>
+                <th class="px-4 py-2.5 text-left font-medium">ID</th>
+                <th class="px-4 py-2.5 text-left font-medium">User</th>
+                <th class="px-4 py-2.5 text-left font-medium">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in tasks %}
+            <tr class="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                <td class="px-4 py-2 text-xs font-mono text-[--ng-text-muted] whitespace-nowrap">{{ t.starttime or '—' }}</td>
+                <td class="px-4 py-2 text-xs text-[--ng-text-secondary]">{{ t.node }}</td>
+                <td class="px-4 py-2">
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-blue-500/15 text-blue-400">{{ t.type }}</span>
+                </td>
+                <td class="px-4 py-2 text-xs font-mono text-[--ng-text-secondary]">{{ t.id if t.id else '—' }}</td>
+                <td class="px-4 py-2 text-xs font-mono text-[--ng-text-muted]">{{ t.user }}</td>
+                <td class="px-4 py-2 text-xs">
+                    <span class="flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full {% if t.ok == true %}bg-ng-success{% elif t.ok == false %}bg-ng-critical{% else %}bg-ng-warning animate-pulse{% endif %}"></span>
+                        <span class="{% if t.ok == false %}text-ng-critical{% elif t.ok == true %}text-[--ng-text-secondary]{% else %}text-ng-warning{% endif %}">{{ t.status }}</span>
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
 {% else %}
 <div class="text-center py-16 text-[--ng-text-secondary]">
     <p class="text-lg mb-2">No data available</p>
