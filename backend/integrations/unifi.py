@@ -247,14 +247,18 @@ def parse_unifi_data(raw_devices: list, raw_clients: list, raw_health: list,
     # Latest speedtest for quick summary
     speedtest_latest = speedtest_results[0] if speedtest_results else None
 
+    access_points = sum(1 for d in devices if d.get("type") == "uap")
+
     return {
         "devices": devices, "clients": clients, "events": events,
         "wan": wan, "lan": lan, "wlan": wlan,
         "speedtest": speedtest_results, "speedtest_latest": speedtest_latest,
         "totals": {
             "devices": len(devices), "devices_online": devices_online,
-            "clients_total": len(clients), "clients_wifi": clients_wifi,
-            "clients_wired": clients_wired,
+            "clients": len(clients), "clients_total": len(clients),
+            "clients_wifi": clients_wifi, "wireless_clients": clients_wifi,
+            "clients_wired": clients_wired, "wired_clients": clients_wired,
+            "aps": access_points, "access_points": access_points,
         },
     }
 
