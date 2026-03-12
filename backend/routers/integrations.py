@@ -17,8 +17,11 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from templating import templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select as sa_select
+
 from integrations import get_registry, get_integration
 from integrations._base import BaseIntegration
+from database import PingHost
 from models.base import get_db
 from services import integration as int_svc
 from services import snapshot as snap_svc
@@ -165,6 +168,22 @@ async def detail(
         except Exception:
             template_name = "integrations/_detail.html"
 
+    # Build IP/name → host_id map for linking devices to hosts
+    ip_to_host_id: dict[str, int] = {}
+    try:
+        ping_hosts = (await db.execute(sa_select(PingHost))).scalars().all()
+        for ph in ping_hosts:
+            raw = ph.hostname
+            for prefix in ("https://", "http://"):
+                if raw.startswith(prefix):
+                    raw = raw[len(prefix):]
+            raw = raw.split("/")[0].split(":")[0]
+            ip_to_host_id[raw] = ph.id
+            if ph.name:
+                ip_to_host_id[ph.name.lower()] = ph.id
+    except Exception:
+        pass
+
     ctx = {
         "request": request,
         "integration": integration_cls,
@@ -176,6 +195,7 @@ async def detail(
         "active_page": integration_type,
         "active_tab": request.query_params.get("tab", "overview"),
         "saved": request.query_params.get("saved"),
+        "ip_to_host_id": ip_to_host_id,
         **extra_ctx,
     }
     return templates.TemplateResponse(template_name, ctx)

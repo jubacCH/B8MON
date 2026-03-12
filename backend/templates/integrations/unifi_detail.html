@@ -103,7 +103,7 @@
 
 {% if st_history|length > 1 %}
 <div class="glass-card p-4 mb-6">
-    <canvas id="speedtestChart" height="120"></canvas>
+    <canvas id="speedtestChart" height="140"></canvas>
 </div>
 {% endif %}
 {% endif %}
@@ -114,11 +114,18 @@
 <h2 class="metric-label !text-[10px] mb-3">Devices ({{ devices|length }})</h2>
 <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3 mb-6">
     {% for d in devices %}
+    {% set dev_ip = d.get('ip', '') %}
+    {% set dev_name = d.get('name', d.get('hostname', 'Unknown')) %}
+    {% set host_id = ip_to_host_id.get(dev_ip) or ip_to_host_id.get(dev_name.lower()) %}
+    {% if host_id %}
+    <a href="/hosts/{{ host_id }}" class="glass-card p-4 block hover:!border-[--ng-primary]/30 transition-colors">
+    {% else %}
     <div class="glass-card p-4">
+    {% endif %}
         <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2">
                 <span class="w-2 h-2 rounded-full {% if d.get('state', d.get('status')) == 1 or d.get('adopted') %}bg-ng-success{% else %}bg-ng-critical{% endif %}"></span>
-                <span class="text-[--ng-text-primary] font-medium text-sm">{{ d.get('name', d.get('hostname', 'Unknown')) }}</span>
+                <span class="text-[--ng-text-primary] font-medium text-sm">{{ dev_name }}</span>
             </div>
             <span class="text-[10px] font-mono text-[--ng-text-muted]">{{ d.get('model', '') }}</span>
         </div>
@@ -141,11 +148,11 @@
                 </div>
             </div>
             {% endif %}
-            {% if d.get('ip') %}
-            <p class="text-[10px] text-[--ng-text-muted] font-mono">{{ d.get('ip') }}</p>
+            {% if dev_ip %}
+            <p class="text-[10px] text-[--ng-text-muted] font-mono">{{ dev_ip }}</p>
             {% endif %}
         </div>
-    </div>
+    {% if host_id %}</a>{% else %}</div>{% endif %}
     {% endfor %}
 </div>
 {% endif %}
@@ -277,10 +284,13 @@
         datasets: [
           {label: 'Download (Mbps)', data: reversed.map(s => s.download_mbps),
            borderColor: '#38BDF8', backgroundColor: 'rgba(56,189,248,0.1)',
-           fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2},
+           fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2, yAxisID: 'y'},
           {label: 'Upload (Mbps)', data: reversed.map(s => s.upload_mbps),
            borderColor: '#34D399', backgroundColor: 'rgba(52,211,153,0.1)',
-           fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2},
+           fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2, yAxisID: 'y'},
+          {label: 'Latency (ms)', data: reversed.map(s => s.latency_ms),
+           borderColor: '#F59E0B', backgroundColor: 'transparent',
+           borderDash: [4, 4], fill: false, tension: 0.3, pointRadius: 2, borderWidth: 1.5, yAxisID: 'y1'},
         ]
       },
       options: {
@@ -288,7 +298,9 @@
         plugins: {legend: {labels: {color: '#94A3B8', font: {size: 11, family: "'JetBrains Mono', monospace"}}}},
         scales: {
           x: {ticks: {color: '#475569', font: {size: 9}, maxRotation: 45}, grid: {color: 'rgba(255,255,255,0.04)'}},
-          y: {ticks: {color: '#475569', font: {size: 10}, callback: v => v + ' Mbps'}, grid: {color: 'rgba(255,255,255,0.04)'},
+          y: {type: 'linear', position: 'left', ticks: {color: '#475569', font: {size: 10}, callback: v => v + ' Mbps'}, grid: {color: 'rgba(255,255,255,0.04)'},
+             beginAtZero: true},
+          y1: {type: 'linear', position: 'right', ticks: {color: '#F59E0B', font: {size: 10}, callback: v => v + ' ms'}, grid: {drawOnChartArea: false},
              beginAtZero: true}
         }
       }
