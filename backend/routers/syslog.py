@@ -594,6 +594,118 @@ async def template_browser(
 
 # ── Smart Feed API ────────────────────────────────────────────────────────────
 
+# ── Root Cause Suggestions ────────────────────────────────────────────────
+
+@router.get("/api/root-cause/{template_hash}")
+async def root_cause_suggestions(
+    template_hash: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """For a given log template, find historical occurrences and what happened
+    afterwards on the same host — helps users understand root cause patterns."""
+    from models.log_template import LogTemplate
+    from services.log_intelligence import extract_template
+
+    if not re.match(r"^[a-f0-9]{16}$", template_hash):
+        return {"error": "Invalid template hash"}
+
+    since = datetime.utcnow() - timedelta(days=30)
+
+    # 1. How often did this template occur in last 30 days?
+    total_count = int(await ch_scalar(
+        "SELECT count() FROM syslog_messages "
+        "WHERE template_hash = {th:String} AND timestamp >= {since:DateTime64(3)}",
+        {"th": template_hash, "since": since},
+    ) or 0)
+
+    # 2. Get a sample of recent occurrences with host info (max 200 for analysis)
+    occurrences = await ch_query(
+        """SELECT timestamp, source_ip, hostname, host_id, severity, app_name
+           FROM syslog_messages
+           WHERE template_hash = {th:String} AND timestamp >= {since:DateTime64(3)}
+           ORDER BY timestamp DESC
+           LIMIT 200""",
+        {"th": template_hash, "since": since},
+    )
+
+    if not occurrences:
+        return {"total_count": 0, "aftermath": [], "hosts_affected": 0, "template": ""}
+
+    # 3. Get the template text
+    tpl_row = (await db.execute(
+        select(LogTemplate.template).where(LogTemplate.template_hash == template_hash)
+    )).scalar()
+
+    # 4. For each occurrence, query what happened on the same host in the next 5 minutes
+    #    Group by template_hash to find common aftermath patterns.
+    #    Use a single batch query: for each (source_ip, timestamp), find follow-up messages.
+    aftermath_counts: dict[str, dict] = {}  # template_hash -> {count, template, severity_avg, example}
+    hosts_seen = set()
+
+    # Sample up to 50 occurrences for aftermath analysis (avoid huge queries)
+    sample = occurrences[:50]
+    for occ in sample:
+        hosts_seen.add(occ["source_ip"])
+        ts = occ["timestamp"]
+        ts_end = ts + timedelta(minutes=5) if isinstance(ts, datetime) else datetime.utcnow()
+
+        follow_ups = await ch_query(
+            """SELECT template_hash, message, severity
+               FROM syslog_messages
+               WHERE source_ip = {sip:String}
+                 AND timestamp > {ts:DateTime64(3)}
+                 AND timestamp <= {ts_end:DateTime64(3)}
+                 AND template_hash != {th:String}
+                 AND template_hash != ''
+               ORDER BY timestamp
+               LIMIT 20""",
+            {"sip": occ["source_ip"], "ts": ts, "ts_end": ts_end, "th": template_hash},
+        )
+
+        for fu in follow_ups:
+            fh = fu["template_hash"]
+            if fh not in aftermath_counts:
+                _, tpl_text = extract_template(fu["message"])
+                aftermath_counts[fh] = {
+                    "count": 0,
+                    "example": fu["message"][:200],
+                    "severity_sum": 0,
+                    "template_hash": fh,
+                }
+            aftermath_counts[fh]["count"] += 1
+            aftermath_counts[fh]["severity_sum"] += fu["severity"] if fu["severity"] is not None else 6
+
+    # 5. Rank aftermath by frequency and severity
+    aftermath_list = []
+    for fh, info in aftermath_counts.items():
+        pct = round(info["count"] / len(sample) * 100)
+        avg_sev = info["severity_sum"] / info["count"] if info["count"] else 6
+        aftermath_list.append({
+            "template_hash": fh,
+            "example": info["example"],
+            "frequency": info["count"],
+            "percentage": pct,
+            "avg_severity": round(avg_sev, 1),
+        })
+
+    # Sort by frequency desc, then by severity asc (more severe first)
+    aftermath_list.sort(key=lambda x: (-x["frequency"], x["avg_severity"]))
+
+    # 6. Get first/last seen times
+    first_seen = occurrences[-1]["timestamp"] if occurrences else None
+    last_seen = occurrences[0]["timestamp"] if occurrences else None
+
+    return {
+        "total_count": total_count,
+        "hosts_affected": len(hosts_seen),
+        "template": tpl_row or "",
+        "first_seen": first_seen.isoformat() if first_seen else None,
+        "last_seen": last_seen.isoformat() if last_seen else None,
+        "aftermath": aftermath_list[:10],  # top 10 patterns
+        "sample_size": len(sample),
+    }
+
+
 @router.get("/api/smart-feed")
 async def smart_feed(
     db: AsyncSession = Depends(get_db),

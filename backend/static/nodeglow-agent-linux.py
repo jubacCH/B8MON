@@ -739,7 +739,7 @@ def main():
     last_log_send = 0
     server_log_levels = [1, 2, 3]  # default: Critical, Error, Warning
     server_log_file_paths = []
-    server_upload_agent_log = True
+    server_agent_log_level = "errors"  # "off", "errors", "all"
 
     while True:
         try:
@@ -764,7 +764,7 @@ def main():
                         server_log_file_paths = new_paths
                     except Exception:
                         pass
-                server_upload_agent_log = srv_config.get("upload_agent_log", True)
+                server_agent_log_level = srv_config.get("agent_log_level", "errors")
 
             # Send logs less frequently than metrics
             now = time.time()
@@ -780,9 +780,11 @@ def main():
                             logs.extend(file_logs)
 
                     # Agent self-log
-                    if server_upload_agent_log:
+                    if server_agent_log_level != "off":
                         agent_logs = get_agent_log_entries()
                         if agent_logs:
+                            if server_agent_log_level == "errors":
+                                agent_logs = [l for l in agent_logs if l.get("severity", 6) <= 4]
                             logs.extend(agent_logs)
 
                     if logs:

@@ -403,6 +403,15 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
                 {% endif %}
+                {% if msg.severity is not none and msg.severity <= 4 and msg._template_hash %}
+                <button onclick="event.stopPropagation(); toggleRootCause(this, '{{ msg._template_hash|e }}')"
+                        class="shrink-0 p-0.5 rounded text-slate-600 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                        title="Root cause suggestions">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                  </svg>
+                </button>
+                {% endif %}
               </div>
             </td>
           </tr>
@@ -421,6 +430,12 @@
             </td>
           </tr>
           {% endif %}
+          {# ── Root cause suggestions row (inserted by JS) ────── #}
+          <tr class="hidden rc-row bg-amber-500/[0.03]" data-rc-hash="{{ msg._template_hash }}">
+            <td colspan="6" class="px-4 py-3">
+              <div class="rc-content text-xs text-[--ng-text-muted]">Loading...</div>
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
@@ -632,6 +647,88 @@
 
       if (eventSource) { eventSource.close(); eventSource = null; }
     }
+  }
+
+  // ── Root Cause Suggestions ──────────────────────────────────────────
+  const _rcCache = {};
+  window.toggleRootCause = function(btn, hash) {
+    // Find the rc-row after this row (may be 1-2 siblings down)
+    let tr = btn.closest('tr');
+    let rcRow = null;
+    let sib = tr.nextElementSibling;
+    for (let i = 0; i < 3 && sib; i++, sib = sib.nextElementSibling) {
+      if (sib.classList.contains('rc-row') && sib.dataset.rcHash === hash) {
+        rcRow = sib;
+        break;
+      }
+    }
+    if (!rcRow) return;
+
+    const isHidden = rcRow.classList.contains('hidden');
+    // Close all open rc-rows first
+    document.querySelectorAll('.rc-row:not(.hidden)').forEach(r => r.classList.add('hidden'));
+
+    if (isHidden) {
+      rcRow.classList.remove('hidden');
+      const content = rcRow.querySelector('.rc-content');
+
+      if (_rcCache[hash]) {
+        _renderRootCause(content, _rcCache[hash]);
+        return;
+      }
+
+      content.innerHTML = '<span class="text-[--ng-text-muted] animate-pulse">Analyzing historical patterns...</span>';
+      fetch('/syslog/api/root-cause/' + encodeURIComponent(hash), {credentials: 'same-origin'})
+        .then(r => r.json())
+        .then(data => {
+          _rcCache[hash] = data;
+          _renderRootCause(content, data);
+        })
+        .catch(() => {
+          content.innerHTML = '<span class="text-red-400">Failed to load root cause data</span>';
+        });
+    }
+  };
+
+  function _renderRootCause(el, data) {
+    if (!data || data.total_count === 0) {
+      el.innerHTML = '<span class="text-[--ng-text-muted]">No historical data for this error pattern.</span>';
+      return;
+    }
+
+    const SEV_LABELS = {0:'Emergency',1:'Alert',2:'Critical',3:'Error',4:'Warning',5:'Notice',6:'Info',7:'Debug'};
+    const sevBadge = (s) => {
+      const c = s <= 2 ? 'bg-red-500/20 text-red-400' : s == 3 ? 'bg-orange-500/20 text-orange-400' : s == 4 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-blue-500/15 text-blue-400';
+      return `<span class="px-1 py-0 rounded text-[9px] font-semibold ${c}">${SEV_LABELS[Math.round(s)] || '?'}</span>`;
+    };
+
+    let html = `<div class="space-y-3">`;
+    html += `<div class="flex items-center gap-3 flex-wrap">`;
+    html += `<span class="text-amber-400 font-semibold text-xs flex items-center gap-1">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+      Root Cause Analysis</span>`;
+    html += `<span class="text-[--ng-text-muted] text-[11px]">${data.total_count.toLocaleString()} occurrences across ${data.hosts_affected} host(s) in last 30 days</span>`;
+    html += `</div>`;
+
+    if (data.aftermath && data.aftermath.length > 0) {
+      html += `<div class="text-[11px] text-[--ng-text-secondary] font-medium">What typically follows this error (within 5 min):</div>`;
+      html += `<div class="space-y-1">`;
+      for (const a of data.aftermath) {
+        const barW = Math.max(4, Math.min(100, a.percentage));
+        html += `<div class="flex items-center gap-2 group/rc">`;
+        html += `<div class="w-10 text-right tabular-nums text-[10px] text-[--ng-text-muted] font-mono shrink-0">${a.percentage}%</div>`;
+        html += `<div class="w-16 h-1.5 rounded-full bg-white/5 shrink-0 overflow-hidden"><div class="h-full rounded-full ${a.avg_severity <= 3 ? 'bg-red-500/60' : a.avg_severity <= 4 ? 'bg-yellow-500/50' : 'bg-blue-500/40'}" style="width:${barW}%"></div></div>`;
+        html += `${sevBadge(a.avg_severity)}`;
+        html += `<span class="text-[--ng-text-primary] font-mono text-[11px] truncate">${_esc(a.example)}</span>`;
+        html += `</div>`;
+      }
+      html += `</div>`;
+    } else {
+      html += `<div class="text-[11px] text-[--ng-text-muted]">No consistent aftermath patterns detected — this error appears in isolation.</div>`;
+    }
+
+    html += `</div>`;
+    el.innerHTML = html;
   }
 
   // ── Search keyboard shortcut ─────────────────────────────────────────

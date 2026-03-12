@@ -173,7 +173,7 @@ async def agent_report(request: Request):
         "log_levels": agent.log_levels or "1,2,3",
         "log_channels": agent.log_channels or "System,Application",
         "log_file_paths": agent.log_file_paths or "",
-        "upload_agent_log": True,
+        "agent_log_level": agent.agent_log_level or "errors",
     }}
 
 
@@ -426,12 +426,18 @@ async def agent_save_settings(request: Request, agent_id: int):
     # Log file paths (one per line)
     log_file_paths = form.get("log_file_paths", "").strip()
 
+    # Agent self-log level
+    agent_log_level = form.get("agent_log_level", "errors")
+    if agent_log_level not in ("off", "errors", "all"):
+        agent_log_level = "errors"
+
     async with AsyncSessionLocal() as db:
         await db.execute(
             update(Agent).where(Agent.id == agent_id).values(
                 log_levels=log_levels,
                 log_channels=log_channels,
                 log_file_paths=log_file_paths,
+                agent_log_level=agent_log_level,
             )
         )
         await db.commit()

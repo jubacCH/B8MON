@@ -20,6 +20,7 @@ class Agent(Base):
     log_levels = Column(String(32), nullable=True, default="1,2,3")  # Windows Event Log levels to collect
     log_channels = Column(Text, nullable=True, default="System,Application")  # Event Log channels to collect
     log_file_paths = Column(Text, nullable=True)  # Custom log file paths to tail (one per line)
+    agent_log_level = Column(String(16), nullable=True, default="errors")  # "off", "errors", "all"
     last_seen  = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

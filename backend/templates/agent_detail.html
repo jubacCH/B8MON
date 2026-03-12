@@ -204,6 +204,17 @@
             </div>
         </div>
 
+        <!-- Agent Self-Log -->
+        <div class="border-t border-white/[0.06] pt-4 mb-5">
+            <p class="text-xs text-[--ng-text-primary] font-medium mb-2">Agent Self-Log</p>
+            <p class="text-[10px] text-[--ng-text-muted] mb-3">Forward the agent's own process log (nodeglow-agent.log):</p>
+            <select name="agent_log_level" class="ng-input w-48 text-xs">
+                <option value="off" {% if agent.agent_log_level == 'off' %}selected{% endif %}>Off — don't upload</option>
+                <option value="errors" {% if (agent.agent_log_level or 'errors') == 'errors' %}selected{% endif %}>Errors only (CRITICAL/ERROR/WARNING)</option>
+                <option value="all" {% if agent.agent_log_level == 'all' %}selected{% endif %}>All levels (incl. INFO/DEBUG)</option>
+            </select>
+        </div>
+
         <!-- Custom Log File Paths -->
         <div class="border-t border-white/[0.06] pt-4 mb-4">
             <p class="text-xs text-[--ng-text-primary] font-medium mb-2">Custom Log Files</p>
