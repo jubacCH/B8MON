@@ -5,12 +5,16 @@ import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
 
 interface UnifiPort {
-  port_idx: number;
+  idx: number;
   name?: string;
   up: boolean;
   speed: number;
-  full_duplex?: boolean;
+  speed_label?: string;
+  is_uplink?: boolean;
   poe_enable?: boolean;
+  poe_power?: number;
+  rx_bytes_r?: number;
+  tx_bytes_r?: number;
 }
 
 interface UnifiDevice {
@@ -131,22 +135,37 @@ export function UnifiDetail({ data }: { data: UnifiData }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-slate-500 border-b border-white/[0.06]">
-                  <th className="px-4 py-2 text-left">Port</th>
+                  <th className="px-4 py-2 text-left">#</th>
                   <th className="px-4 py-2 text-left">Name</th>
                   <th className="px-4 py-2 text-center">Status</th>
-                  <th className="px-4 py-2 text-right">Speed</th>
+                  <th className="px-4 py-2 text-left">Speed</th>
+                  <th className="px-4 py-2 text-right">PoE</th>
+                  <th className="px-4 py-2 text-right">RX</th>
+                  <th className="px-4 py-2 text-right">TX</th>
                 </tr>
               </thead>
               <tbody>
                 {d.port_table!.map((p) => (
-                  <tr key={p.port_idx} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
-                    <td className="px-4 py-2 text-slate-300">{p.port_idx}</td>
-                    <td className="px-4 py-2 text-slate-400">{p.name || '—'}</td>
+                  <tr key={p.idx} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
+                    <td className="px-4 py-2 text-slate-300 font-mono">{p.idx}</td>
+                    <td className="px-4 py-2 text-slate-400">
+                      {p.name || '—'}
+                      {p.is_uplink && <Badge className="ml-2">Uplink</Badge>}
+                    </td>
                     <td className="px-4 py-2 text-center">
                       <span className={`inline-block w-2 h-2 rounded-full ${p.up ? 'bg-emerald-400' : 'bg-slate-600'}`} />
                     </td>
+                    <td className="px-4 py-2 text-slate-400">
+                      {p.up ? (p.speed_label || (p.speed ? `${p.speed}M` : '—')) : '—'}
+                    </td>
                     <td className="px-4 py-2 text-right text-slate-400">
-                      {p.up && p.speed ? `${p.speed} Mbps` : '—'}
+                      {p.poe_enable ? (p.poe_power ? `${p.poe_power.toFixed(1)}W` : 'On') : '—'}
+                    </td>
+                    <td className="px-4 py-2 text-right text-slate-400 font-mono text-xs">
+                      {p.up && p.rx_bytes_r ? formatBytes(p.rx_bytes_r) + '/s' : '—'}
+                    </td>
+                    <td className="px-4 py-2 text-right text-slate-400 font-mono text-xs">
+                      {p.up && p.tx_bytes_r ? formatBytes(p.tx_bytes_r) + '/s' : '—'}
                     </td>
                   </tr>
                 ))}

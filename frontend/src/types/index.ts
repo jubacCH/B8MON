@@ -36,6 +36,9 @@ export interface HostStatus {
   enabled: boolean;
   maintenance: boolean;
   source: string;
+  uptime_h24: number | null;
+  uptime_d7: number | null;
+  uptime_d30: number | null;
 }
 
 export interface HostDetail extends PingHost {
@@ -67,11 +70,13 @@ export interface Agent {
   arch: string | null;
   agent_version: string | null;
   enabled: boolean;
+  online: boolean;
   last_seen: string | null;
   created_at: string;
   cpu_pct: number | null;
   mem_pct: number | null;
   disk_pct: number | null;
+  host_id: number | null;
 }
 
 export interface AgentSnapshot {

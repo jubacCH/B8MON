@@ -8,12 +8,6 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useAgents } from '@/hooks/queries/useAgents';
 import Link from 'next/link';
 
-function isOnline(lastSeen: string | null): boolean {
-  if (!lastSeen) return false;
-  const diff = Date.now() - new Date(lastSeen).getTime();
-  return diff < 5 * 60 * 1000; // 5 minutes
-}
-
 function MetricBar({ label, value }: { label: string; value: number | null }) {
   const pct = value ?? 0;
   const color = pct >= 90 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-emerald-400';
@@ -56,12 +50,12 @@ export default function AgentsPage() {
             </GlassCard>
           ))}
         {agents?.map((agent) => {
-          const online = isOnline(agent.last_seen);
+          const detailHref = agent.host_id ? `/hosts/${agent.host_id}` : `/agents/${agent.id}`;
           return (
-            <Link key={agent.id} href={`/agents/${agent.id}`}>
+            <Link key={agent.id} href={detailHref}>
               <GlassCard className="p-4 hover:bg-white/[0.06] transition-colors cursor-pointer">
                 <div className="flex items-center gap-3 mb-4">
-                  <StatusDot status={online ? 'online' : 'offline'} pulse={!online} />
+                  <StatusDot status={agent.online ? 'online' : 'offline'} pulse={!agent.online} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-200 truncate">{agent.name}</p>
                     <p className="text-xs text-slate-500 font-mono truncate">{agent.hostname ?? '--'}</p>

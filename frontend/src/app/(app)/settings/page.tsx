@@ -62,6 +62,22 @@ interface NotifLog {
 
 /* ---------- Constants ---------- */
 
+const TIMEZONES = [
+  'UTC',
+  'Europe/Zurich', 'Europe/Berlin', 'Europe/Vienna', 'Europe/London',
+  'Europe/Paris', 'Europe/Rome', 'Europe/Madrid', 'Europe/Amsterdam',
+  'Europe/Brussels', 'Europe/Stockholm', 'Europe/Oslo', 'Europe/Helsinki',
+  'Europe/Warsaw', 'Europe/Prague', 'Europe/Budapest', 'Europe/Bucharest',
+  'Europe/Athens', 'Europe/Istanbul', 'Europe/Moscow',
+  'US/Eastern', 'US/Central', 'US/Mountain', 'US/Pacific', 'US/Alaska', 'US/Hawaii',
+  'Canada/Eastern', 'Canada/Central', 'Canada/Pacific',
+  'America/Sao_Paulo', 'America/Buenos_Aires', 'America/Mexico_City',
+  'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Singapore',
+  'Asia/Seoul', 'Asia/Kolkata', 'Asia/Dubai', 'Asia/Bangkok',
+  'Australia/Sydney', 'Australia/Melbourne', 'Australia/Perth',
+  'Pacific/Auckland', 'Africa/Cairo', 'Africa/Johannesburg',
+];
+
 const ACCENT_COLORS = [
   { name: 'Sky', value: '#0ea5e9' },
   { name: 'Violet', value: '#8b5cf6' },
@@ -396,13 +412,19 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label className="block text-xs text-slate-500 mb-1">Timezone</label>
-                  <input
-                    type="text"
+                  <select
                     value={timezone}
                     onChange={(e) => setTimezone(e.target.value)}
-                    className={inputCls}
-                    placeholder="Europe/Zurich"
-                  />
+                    className="w-full max-w-sm px-3 py-1.5 rounded-md bg-[#111621] border border-white/[0.06] text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 transition-colors [&>option]:bg-[#111621] [&>option]:text-slate-200"
+                  >
+                    {TIMEZONES.map((tz) => (
+                      <option key={tz} value={tz}>{tz}</option>
+                    ))}
+                    {/* Show current value even if not in list */}
+                    {timezone && !TIMEZONES.includes(timezone) && (
+                      <option value={timezone}>{timezone}</option>
+                    )}
+                  </select>
                 </div>
               </div>
             )}

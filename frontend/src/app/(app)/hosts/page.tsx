@@ -4,21 +4,40 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { StatusDot } from '@/components/ui/StatusDot';
+import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useHosts } from '@/hooks/queries/useHosts';
-import { formatLatency } from '@/lib/utils';
-import { Plus, Search } from 'lucide-react';
+import { formatLatency, uptimeColor } from '@/lib/utils';
+import { post } from '@/lib/api';
+import { Plus, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { Suspense, useEffect, useRef, useState } from 'react';
+
+const inputClass = 'w-full px-3 py-2 text-sm bg-white/[0.06] border border-white/[0.08] rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50';
+const selectClass = 'w-full px-3 py-2 text-sm bg-[#111621] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-sky-500/50 [&>option]:bg-[#111621] [&>option]:text-slate-200';
+
+function UptimeCell({ value }: { value: number | null }) {
+  if (value === null) return <span className="text-xs text-slate-600">—</span>;
+  return (
+    <span className={`text-xs font-mono ${uptimeColor(value)}`}>
+      {value.toFixed(1)}%
+    </span>
+  );
+}
 
 function HostsPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const qc = useQueryClient();
   const qParam = searchParams.get('q') ?? '';
   const [search, setSearch] = useState(qParam);
   const { data: hosts, isLoading } = useHosts();
   const redirected = useRef(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: '', hostname: '', check_type: 'icmp', port: '' });
 
   const filteredHosts = hosts?.filter((host) => {
     if (!search) return true;
@@ -37,6 +56,23 @@ function HostsPageInner() {
     }
   }, [qParam, isLoading, filteredHosts, router]);
 
+  async function handleAdd() {
+    setSaving(true);
+    try {
+      await post('/hosts/api/create', {
+        name: form.name,
+        hostname: form.hostname,
+        check_type: form.check_type,
+        port: form.port || undefined,
+      });
+      qc.invalidateQueries({ queryKey: ['hosts'] });
+      setShowAdd(false);
+      setForm({ name: '', hostname: '', check_type: 'icmp', port: '' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -54,13 +90,77 @@ function HostsPageInner() {
                 className="pl-8 pr-3 py-1.5 text-sm bg-white/[0.06] border border-white/[0.08] rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50"
               />
             </div>
-            <Button size="sm">
+            <Button size="sm" onClick={() => setShowAdd(true)}>
               <Plus size={16} />
               Add Host
             </Button>
           </div>
         }
       />
+
+      {/* Add Host form */}
+      {showAdd && (
+        <GlassCard className="p-6 mb-6 border border-sky-500/20">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-slate-200">Add New Host</h3>
+            <button onClick={() => setShowAdd(false)} className="text-slate-400 hover:text-slate-200">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Name <span className="text-red-400">*</span></label>
+              <input
+                type="text"
+                placeholder="My Server"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Hostname / IP <span className="text-red-400">*</span></label>
+              <input
+                type="text"
+                placeholder="192.168.1.1 or example.com"
+                value={form.hostname}
+                onChange={(e) => setForm({ ...form, hostname: e.target.value })}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Check Type</label>
+              <select
+                value={form.check_type}
+                onChange={(e) => setForm({ ...form, check_type: e.target.value })}
+                className={selectClass}
+              >
+                <option value="icmp">ICMP (Ping)</option>
+                <option value="http">HTTP</option>
+                <option value="https">HTTPS</option>
+                <option value="tcp">TCP</option>
+                <option value="dns">DNS</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Port (optional)</label>
+              <input
+                type="text"
+                placeholder="443"
+                value={form.port}
+                onChange={(e) => setForm({ ...form, port: e.target.value })}
+                className={inputClass}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="ghost" size="sm" onClick={() => setShowAdd(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleAdd} disabled={saving || !form.name || !form.hostname}>
+              {saving ? 'Adding...' : 'Add Host'}
+            </Button>
+          </div>
+        </GlassCard>
+      )}
 
       <GlassCard>
         <div className="overflow-x-auto">
@@ -69,10 +169,11 @@ function HostsPageInner() {
               <tr className="border-b border-white/[0.06]">
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Host</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Type</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Latency</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">24h</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">7d</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">30d</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">24h</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">7d</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">30d</th>
               </tr>
             </thead>
             <tbody>
@@ -81,6 +182,7 @@ function HostsPageInner() {
                   <tr key={i} className="border-b border-white/[0.03]">
                     <td className="px-4 py-3"><Skeleton className="h-5 w-40" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
@@ -111,23 +213,26 @@ function HostsPageInner() {
                       />
                       <span className="text-xs text-slate-400">
                         {!host.enabled ? 'Disabled' :
-                         host.maintenance ? 'Maintenance' :
-                         host.online === null ? 'No data' :
+                         host.maintenance ? 'Maint.' :
+                         host.online === null ? '—' :
                          host.online ? 'Online' : 'Offline'}
                       </span>
                     </div>
                   </td>
+                  <td className="px-4 py-3">
+                    <Badge>{host.check_type}</Badge>
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-300">
                     {formatLatency(host.latency_ms)}
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs">—</span>
+                  <td className="px-4 py-3 text-right">
+                    <UptimeCell value={host.uptime_h24} />
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs">—</span>
+                  <td className="px-4 py-3 text-right">
+                    <UptimeCell value={host.uptime_d7} />
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs">—</span>
+                  <td className="px-4 py-3 text-right">
+                    <UptimeCell value={host.uptime_d30} />
                   </td>
                 </tr>
               ))}

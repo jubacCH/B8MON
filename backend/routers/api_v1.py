@@ -377,9 +377,24 @@ async def list_agents(
     )
     snaps_by_agent = {s.agent_id: s for s in snap_q.scalars().all()}
 
+    # Lookup PingHost ids for agent-sourced hosts (to link agent → host detail)
+    host_by_name: dict[str, int] = {}
+    if agents:
+        ph_rows = (await db.execute(
+            select(PingHost.id, PingHost.hostname, PingHost.name)
+            .where(PingHost.source == "agent")
+        )).all()
+        for ph in ph_rows:
+            host_by_name[ph.hostname.lower()] = ph.id
+            host_by_name[ph.name.lower()] = ph.id
+
     out = []
     for a in agents:
         s = snaps_by_agent.get(a.id)
+        # Find linked host by agent hostname
+        host_id = None
+        if a.hostname:
+            host_id = host_by_name.get(a.hostname.lower())
         out.append({
             "id": a.id,
             "name": a.name,
@@ -393,6 +408,7 @@ async def list_agents(
             "cpu_pct": s.cpu_pct if s else None,
             "mem_pct": s.mem_pct if s else None,
             "disk_pct": s.disk_pct if s else None,
+            "host_id": host_id,
         })
     return out
 

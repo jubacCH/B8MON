@@ -77,6 +77,7 @@ async def build_weekly_digest(db: AsyncSession) -> dict:
         ok, total = uptime_by_host.get(host.id, (0, 0))
         uptime_pct = round(ok / total * 100, 2) if total > 0 else 100.0
         host_uptimes.append({
+            "id": host.id,
             "name": host.name,
             "hostname": host.hostname,
             "uptime_pct": uptime_pct,

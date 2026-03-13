@@ -114,9 +114,63 @@ async def api_status(db: AsyncSession = Depends(get_db)):
         )).scalars().all()
         latest_by_host = {r.host_id: r for r in latest_rows}
 
+    # Batch: uptime stats (total/success counts per host for 24h, 7d, 30d)
+    uptime_by_host: dict[int, dict] = {}
+    if host_ids:
+        now = datetime.utcnow()
+        cutoff_30d = now - timedelta(days=30)
+        rows = (await db.execute(
+            select(
+                PingResult.host_id,
+                func.count().label("total"),
+                func.sum(func.cast(PingResult.success, Integer)).label("ok"),
+                func.min(PingResult.timestamp).label("oldest"),
+            )
+            .where(PingResult.host_id.in_(host_ids), PingResult.timestamp >= cutoff_30d)
+            .group_by(PingResult.host_id)
+        )).all()
+
+        # Also get 24h and 7d counts
+        cutoff_7d = now - timedelta(days=7)
+        cutoff_24h = now - timedelta(hours=24)
+        rows_7d = (await db.execute(
+            select(
+                PingResult.host_id,
+                func.count().label("total"),
+                func.sum(func.cast(PingResult.success, Integer)).label("ok"),
+            )
+            .where(PingResult.host_id.in_(host_ids), PingResult.timestamp >= cutoff_7d)
+            .group_by(PingResult.host_id)
+        )).all()
+        rows_24h = (await db.execute(
+            select(
+                PingResult.host_id,
+                func.count().label("total"),
+                func.sum(func.cast(PingResult.success, Integer)).label("ok"),
+            )
+            .where(PingResult.host_id.in_(host_ids), PingResult.timestamp >= cutoff_24h)
+            .group_by(PingResult.host_id)
+        )).all()
+
+        map_7d = {r.host_id: r for r in rows_7d}
+        map_24h = {r.host_id: r for r in rows_24h}
+        map_30d = {r.host_id: r for r in rows}
+
+        for hid in host_ids:
+            def _pct(row):
+                if not row or not row.total:
+                    return None
+                return round((row.ok or 0) / row.total * 100, 1)
+            uptime_by_host[hid] = {
+                "h24": _pct(map_24h.get(hid)),
+                "d7": _pct(map_7d.get(hid)),
+                "d30": _pct(map_30d.get(hid)),
+            }
+
     out = []
     for host in hosts:
         lr = latest_by_host.get(host.id)
+        up = uptime_by_host.get(host.id, {})
         out.append({
             "id": host.id,
             "name": host.name,
@@ -127,6 +181,9 @@ async def api_status(db: AsyncSession = Depends(get_db)):
             "source": host.source or "manual",
             "online": lr.success if lr else None,
             "latency_ms": lr.latency_ms if lr else None,
+            "uptime_h24": up.get("h24"),
+            "uptime_d7": up.get("d7"),
+            "uptime_d30": up.get("d30"),
         })
     return out
 
@@ -674,6 +731,28 @@ async def add_ping_host(
     ))
     await db.commit()
     return RedirectResponse(url="/hosts", status_code=303)
+
+
+@router.post("/api/create")
+async def api_create_host(request: Request, db: AsyncSession = Depends(get_db)):
+    """JSON endpoint for creating a host from the SPA frontend."""
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    hostname = (body.get("hostname") or "").strip()
+    check_type = (body.get("check_type") or "icmp").strip()
+    port_str = str(body.get("port") or "").strip()
+    if not name or not hostname:
+        return JSONResponse({"error": "name and hostname required"}, status_code=400)
+    host = PingHost(
+        name=name,
+        hostname=hostname,
+        check_type=check_type,
+        port=int(port_str) if port_str else None,
+    )
+    db.add(host)
+    await db.commit()
+    await db.refresh(host)
+    return {"ok": True, "id": host.id}
 
 
 @router.post("/{host_id}/edit")

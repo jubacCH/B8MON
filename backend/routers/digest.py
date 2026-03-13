@@ -36,7 +36,12 @@ async def digest_api(request: Request, db: AsyncSession = Depends(get_db)):
     worst_hosts = []
     for h in data["hosts"].get("worst", []):
         if isinstance(h, dict):
-            worst_hosts.append(h)
+            worst_hosts.append({
+                "id": h.get("id", 0),
+                "name": h.get("name", ""),
+                "uptime": h.get("uptime_pct", 0),
+                "failures": h.get("failures", 0),
+            })
         else:
             worst_hosts.append({
                 "id": getattr(h, "id", 0),
