@@ -8,7 +8,8 @@ import bcrypt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import Session, User, get_db
+from fastapi.responses import JSONResponse as _JSONResponse
+from database import Session, User, get_db, get_current_user
 from ratelimit import rate_limit
 
 router = APIRouter()
@@ -49,6 +50,14 @@ async def login(
     is_https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
     response.set_cookie("nodeglow_session", token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", secure=is_https)
     return response
+
+
+@router.get("/api/auth/me")
+async def get_current_user_api(request: Request, db: AsyncSession = Depends(get_db)):
+    user = await get_current_user(request, db)
+    if not user:
+        return _JSONResponse({"user": None}, status_code=401)
+    return {"user": {"id": user.id, "username": user.username, "role": user.role}}
 
 
 @router.get("/logout")

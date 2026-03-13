@@ -60,6 +60,17 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# ── CORS (development: Next.js on localhost:3000) ─────────────────────────────
+from starlette.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.get("/health")
 async def health():
@@ -113,6 +124,7 @@ async def _get_nav_counts(db) -> dict:
 async def inject_globals(request: Request, call_next):
     if request.url.path.startswith("/static/") or request.url.path == "/health" \
             or request.url.path.startswith("/api/agent/") or request.url.path.startswith("/api/v1/") \
+            or request.url.path.startswith("/api/auth/") \
             or request.url.path.startswith("/api/docs") or request.url.path.startswith("/api/redoc") \
             or request.url.path.startswith("/api/openapi") \
             or request.url.path.startswith("/ws/") \
