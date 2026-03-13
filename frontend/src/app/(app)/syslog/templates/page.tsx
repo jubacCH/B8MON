@@ -168,17 +168,19 @@ export default function SyslogTemplatesPage() {
     <div>
       {/* Header */}
       <PageHeader
-        title="Log Templates"
-        description="Extracted log message patterns and their statistics"
-        actions={
-          <Link href="/syslog">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Syslog
-            </Button>
-          </Link>
-        }
+        title="Syslog"
+        description="Log Intelligence - extracted message patterns and statistics"
       />
+
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 mb-4">
+        <Link href="/syslog" className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.03] transition-colors">
+          <FileText size={15} /> Messages
+        </Link>
+        <span className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-white/[0.06] text-slate-100">
+          <TrendingUp size={15} /> Intelligence
+        </span>
+      </div>
 
       {/* Stats summary */}
       <div className="grid grid-cols-2 gap-4 mb-6">

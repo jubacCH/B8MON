@@ -24,23 +24,46 @@ async def digest_page(request: Request, db: AsyncSession = Depends(get_db)):
 async def digest_api(request: Request, db: AsyncSession = Depends(get_db)):
     data = await build_weekly_digest(db)
     # Serialize for JSON (convert datetimes, ORM objects)
+    # Serialize top incidents
+    top_incidents = []
+    for inc in data["incidents"].get("top", []):
+        top_incidents.append({
+            "id": inc.id,
+            "title": inc.title,
+            "severity": inc.severity,
+        })
+    # Serialize worst hosts
+    worst_hosts = []
+    for h in data["hosts"].get("worst", []):
+        if isinstance(h, dict):
+            worst_hosts.append(h)
+        else:
+            worst_hosts.append({
+                "id": getattr(h, "id", 0),
+                "name": getattr(h, "name", ""),
+                "uptime": getattr(h, "uptime_pct", 0),
+                "failures": getattr(h, "failures", 0),
+            })
     result = {
         "period_start": data["period_start"].isoformat(),
         "period_end": data["period_end"].isoformat(),
         "incidents": {
             "total": data["incidents"]["total"],
             "by_severity": data["incidents"]["by_severity"],
-            "by_status": data["incidents"]["by_status"],
-            "mttr_min": data["incidents"]["mttr_min"],
+            "mttr_minutes": data["incidents"]["mttr_min"],
+            "top": top_incidents,
         },
         "hosts": {
-            "total": data["hosts"]["total"],
             "avg_uptime": data["hosts"]["avg_uptime"],
-            "worst": data["hosts"]["worst"],
+            "worst": worst_hosts,
         },
-        "syslog": data["syslog"],
-        "integrations": data["integrations"],
-        "storage_predictions": data["storage_predictions"],
-        "ssl_expiring": data["ssl_expiring"],
+        "syslog": {
+            "total": data["syslog"].get("total", 0),
+            "errors": data["syslog"].get("errors", 0),
+            "top_errors": [
+                {"template": t["template"], "count": t["count"]}
+                for t in data["syslog"].get("top_templates", [])
+            ],
+        },
     }
     return JSONResponse(result)

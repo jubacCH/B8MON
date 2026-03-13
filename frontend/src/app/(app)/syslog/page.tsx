@@ -6,6 +6,8 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useSyslog } from '@/hooks/queries/useSyslog';
 import { useState } from 'react';
+import Link from 'next/link';
+import { MessageSquare, Brain } from 'lucide-react';
 
 const SEVERITY_LABELS: Record<number, string> = {
   0: 'Emergency',
@@ -50,6 +52,19 @@ export default function SyslogPage() {
           title="Syslog"
           description="Live syslog messages from all sources"
         />
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 mb-4">
+        <span className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-white/[0.06] text-slate-100">
+          <MessageSquare size={15} /> Messages
+        </span>
+        <Link href="/syslog/templates" className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.03] transition-colors">
+          <Brain size={15} /> Intelligence
+        </Link>
+      </div>
+
+      <div className="flex items-center justify-end mb-2">
         <button
           onClick={() => setLiveEnabled((v) => !v)}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${

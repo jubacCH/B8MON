@@ -32,6 +32,75 @@ async def list_users_api(request: Request, db: AsyncSession = Depends(get_db)):
     ])
 
 
+@api_router.post("/api/users")
+async def create_user_api(request: Request, db: AsyncSession = Depends(get_db)):
+    """Create a new user (admin only, JSON API)."""
+    current = getattr(request.state, "current_user", None)
+    if not current or getattr(current, "role", None) != "admin":
+        return JSONResponse({"error": "Admin access required"}, status_code=403)
+    body = await request.json()
+    username = (body.get("username") or "").strip()
+    password = body.get("password", "")
+    role = body.get("role", "readonly")
+    if not username or not password:
+        return JSONResponse({"error": "Username and password required"}, status_code=400)
+    if role not in VALID_ROLES:
+        role = "readonly"
+    existing = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+    if existing:
+        return JSONResponse({"error": "Username already exists"}, status_code=409)
+    pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    user = User(username=username, password_hash=pw_hash, role=role)
+    db.add(user)
+    await db.commit()
+    return JSONResponse({"ok": True, "id": user.id, "username": user.username, "role": user.role})
+
+
+@api_router.delete("/api/users/{user_id}")
+async def delete_user_api(user_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    """Delete a user (admin only, JSON API)."""
+    current = getattr(request.state, "current_user", None)
+    if not current or getattr(current, "role", None) != "admin":
+        return JSONResponse({"error": "Admin access required"}, status_code=403)
+    if current.id == user_id:
+        return JSONResponse({"error": "Cannot delete yourself"}, status_code=400)
+    user = await db.get(User, user_id)
+    if not user:
+        return JSONResponse({"error": "User not found"}, status_code=404)
+    if user.role == "admin":
+        admins = (await db.execute(select(User).where(User.role == "admin"))).scalars().all()
+        if len(admins) <= 1:
+            return JSONResponse({"error": "Cannot delete the last admin"}, status_code=400)
+    await db.delete(user)
+    await db.commit()
+    return JSONResponse({"ok": True})
+
+
+@api_router.patch("/api/users/{user_id}")
+async def update_user_api(user_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    """Update user role or password (admin only, JSON API)."""
+    current = getattr(request.state, "current_user", None)
+    if not current or getattr(current, "role", None) != "admin":
+        return JSONResponse({"error": "Admin access required"}, status_code=403)
+    user = await db.get(User, user_id)
+    if not user:
+        return JSONResponse({"error": "User not found"}, status_code=404)
+    body = await request.json()
+    if "role" in body:
+        new_role = body["role"]
+        if new_role not in VALID_ROLES:
+            return JSONResponse({"error": "Invalid role"}, status_code=400)
+        if user.role == "admin" and new_role != "admin":
+            admins = (await db.execute(select(User).where(User.role == "admin"))).scalars().all()
+            if len(admins) <= 1:
+                return JSONResponse({"error": "Cannot demote the last admin"}, status_code=400)
+        user.role = new_role
+    if "password" in body and body["password"]:
+        user.password_hash = bcrypt.hashpw(body["password"].encode(), bcrypt.gensalt()).decode()
+    await db.commit()
+    return JSONResponse({"ok": True})
+
+
 @router.post("/me/password")
 async def change_own_password(
     request: Request,
