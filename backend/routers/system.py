@@ -463,6 +463,35 @@ async def system_status(request: Request, db: AsyncSession = Depends(get_db)):
     sysinfo = await sysinfo_fut
     log_lines = await logs_fut
 
+    payload = {
+        "application": sysinfo["app_info"],
+        "system": sysinfo["system_info"],
+        "process": sysinfo["process_info"],
+        "database": db_stats,
+        "top_tables": top_tables,
+        "pool": pool_info,
+        "scheduler_jobs": scheduler_jobs,
+        "integrations": integration_summary,
+        "operational": {
+            "ping_stats": ping_stats,
+            "syslog_status": syslog_status,
+            "ssl_expiring": ssl_certs,
+            "notification_channels": notification_info,
+            "data_retention": retention_info,
+            "incidents": incident_stats,
+            "alert_rules": alert_rule_stats,
+            "maintenance": maintenance_stats,
+            "log_intelligence": log_intelligence,
+        },
+        "logs": log_lines,
+    }
+
+    # JSON requested (Next.js frontend via /api/system/status)
+    accept = request.headers.get("accept", "")
+    if "application/json" in accept:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(payload)
+
     return templates.TemplateResponse("system_status.html", {
         "request": request,
         "app_info": sysinfo["app_info"],

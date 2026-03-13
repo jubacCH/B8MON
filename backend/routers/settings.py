@@ -92,6 +92,35 @@ async def settings_page(request: Request, db: AsyncSession = Depends(get_db)):
     })
 
 
+@router.get("/json")
+async def settings_json(db: AsyncSession = Depends(get_db)):
+    """Return current settings as JSON for the SPA frontend."""
+    keys = [
+        "site_name", "timezone", "ping_interval", "latency_threshold_ms",
+        "proxmox_interval", "notify_enabled",
+        "telegram_bot_token", "telegram_chat_id",
+        "discord_webhook_url", "webhook_url", "webhook_secret",
+        "smtp_host", "smtp_port", "smtp_user", "smtp_from", "smtp_to",
+    ]
+    result = {}
+    for key in keys:
+        result[key] = await get_setting(db, key, "")
+    # Booleans that need defaults
+    if not result["site_name"]:
+        result["site_name"] = "NODEGLOW"
+    if not result["ping_interval"]:
+        result["ping_interval"] = "60"
+    if not result["proxmox_interval"]:
+        result["proxmox_interval"] = "60"
+    if not result["timezone"]:
+        result["timezone"] = "UTC"
+    if not result["smtp_port"]:
+        result["smtp_port"] = "587"
+    # Don't expose passwords, just indicate if set
+    result["smtp_has_pw"] = bool(await get_setting(db, "smtp_password", ""))
+    return JSONResponse(result)
+
+
 @router.post("/save")
 async def save_settings(
     site_name:          str = Form("NODEGLOW"),
@@ -312,7 +341,15 @@ async def save_notifications(
 
 
 @router.post("/notifications/test")
-async def test_notification(channel: str = Form(""), db: AsyncSession = Depends(get_db)):
+async def test_notification(request: Request, db: AsyncSession = Depends(get_db)):
+    # Accept both JSON and form data
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        body = await request.json()
+        channel = body.get("channel", "")
+    else:
+        form = await request.form()
+        channel = form.get("channel", "")
     from notifications import (
         _send_telegram, _send_discord, _send_webhook, _send_email,
         _build_html_email, _log_notification,
