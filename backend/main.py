@@ -134,7 +134,7 @@ async def inject_globals(request: Request, call_next):
     # Skip auth entirely for these paths
     _skip = (
         request.url.path.startswith("/static/") or request.url.path == "/health"
-        or request.url.path.startswith("/api/agent/") or request.url.path.startswith("/api/v1/")
+        or request.url.path.startswith("/api/agent/")
         or request.url.path.startswith("/api/v2/") or request.url.path.startswith("/api/auth/")
         or request.url.path.startswith("/api/docs") or request.url.path.startswith("/api/redoc")
         or request.url.path.startswith("/api/openapi")
@@ -174,9 +174,9 @@ async def inject_globals(request: Request, call_next):
         async with _ASL() as auth_db:
             user = await get_current_user(request, auth_db)
         if user is None:
-            if is_api:
+            # /api/v1/ has its own auth (API key) — let it through
+            if is_api and not request.url.path.startswith("/api/v1/"):
                 return _JSON({"error": "Unauthorized"}, status_code=401)
-            # Non-API requests pass through (Next.js serves the pages, handles auth client-side)
             request.state.current_user = None
             response = await call_next(request)
             return response

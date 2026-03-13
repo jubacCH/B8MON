@@ -37,20 +37,29 @@ def _hash_key(key: str) -> str:
 
 
 async def require_api_key(request: Request, db: AsyncSession = Depends(get_db)) -> ApiKey:
-    """Validate API key from header or query param."""
+    """Validate API key from header/query param, or fall back to session auth."""
     key = request.headers.get("X-API-Key") or request.query_params.get("api_key")
-    if not key:
-        raise HTTPException(status_code=401, detail="API key required. Pass via X-API-Key header.")
-    hashed = _hash_key(key)
-    result = await db.execute(
-        select(ApiKey).where(ApiKey.key_hash == hashed, ApiKey.enabled == True)
-    )
-    api_key = result.scalar_one_or_none()
-    if not api_key:
-        raise HTTPException(status_code=401, detail="Invalid or disabled API key.")
-    api_key.last_used = datetime.utcnow()
-    await db.commit()
-    return api_key
+    if key:
+        hashed = _hash_key(key)
+        result = await db.execute(
+            select(ApiKey).where(ApiKey.key_hash == hashed, ApiKey.enabled == True)
+        )
+        api_key = result.scalar_one_or_none()
+        if not api_key:
+            raise HTTPException(status_code=401, detail="Invalid or disabled API key.")
+        api_key.last_used = datetime.utcnow()
+        await db.commit()
+        return api_key
+
+    # Fall back to session auth (set by middleware)
+    user = getattr(request.state, "current_user", None)
+    if user:
+        # Create a virtual ApiKey-like object from the session user
+        role = getattr(user, "role", "admin") or "admin"
+        return ApiKey(id=0, name=f"session:{user.username}", key_hash="", prefix="session",
+                      role=role, enabled=True)
+
+    raise HTTPException(status_code=401, detail="API key or session required.")
 
 
 async def require_editor(api_key: ApiKey = Depends(require_api_key)) -> ApiKey:
