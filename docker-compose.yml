@@ -58,6 +58,17 @@ services:
       - NET_RAW   # Required for ICMP ping
     restart: unless-stopped
 
+  frontend:
+    build: ./frontend
+    container_name: nodeglow-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      HOSTNAME: "0.0.0.0"
+    depends_on:
+      - nodeglow
+    restart: unless-stopped
+
 volumes:
   pgdata:
   chdata:
