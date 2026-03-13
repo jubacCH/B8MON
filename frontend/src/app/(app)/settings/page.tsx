@@ -860,7 +860,7 @@ export default function SettingsPage() {
                         </code>
                       </td>
                       <td className="py-2.5">
-                        <Badge variant="severity" severity={k.role === 'admin' ? 'critical' : k.role === 'editor' ? 'warning' : 'ok'}>
+                        <Badge variant="severity" severity={k.role === 'admin' ? 'critical' : k.role === 'editor' ? 'warning' : 'info'}>
                           {k.role}
                         </Badge>
                       </td>
