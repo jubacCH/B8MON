@@ -387,10 +387,9 @@ async def get_agent(
 
     snap_q = await db.execute(
         select(AgentSnapshot).where(AgentSnapshot.agent_id == agent_id)
-        .order_by(AgentSnapshot.timestamp.desc()).limit(1)
+        .order_by(AgentSnapshot.timestamp.desc()).limit(60)
     )
-    snap = snap_q.scalar_one_or_none()
-    metrics = json.loads(snap.data_json) if snap and snap.data_json else None
+    snaps = snap_q.scalars().all()
 
     now = datetime.utcnow()
     return {
@@ -403,7 +402,20 @@ async def get_agent(
         "online": agent.last_seen is not None and (now - agent.last_seen).total_seconds() < 120,
         "last_seen": agent.last_seen.isoformat() if agent.last_seen else None,
         "enabled": agent.enabled,
-        "metrics": metrics,
+        "snapshots": [
+            {
+                "agent_id": s.agent_id,
+                "timestamp": s.timestamp.isoformat() if s.timestamp else None,
+                "cpu_pct": s.cpu_pct,
+                "mem_pct": s.mem_pct,
+                "mem_used_mb": s.mem_used_mb,
+                "mem_total_mb": s.mem_total_mb,
+                "disk_pct": s.disk_pct,
+                "uptime_s": s.uptime_s,
+                "data_json": json.loads(s.data_json) if s.data_json else None,
+            }
+            for s in snaps
+        ],
     }
 
 
@@ -437,6 +449,7 @@ async def list_integrations(
             "type": cfg.type,
             "name": cfg.name,
             "enabled": cfg.enabled,
+            "created_at": cfg.created_at.isoformat() if hasattr(cfg, "created_at") and cfg.created_at else None,
             "status": "ok" if snap and snap.ok else ("error" if snap else "no_data"),
             "last_check": snap.timestamp.isoformat() if snap else None,
             "error": snap.error if snap and not snap.ok else None,
@@ -458,13 +471,14 @@ async def get_integration(
 
     return {
         "id": cfg.id,
-        "type": cfg.type,
+        "entity_type": cfg.type,
+        "entity_id": cfg.id,
         "name": cfg.name,
         "enabled": cfg.enabled,
-        "status": "ok" if snap and snap.ok else ("error" if snap else "no_data"),
-        "last_check": snap.timestamp.isoformat() if snap else None,
+        "ok": snap.ok if snap else False,
+        "timestamp": snap.timestamp.isoformat() if snap else None,
         "error": snap.error if snap and not snap.ok else None,
-        "data": data,
+        "data_json": data,
     }
 
 
