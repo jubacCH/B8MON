@@ -233,6 +233,70 @@ async def get_host(
 
     um = (await ping_svc.get_uptime_map(db)).get(host_id, {})
 
+    # Agent metrics (if host is agent-sourced)
+    agent_metrics = None
+    if host.source == "agent" and host.hostname:
+        hn = host.hostname.lower()
+        agent_q = await db.execute(
+            select(Agent).where(
+                func.lower(Agent.hostname) == hn
+            ).limit(1)
+        )
+        agent = agent_q.scalar_one_or_none()
+        if agent:
+            snap_q = await db.execute(
+                select(AgentSnapshot)
+                .where(AgentSnapshot.agent_id == agent.id)
+                .order_by(AgentSnapshot.id.desc())
+                .limit(1)
+            )
+            snap = snap_q.scalar_one_or_none()
+            agent_metrics = {
+                "agent_id": agent.id,
+                "agent_name": agent.name,
+                "platform": agent.platform,
+                "arch": agent.arch,
+                "agent_version": agent.agent_version,
+                "last_seen": agent.last_seen.isoformat() if agent.last_seen else None,
+                "cpu_pct": snap.cpu_pct if snap else None,
+                "mem_pct": snap.mem_pct if snap else None,
+                "mem_used_mb": snap.mem_used_mb if snap else None,
+                "mem_total_mb": snap.mem_total_mb if snap else None,
+                "disk_pct": snap.disk_pct if snap else None,
+                "uptime_s": snap.uptime_s if snap else None,
+                "snapshot_time": snap.timestamp.isoformat() if snap else None,
+            }
+
+    # Integration snapshots (for non-agent hosts with integration data)
+    integration_data = None
+    if host.source and host.source not in ("manual", "agent"):
+        int_type = host.source
+        # Find config by type + match hostname in latest snapshot
+        configs_q = await db.execute(
+            select(IntegrationConfig).where(
+                IntegrationConfig.type == int_type,
+                IntegrationConfig.enabled == True,
+            )
+        )
+        for cfg in configs_q.scalars().all():
+            snap_q = await db.execute(
+                select(Snapshot)
+                .where(Snapshot.entity_type == int_type, Snapshot.entity_id == cfg.id)
+                .order_by(Snapshot.timestamp.desc())
+                .limit(1)
+            )
+            snap = snap_q.scalar_one_or_none()
+            if snap and snap.data_json:
+                integration_data = {
+                    "type": int_type,
+                    "config_id": cfg.id,
+                    "config_name": cfg.name,
+                    "ok": snap.ok,
+                    "timestamp": snap.timestamp.isoformat(),
+                    "data": snap.data_json,
+                }
+                break
+
     return {
         "id": host.id,
         "name": host.name,
@@ -254,6 +318,8 @@ async def get_host(
             "timestamp": lr.timestamp.isoformat() if lr else None,
         },
         "uptime": {"h24": um.get("h24"), "d7": um.get("d7"), "d30": um.get("d30")},
+        "agent": agent_metrics,
+        "integration": integration_data,
     }
 
 

@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useHost, useHostHistory } from '@/hooks/queries/useHosts';
 import { formatLatency, uptimeColor } from '@/lib/utils';
 import { EChart } from '@/components/charts/EChart';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Cpu, MemoryStick, HardDrive, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -26,6 +26,22 @@ interface SyslogEntry {
   message: string;
 }
 
+interface AgentMetrics {
+  agent_id: number;
+  agent_name: string;
+  platform: string | null;
+  arch: string | null;
+  agent_version: string | null;
+  last_seen: string | null;
+  cpu_pct: number | null;
+  mem_pct: number | null;
+  mem_used_mb: number | null;
+  mem_total_mb: number | null;
+  disk_pct: number | null;
+  uptime_s: number | null;
+  snapshot_time: string | null;
+}
+
 const sevLabels: Record<number, string> = {
   0: 'Emergency', 1: 'Alert', 2: 'Critical', 3: 'Error',
   4: 'Warning', 5: 'Notice', 6: 'Info', 7: 'Debug',
@@ -35,18 +51,69 @@ const sevColors: Record<number, string> = {
   4: 'text-amber-400', 5: 'text-blue-400', 6: 'text-slate-400', 7: 'text-slate-500',
 };
 
-type Tab = 'overview' | 'results' | 'syslog';
+type Tab = 'overview' | 'syslog';
+
+function pctColor(pct: number): string {
+  if (pct >= 90) return 'bg-red-500';
+  if (pct >= 75) return 'bg-amber-500';
+  return 'bg-emerald-500';
+}
+
+function pctTextColor(pct: number): string {
+  if (pct >= 90) return 'text-red-400';
+  if (pct >= 75) return 'text-amber-400';
+  return 'text-emerald-400';
+}
+
+function formatUptime(seconds: number | null): string {
+  if (!seconds || seconds <= 0) return '—';
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function MetricCard({ icon: Icon, label, value, pct, sub, color }: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  pct?: number | null;
+  sub?: string;
+  color: string;
+}) {
+  return (
+    <GlassCard className="p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Icon size={14} className={color} />
+        <span className="text-xs text-slate-500 uppercase tracking-wider">{label}</span>
+      </div>
+      <p className={`text-2xl font-bold ${pct != null ? pctTextColor(pct) : 'text-slate-100'}`}>
+        {value}
+      </p>
+      {pct != null && (
+        <div className="mt-2 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+          <div className={`h-full rounded-full ${pctColor(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+        </div>
+      )}
+      {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
+    </GlassCard>
+  );
+}
 
 export default function HostDetailPage() {
   const params = useParams();
   const hostId = Number(params.id);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const { data: host, isLoading } = useHost(hostId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: host, isLoading } = useHost(hostId) as { data: any; isLoading: boolean };
   const { data: history, isLoading: historyLoading } = useHostHistory(hostId, 24);
+
+  const agent: AgentMetrics | null = host?.agent ?? null;
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
-    { key: 'results', label: 'Check Results' },
     { key: 'syslog', label: 'Syslog' },
   ];
 
@@ -56,9 +123,9 @@ export default function HostDetailPage() {
       ? 'disabled' as const
       : host.maintenance
         ? 'maintenance' as const
-        : host.latest?.success
+        : host.latest?.online === true
           ? 'online' as const
-          : host.latest?.success === false
+          : host.latest?.online === false
             ? 'offline' as const
             : 'unknown' as const;
 
@@ -102,7 +169,13 @@ export default function HostDetailPage() {
             <div className="flex items-center gap-3">
               <Badge>{host.check_type}</Badge>
               <Badge>{host.source}</Badge>
+              {host.port && <Badge>:{host.port}</Badge>}
               {host.maintenance && <Badge variant="severity" severity="warning">Maintenance</Badge>}
+              {host.ssl_expiry_days != null && (
+                <Badge variant="severity" severity={host.ssl_expiry_days <= 14 ? 'critical' : host.ssl_expiry_days <= 30 ? 'warning' : 'info'}>
+                  SSL: {host.ssl_expiry_days}d
+                </Badge>
+              )}
             </div>
           </div>
         ) : (
@@ -130,6 +203,72 @@ export default function HostDetailPage() {
       {/* Tab content */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {/* Agent Metrics (CPU / RAM / Disk / Uptime) */}
+          {agent && (
+            <div>
+              <h3 className="text-sm font-medium text-slate-300 mb-3">System Metrics</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <MetricCard
+                  icon={Cpu}
+                  label="CPU"
+                  value={agent.cpu_pct != null ? `${agent.cpu_pct.toFixed(1)}%` : '—'}
+                  pct={agent.cpu_pct}
+                  color="text-sky-400"
+                />
+                <MetricCard
+                  icon={MemoryStick}
+                  label="Memory"
+                  value={agent.mem_pct != null ? `${agent.mem_pct.toFixed(1)}%` : '—'}
+                  pct={agent.mem_pct}
+                  sub={agent.mem_used_mb != null && agent.mem_total_mb != null
+                    ? `${(agent.mem_used_mb / 1024).toFixed(1)} / ${(agent.mem_total_mb / 1024).toFixed(1)} GB`
+                    : undefined}
+                  color="text-violet-400"
+                />
+                <MetricCard
+                  icon={HardDrive}
+                  label="Disk"
+                  value={agent.disk_pct != null ? `${agent.disk_pct.toFixed(1)}%` : '—'}
+                  pct={agent.disk_pct}
+                  color="text-amber-400"
+                />
+                <MetricCard
+                  icon={Clock}
+                  label="System Uptime"
+                  value={formatUptime(agent.uptime_s)}
+                  color="text-emerald-400"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Agent Info */}
+          {agent && (
+            <GlassCard className="p-4">
+              <h3 className="text-sm font-medium text-slate-300 mb-3">Agent Info</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-slate-400">Platform</span>
+                  <span className="text-sm text-slate-200">{agent.platform || '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-slate-400">Arch</span>
+                  <span className="text-sm text-slate-200">{agent.arch || '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-slate-400">Version</span>
+                  <span className="text-sm text-slate-200">{agent.agent_version || '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-slate-400">Last Seen</span>
+                  <span className="text-sm text-slate-200">
+                    {agent.last_seen ? new Date(agent.last_seen).toLocaleString() : '—'}
+                  </span>
+                </div>
+              </div>
+            </GlassCard>
+          )}
+
           {/* Uptime stats */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {isLoading ? (
@@ -143,37 +282,74 @@ export default function HostDetailPage() {
               <>
                 <GlassCard className="p-4">
                   <p className="text-xs text-slate-500 uppercase tracking-wider">24h Uptime</p>
-                  <p className={`text-2xl font-bold mt-1 ${uptimeColor(host?.uptime.h24 ?? null)}`}>
-                    {host?.uptime.h24 != null ? `${host.uptime.h24.toFixed(1)}%` : '--'}
+                  <p className={`text-2xl font-bold mt-1 ${uptimeColor(host?.uptime?.h24 ?? null)}`}>
+                    {host?.uptime?.h24 != null ? `${host.uptime.h24.toFixed(1)}%` : '--'}
                   </p>
                 </GlassCard>
                 <GlassCard className="p-4">
                   <p className="text-xs text-slate-500 uppercase tracking-wider">7d Uptime</p>
-                  <p className={`text-2xl font-bold mt-1 ${uptimeColor(host?.uptime.d7 ?? null)}`}>
-                    {host?.uptime.d7 != null ? `${host.uptime.d7.toFixed(1)}%` : '--'}
+                  <p className={`text-2xl font-bold mt-1 ${uptimeColor(host?.uptime?.d7 ?? null)}`}>
+                    {host?.uptime?.d7 != null ? `${host.uptime.d7.toFixed(1)}%` : '--'}
                   </p>
                 </GlassCard>
                 <GlassCard className="p-4">
                   <p className="text-xs text-slate-500 uppercase tracking-wider">30d Uptime</p>
-                  <p className={`text-2xl font-bold mt-1 ${uptimeColor(host?.uptime.d30 ?? null)}`}>
-                    {host?.uptime.d30 != null ? `${host.uptime.d30.toFixed(1)}%` : '--'}
+                  <p className={`text-2xl font-bold mt-1 ${uptimeColor(host?.uptime?.d30 ?? null)}`}>
+                    {host?.uptime?.d30 != null ? `${host.uptime.d30.toFixed(1)}%` : '--'}
                   </p>
                 </GlassCard>
               </>
             )}
           </div>
 
-          {/* Latency */}
-          <GlassCard className="p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-2">Current Latency</h3>
-            {isLoading ? (
-              <Skeleton className="h-8 w-24" />
-            ) : (
-              <p className="text-2xl font-mono text-slate-100">
-                {formatLatency(host?.latest?.latency_ms ?? null)}
-              </p>
-            )}
-          </GlassCard>
+          {/* Latency + Availability */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <GlassCard className="p-4">
+              <h3 className="text-sm font-medium text-slate-300 mb-2">Current Latency</h3>
+              {isLoading ? (
+                <Skeleton className="h-8 w-24" />
+              ) : (
+                <p className="text-2xl font-mono text-slate-100">
+                  {formatLatency(host?.latest?.latency_ms ?? null)}
+                </p>
+              )}
+              {host?.latest?.timestamp && (
+                <p className="text-xs text-slate-500 mt-1">
+                  Last check: {new Date(host.latest.timestamp).toLocaleString()}
+                </p>
+              )}
+            </GlassCard>
+
+            <GlassCard className="p-4">
+              <h3 className="text-sm font-medium text-slate-300 mb-3">Host Details</h3>
+              <div className="space-y-1.5">
+                {host?.mac_address && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">MAC</span>
+                    <span className="text-slate-200 font-mono">{host.mac_address}</span>
+                  </div>
+                )}
+                {host?.source_detail && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Source</span>
+                    <span className="text-slate-200">{host.source_detail}</span>
+                  </div>
+                )}
+                {host?.created_at && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Created</span>
+                    <span className="text-slate-200">{new Date(host.created_at).toLocaleDateString()}</span>
+                  </div>
+                )}
+                {host?.latency_threshold_ms != null && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Threshold</span>
+                    <span className="text-slate-200">{host.latency_threshold_ms} ms</span>
+                  </div>
+                )}
+              </div>
+            </GlassCard>
+          </div>
 
           {/* Availability overview */}
           <GlassCard className="p-4">
@@ -183,9 +359,9 @@ export default function HostDetailPage() {
             ) : (
               <div className="space-y-3">
                 {([
-                  { label: '24 Hours', value: host?.uptime.h24 ?? null },
-                  { label: '7 Days', value: host?.uptime.d7 ?? null },
-                  { label: '30 Days', value: host?.uptime.d30 ?? null },
+                  { label: '24 Hours', value: host?.uptime?.h24 ?? null },
+                  { label: '7 Days', value: host?.uptime?.d7 ?? null },
+                  { label: '30 Days', value: host?.uptime?.d30 ?? null },
                 ] as const).map(({ label, value }) => (
                   <div key={label}>
                     <div className="flex items-center justify-between mb-1">
@@ -216,7 +392,7 @@ export default function HostDetailPage() {
 
           {/* Latency chart */}
           <GlassCard className="p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3">Latency Chart</h3>
+            <h3 className="text-sm font-medium text-slate-300 mb-3">Latency Chart (24h)</h3>
             {historyLoading ? (
               <Skeleton className="h-52 w-full" />
             ) : history?.results && history.results.length > 0 ? (
@@ -226,55 +402,6 @@ export default function HostDetailPage() {
             )}
           </GlassCard>
         </div>
-      )}
-
-      {activeTab === 'results' && (
-        <GlassCard>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/[0.06]">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Timestamp</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Latency</th>
-                </tr>
-              </thead>
-              <tbody>
-                {historyLoading &&
-                  Array.from({ length: 10 }).map((_, i) => (
-                    <tr key={i} className="border-b border-white/[0.03]">
-                      <td className="px-4 py-3"><Skeleton className="h-5 w-40" /></td>
-                      <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
-                      <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
-                    </tr>
-                  ))}
-                {history?.results.map((r) => (
-                  <tr key={r.id} className="border-b border-white/[0.03]">
-                    <td className="px-4 py-3 text-xs text-slate-400 font-mono">
-                      {new Date(r.timestamp).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <StatusDot status={r.success ? 'online' : 'offline'} />
-                        <span className="text-xs text-slate-300">{r.success ? 'OK' : 'Fail'}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-300">
-                      {formatLatency(r.latency_ms)}
-                    </td>
-                  </tr>
-                ))}
-                {!historyLoading && (!history?.results || history.results.length === 0) && (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-8 text-center text-sm text-slate-500">
-                      No check results available
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </GlassCard>
       )}
 
       {activeTab === 'syslog' && (
@@ -360,7 +487,6 @@ function LatencyChart({ results }: { results: HistoryResult[] }) {
     const timestamps = sorted.map((r) => r.timestamp);
     const latencies = sorted.map((r) => r.latency_ms);
 
-    // Mark failed pings as red scatter points at y=0
     const failPoints = sorted
       .map((r, i) => (!r.success ? [i, 0] : null))
       .filter(Boolean);

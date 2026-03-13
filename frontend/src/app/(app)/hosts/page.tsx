@@ -18,12 +18,36 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 const inputClass = 'w-full px-3 py-2 text-sm bg-white/[0.06] border border-white/[0.08] rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50';
 const selectClass = 'w-full px-3 py-2 text-sm bg-[#111621] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-sky-500/50 [&>option]:bg-[#111621] [&>option]:text-slate-200';
 
-function UptimeCell({ value }: { value: number | null }) {
-  if (value === null) return <span className="text-xs text-slate-600">—</span>;
+function UptimeBar({ h24, d7, d30 }: { h24: number | null; d7: number | null; d30: number | null }) {
+  const bars = [
+    { label: '30d', value: d30 },
+    { label: '7d', value: d7 },
+    { label: '24h', value: h24 },
+  ];
+  const allNull = bars.every((b) => b.value === null);
+  if (allNull) return <span className="text-xs text-slate-600">—</span>;
+
+  function barColor(v: number | null): string {
+    if (v === null) return 'bg-slate-700';
+    if (v >= 99.9) return 'bg-emerald-500';
+    if (v >= 95) return 'bg-amber-500';
+    return 'bg-red-500';
+  }
+
+  // Show the worst value prominently
+  const worst = bars.reduce((min, b) => (b.value !== null && (min === null || b.value < min)) ? b.value : min, null as number | null);
+
   return (
-    <span className={`text-xs font-mono ${uptimeColor(value)}`}>
-      {value.toFixed(1)}%
-    </span>
+    <div className="flex items-center gap-2">
+      <div className="flex gap-0.5" title={bars.map((b) => `${b.label}: ${b.value != null ? b.value.toFixed(1) + '%' : '—'}`).join(' | ')}>
+        {bars.map((b) => (
+          <div key={b.label} className={`w-3 h-3 rounded-sm ${barColor(b.value)}`} />
+        ))}
+      </div>
+      <span className={`text-xs font-mono ${uptimeColor(worst)}`}>
+        {worst != null ? `${worst.toFixed(1)}%` : ''}
+      </span>
+    </div>
   );
 }
 
@@ -171,9 +195,7 @@ function HostsPageInner() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Type</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Latency</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">24h</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">7d</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">30d</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Availability</th>
               </tr>
             </thead>
             <tbody>
@@ -184,9 +206,7 @@ function HostsPageInner() {
                     <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-5 w-20" /></td>
                   </tr>
                 ))}
               {filteredHosts?.map((host) => (
@@ -225,14 +245,8 @@ function HostsPageInner() {
                   <td className="px-4 py-3 font-mono text-xs text-slate-300">
                     {formatLatency(host.latency_ms)}
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <UptimeCell value={host.uptime_h24} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <UptimeCell value={host.uptime_d7} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <UptimeCell value={host.uptime_d30} />
+                  <td className="px-4 py-3">
+                    <UptimeBar h24={host.uptime_h24} d7={host.uptime_d7} d30={host.uptime_d30} />
                   </td>
                 </tr>
               ))}

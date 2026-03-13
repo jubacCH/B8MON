@@ -155,8 +155,12 @@ export default function SystemStatusPage() {
   const [checking, setChecking] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{
     update_available: boolean;
-    local: string;
-    changelog?: string;
+    local: { commit?: string; version?: string };
+    remote_commit?: string;
+    remote_version?: string;
+    commits_behind?: number;
+    changelog?: { hash: string; message: string }[];
+    error?: string;
   } | null>(null);
 
   const { data: status, isLoading } = useQuery({
@@ -168,11 +172,7 @@ export default function SystemStatusPage() {
   async function checkUpdate() {
     setChecking(true);
     try {
-      const info = await get<{
-        update_available: boolean;
-        local: string;
-        changelog?: string;
-      }>('/api/update/check');
+      const info = await get<typeof updateInfo>('/api/update/check');
       setUpdateInfo(info);
     } catch {
       toast('Failed to check for updates', 'error');
@@ -544,17 +544,27 @@ export default function SystemStatusPage() {
         {updateInfo ? (
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <Badge>{updateInfo.local}</Badge>
+              <Badge>{updateInfo.local?.version || updateInfo.local?.commit || '—'}</Badge>
               {updateInfo.update_available ? (
-                <Badge variant="severity" severity="warning">Update available</Badge>
+                <Badge variant="severity" severity="warning">
+                  {updateInfo.commits_behind} commit{updateInfo.commits_behind !== 1 ? 's' : ''} behind
+                </Badge>
               ) : (
                 <Badge variant="severity" severity="info">Up to date</Badge>
               )}
+              {updateInfo.error && (
+                <span className="text-xs text-amber-400">{updateInfo.error}</span>
+              )}
             </div>
-            {updateInfo.changelog && (
-              <pre className="text-xs text-slate-400 bg-white/[0.02] rounded p-3 mt-2 max-h-[200px] overflow-y-auto whitespace-pre-wrap">
-                {updateInfo.changelog}
-              </pre>
+            {updateInfo.changelog && updateInfo.changelog.length > 0 && (
+              <div className="bg-white/[0.02] rounded p-3 mt-2 max-h-[200px] overflow-y-auto space-y-1">
+                {updateInfo.changelog.map((entry) => (
+                  <div key={entry.hash} className="flex gap-2 text-xs">
+                    <code className="text-sky-400 shrink-0">{entry.hash}</code>
+                    <span className="text-slate-400">{entry.message}</span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         ) : (
