@@ -699,7 +699,7 @@ export default function SettingsPage() {
                     ) : (
                       <XCircle size={14} className="text-red-400 shrink-0" />
                     )}
-                    <Badge variant="severity" severity={n.status === 'sent' ? 'ok' : 'critical'}>
+                    <Badge variant="severity" severity={n.status === 'sent' ? 'info' : 'critical'}>
                       {n.channel}
                     </Badge>
                     <span className="text-slate-300 truncate">{n.title}</span>
