@@ -75,6 +75,29 @@ async def _get_ssl_info(hostname: str, port: int = 443) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+@router.get("/api/ssl/certs")
+async def ssl_certs_json(db: AsyncSession = Depends(get_db)):
+    """JSON endpoint for SSL certificate data."""
+    result = await db.execute(
+        select(PingHost)
+        .where(PingHost.check_type.contains("https"))
+        .order_by(PingHost.name)
+    )
+    hosts = result.scalars().all()
+    certs = []
+    for h in hosts:
+        certs.append({
+            "id": h.id,
+            "name": h.name,
+            "hostname": h.hostname,
+            "enabled": h.enabled,
+            "days": h.ssl_expiry_days,
+        })
+    certs.sort(key=lambda c: c["days"] if c["days"] is not None else 9999)
+    expiring_soon = sum(1 for c in certs if c["days"] is not None and c["days"] <= 30)
+    return JSONResponse({"certs": certs, "expiring_soon": expiring_soon})
+
+
 @router.get("/ssl", response_class=HTMLResponse)
 async def ssl_page(request: Request, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -98,6 +121,10 @@ async def ssl_page(request: Request, db: AsyncSession = Depends(get_db)):
     certs.sort(key=lambda c: c["days"] if c["days"] is not None else 9999)
 
     expiring_soon = sum(1 for c in certs if c["days"] is not None and c["days"] <= 30)
+
+    accept = request.headers.get("accept", "")
+    if "application/json" in accept:
+        return JSONResponse({"certs": certs, "expiring_soon": expiring_soon})
 
     return templates.TemplateResponse("ssl.html", {
         "request": request,

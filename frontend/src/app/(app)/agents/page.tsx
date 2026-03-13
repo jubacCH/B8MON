@@ -69,9 +69,9 @@ export default function AgentsPage() {
                   <Badge>{agent.platform ?? '?'}</Badge>
                 </div>
                 <div className="space-y-2">
-                  <MetricBar label="CPU" value={null} />
-                  <MetricBar label="Memory" value={null} />
-                  <MetricBar label="Disk" value={null} />
+                  <MetricBar label="CPU" value={agent.cpu_pct} />
+                  <MetricBar label="Memory" value={agent.mem_pct} />
+                  <MetricBar label="Disk" value={agent.disk_pct} />
                 </div>
                 {agent.last_seen && (
                   <p className="text-xs text-slate-500 mt-3">

@@ -69,6 +69,9 @@ export interface Agent {
   enabled: boolean;
   last_seen: string | null;
   created_at: string;
+  cpu_pct: number | null;
+  mem_pct: number | null;
+  disk_pct: number | null;
 }
 
 export interface AgentSnapshot {

@@ -16,6 +16,13 @@ import { SynologyDetail } from '@/components/integrations/SynologyDetail';
 import { UnasDetail } from '@/components/integrations/UnasDetail';
 import { SpeedtestDetail } from '@/components/integrations/SpeedtestDetail';
 import { PhpipamDetail } from '@/components/integrations/PhpipamDetail';
+import { AdguardDetail } from '@/components/integrations/AdguardDetail';
+import { TruenasDetail } from '@/components/integrations/TruenasDetail';
+import { FirewallDetail } from '@/components/integrations/FirewallDetail';
+import { HassDetail } from '@/components/integrations/HassDetail';
+import { GiteaDetail } from '@/components/integrations/GiteaDetail';
+import { UpsDetail } from '@/components/integrations/UpsDetail';
+import { RedfishDetail } from '@/components/integrations/RedfishDetail';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -29,6 +36,13 @@ const detailComponents: Record<string, React.ComponentType<{ data: any }>> = {
   unas: UnasDetail,
   speedtest: SpeedtestDetail,
   phpipam: PhpipamDetail,
+  adguard: AdguardDetail,
+  truenas: TruenasDetail,
+  firewall: FirewallDetail,
+  hass: HassDetail,
+  gitea: GiteaDetail,
+  ups: UpsDetail,
+  redfish: RedfishDetail,
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 

@@ -13,7 +13,27 @@ import { EChart } from '@/components/charts/EChart';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { get } from '@/lib/api';
 import type { EChartsOption } from 'echarts';
+
+interface SyslogEntry {
+  timestamp: string;
+  severity: number;
+  hostname: string;
+  source_ip: string;
+  app_name: string;
+  message: string;
+}
+
+const sevLabels: Record<number, string> = {
+  0: 'Emergency', 1: 'Alert', 2: 'Critical', 3: 'Error',
+  4: 'Warning', 5: 'Notice', 6: 'Info', 7: 'Debug',
+};
+const sevColors: Record<number, string> = {
+  0: 'text-red-500', 1: 'text-red-400', 2: 'text-red-400', 3: 'text-orange-400',
+  4: 'text-amber-400', 5: 'text-blue-400', 6: 'text-slate-400', 7: 'text-slate-500',
+};
 
 type Tab = 'overview' | 'results' | 'syslog';
 
@@ -258,12 +278,68 @@ export default function HostDetailPage() {
       )}
 
       {activeTab === 'syslog' && (
-        <GlassCard className="p-6">
-          <p className="text-sm text-slate-400">Syslog entries for this host will appear here.</p>
-          <Skeleton className="h-32 w-full mt-4" />
-        </GlassCard>
+        <HostSyslog hostId={hostId} />
       )}
     </div>
+  );
+}
+
+/* ── Host Syslog sub-component ── */
+
+function HostSyslog({ hostId }: { hostId: number }) {
+  const { data: logs, isLoading: syslogLoading } = useQuery({
+    queryKey: ['host-syslog', hostId],
+    queryFn: () => get<SyslogEntry[]>(`/api/v1/syslog?host_id=${hostId}&limit=100&hours=168`),
+    enabled: hostId > 0,
+  });
+
+  return (
+    <GlassCard>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-white/[0.06]">
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Time</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Severity</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">App</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            {syslogLoading &&
+              Array.from({ length: 8 }).map((_, i) => (
+                <tr key={i} className="border-b border-white/[0.03]">
+                  <td className="px-4 py-3"><Skeleton className="h-5 w-32" /></td>
+                  <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
+                  <td className="px-4 py-3"><Skeleton className="h-5 w-20" /></td>
+                  <td className="px-4 py-3"><Skeleton className="h-5 w-full" /></td>
+                </tr>
+              ))}
+            {logs?.map((entry, i) => (
+              <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                <td className="px-4 py-3 text-xs text-slate-400 font-mono whitespace-nowrap">
+                  {new Date(entry.timestamp).toLocaleString()}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`text-xs font-medium ${sevColors[entry.severity] ?? 'text-slate-400'}`}>
+                    {sevLabels[entry.severity] ?? entry.severity}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-400 font-mono">{entry.app_name || '—'}</td>
+                <td className="px-4 py-3 text-xs text-slate-300 max-w-lg truncate">{entry.message}</td>
+              </tr>
+            ))}
+            {!syslogLoading && (!logs || logs.length === 0) && (
+              <tr>
+                <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">
+                  No syslog entries for this host
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </GlassCard>
   );
 }
 

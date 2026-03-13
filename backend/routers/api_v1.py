@@ -358,9 +358,29 @@ async def list_agents(
     _key: ApiKey = Depends(require_api_key),
 ):
     result = await db.execute(select(Agent).order_by(Agent.name))
+    agents = result.scalars().all()
     now = datetime.utcnow()
-    return [
-        {
+
+    # Fetch latest snapshot per agent in one query
+    from sqlalchemy.orm import aliased
+    latest_sub = (
+        select(
+            AgentSnapshot.agent_id,
+            func.max(AgentSnapshot.id).label("max_id"),
+        )
+        .group_by(AgentSnapshot.agent_id)
+        .subquery()
+    )
+    snap_q = await db.execute(
+        select(AgentSnapshot)
+        .join(latest_sub, AgentSnapshot.id == latest_sub.c.max_id)
+    )
+    snaps_by_agent = {s.agent_id: s for s in snap_q.scalars().all()}
+
+    out = []
+    for a in agents:
+        s = snaps_by_agent.get(a.id)
+        out.append({
             "id": a.id,
             "name": a.name,
             "hostname": a.hostname,
@@ -370,9 +390,11 @@ async def list_agents(
             "online": a.last_seen is not None and (now - a.last_seen).total_seconds() < 120,
             "last_seen": a.last_seen.isoformat() if a.last_seen else None,
             "enabled": a.enabled,
-        }
-        for a in result.scalars().all()
-    ]
+            "cpu_pct": s.cpu_pct if s else None,
+            "mem_pct": s.mem_pct if s else None,
+            "disk_pct": s.disk_pct if s else None,
+        })
+    return out
 
 
 @router.get("/agents/{agent_id}", summary="Agent detail with latest metrics")
