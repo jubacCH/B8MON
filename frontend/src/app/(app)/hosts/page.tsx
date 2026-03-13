@@ -10,9 +10,9 @@ import { formatLatency } from '@/lib/utils';
 import { Plus, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 
-export default function HostsPage() {
+function HostsPageInner() {
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('q') ?? '');
   const { data: hosts, isLoading } = useHosts();
@@ -125,5 +125,13 @@ export default function HostsPage() {
         </div>
       </GlassCard>
     </div>
+  );
+}
+
+export default function HostsPage() {
+  return (
+    <Suspense>
+      <HostsPageInner />
+    </Suspense>
   );
 }
