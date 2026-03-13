@@ -17,6 +17,8 @@ const nextConfig = {
       { source: '/setup/:path*', destination: `${backend}/setup/:path*` },
       { source: '/install/:path*', destination: `${backend}/install/:path*` },
       { source: '/static/:path*', destination: `${backend}/static/:path*` },
+      { source: '/snmp', destination: `${backend}/snmp` },
+      { source: '/subnet-scanner', destination: `${backend}/subnet-scanner` },
     ];
   },
 };

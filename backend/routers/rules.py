@@ -16,21 +16,28 @@ router = APIRouter()
 
 # ── Page ─────────────────────────────────────────────────────────────────────
 
-@router.get("/rules")
-async def rules_page(request: Request, db: AsyncSession = Depends(get_db)):
+@router.get("/api/v1/rules")
+async def rules_list(db: AsyncSession = Depends(get_db)):
     all_rules = await rules_svc.get_all_rules(db)
     sources = await rules_svc.get_source_options(db)
     operators = [
         {"key": k, "label": v[0]}
         for k, v in rules_svc.OPERATORS.items()
     ]
-    return templates.TemplateResponse("rules.html", {
-        "request": request,
-        "rules": all_rules,
-        "sources": sources,
-        "operators": operators,
-        "active_page": "rules",
-    })
+    return JSONResponse([
+        {
+            "id": r.id, "name": r.name, "source_type": r.source_type,
+            "source_id": r.source_id, "field_path": r.field_path,
+            "operator": r.operator, "threshold": r.threshold,
+            "severity": r.severity, "enabled": r.enabled,
+            "notify_channels": r.notify_channels,
+            "message_template": r.message_template,
+            "cooldown_minutes": r.cooldown_minutes,
+            "last_triggered_at": str(r.last_triggered) if r.last_triggered else None,
+            "trigger_count": getattr(r, "trigger_count", 0),
+        }
+        for r in all_rules
+    ])
 
 
 # ── CRUD ─────────────────────────────────────────────────────────────────────
@@ -64,20 +71,20 @@ async def add_rule(request: Request, db: AsyncSession = Depends(get_db)):
     return RedirectResponse(url="/rules?saved=1", status_code=303)
 
 
-@router.post("/rules/{rule_id}/toggle")
+@router.post("/api/v1/rules/{rule_id}/toggle")
 async def toggle_rule(rule_id: int, db: AsyncSession = Depends(get_db)):
     rule = await rules_svc.get_rule(db, rule_id)
     if not rule:
         return JSONResponse({"error": "Not found"}, status_code=404)
     rule.enabled = not rule.enabled
     await db.commit()
-    return RedirectResponse(url="/rules", status_code=303)
+    return JSONResponse({"ok": True, "enabled": rule.enabled})
 
 
-@router.post("/rules/{rule_id}/delete")
+@router.post("/api/v1/rules/{rule_id}/delete")
 async def delete_rule(rule_id: int, db: AsyncSession = Depends(get_db)):
     await rules_svc.delete_rule(db, rule_id)
-    return RedirectResponse(url="/rules", status_code=303)
+    return JSONResponse({"ok": True})
 
 
 @router.post("/rules/{rule_id}/edit")

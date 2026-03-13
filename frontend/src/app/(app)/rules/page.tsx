@@ -25,7 +25,7 @@ export default function RulesPage() {
 
   async function toggleRule(id: number) {
     try {
-      await post(`/rules/${id}/toggle`);
+      await post(`/api/v1/rules/${id}/toggle`);
       refetch();
       toast('Rule toggled', 'success');
     } catch {
@@ -36,7 +36,7 @@ export default function RulesPage() {
   async function deleteRule(id: number) {
     if (!confirm('Delete this rule?')) return;
     try {
-      await post(`/rules/${id}/delete`);
+      await post(`/api/v1/rules/${id}/delete`);
       refetch();
       toast('Rule deleted', 'success');
     } catch {

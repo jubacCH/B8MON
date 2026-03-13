@@ -59,13 +59,34 @@ async def snmp_page(request: Request, db: AsyncSession = Depends(get_db)):
     )
     available_hosts = [h for h in q.scalars().all() if h.id not in configured_ids]
 
-    return templates.TemplateResponse("snmp.html", {
-        "request": request,
-        "mibs": mibs,
+    from fastapi.responses import JSONResponse
+    return JSONResponse({
+        "mibs": [
+            {"id": m.id, "name": m.name, "description": getattr(m, "description", ""),
+             "oid_count": getattr(m, "oid_count", 0), "uploaded_at": str(getattr(m, "uploaded_at", ""))}
+            for m in mibs
+        ],
         "oid_count": oid_count,
-        "host_configs": host_configs,
-        "credentials": credentials,
-        "available_hosts": available_hosts,
+        "host_configs": [
+            {
+                "id": hc["config"].id,
+                "host_id": hc["config"].host_id,
+                "host_name": hc["host_name"],
+                "hostname": hc["hostname"],
+                "credential_id": hc["config"].credential_id,
+                "poll_interval": getattr(hc["config"], "poll_interval", 300),
+                "enabled": getattr(hc["config"], "enabled", True),
+            }
+            for hc in host_configs
+        ],
+        "credentials": [
+            {"id": c.id, "name": c.name, "type": c.type}
+            for c in credentials
+        ],
+        "available_hosts": [
+            {"id": h.id, "name": h.name, "hostname": h.hostname}
+            for h in available_hosts
+        ],
         "oid_presets": list(OID_PRESETS.keys()),
     })
 

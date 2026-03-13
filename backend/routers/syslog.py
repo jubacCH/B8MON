@@ -533,7 +533,7 @@ async def syslog_by_host(
 
 # ── Template Browser ──────────────────────────────────────────────────────────
 
-@router.get("/templates", response_class=HTMLResponse)
+@router.get("/templates")
 async def template_browser(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -578,17 +578,41 @@ async def template_browser(
     all_tags_raw = (await db.execute(select(LogTemplate.tags).where(LogTemplate.tags != ""))).scalars().all()
     all_tags = sorted({t.strip() for raw in all_tags_raw for t in raw.split(",") if t.strip()})
 
-    return templates.TemplateResponse("syslog_templates.html", {
-        "request": request,
-        "active_page": "syslog",
-        "templates": tpls,
-        "precursor_map": precursor_map,
+    from services.clickhouse_client import query as _ch_q
+
+    # Compute avg_rate_per_hour for each template from ClickHouse
+    tpl_hashes = [t.template_hash for t in tpls if t.template_hash]
+    rate_map: dict[str, float] = {}
+    if tpl_hashes:
+        try:
+            rate_rows = await _ch_q(
+                "SELECT template_hash, count() / 24.0 AS rate "
+                "FROM syslog_messages WHERE template_hash IN ({hashes:Array(String)}) "
+                "AND timestamp >= now() - INTERVAL 24 HOUR "
+                "GROUP BY template_hash",
+                {"hashes": tpl_hashes},
+            )
+            rate_map = {r["template_hash"]: round(r["rate"], 1) for r in rate_rows}
+        except Exception:
+            pass
+
+    from fastapi.responses import JSONResponse
+    return JSONResponse({
+        "templates": [
+            {
+                "template_hash": t.template_hash,
+                "template": t.template,
+                "example": t.example,
+                "count": t.count,
+                "noise_score": t.noise_score,
+                "first_seen": str(t.first_seen),
+                "last_seen": str(t.last_seen),
+                "tags": t.tags or "",
+                "avg_rate_per_hour": rate_map.get(t.template_hash),
+            }
+            for t in tpls
+        ],
         "total": total,
-        "page": page,
-        "total_pages": total_pages,
-        "all_tags": all_tags,
-        "f_sort": sort,
-        "f_tag": tag,
     })
 
 

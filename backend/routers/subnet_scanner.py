@@ -159,14 +159,19 @@ async def subnet_scanner_page(request: Request, db: AsyncSession = Depends(get_d
     # Build schedule name lookup
     sched_names = {s.id: s.name for s in schedules}
 
-    return templates.TemplateResponse(
-        "subnet_scanner.html", {
-            "request": request,
-            "schedules": schedules,
-            "scan_logs": scan_logs,
-            "sched_names": sched_names,
+    from fastapi.responses import JSONResponse
+    return JSONResponse([
+        {
+            "id": s.id,
+            "name": s.name,
+            "cidr": s.cidr,
+            "interval_m": s.interval_minutes,
+            "auto_add": getattr(s, "auto_add", False),
+            "enabled": s.enabled,
+            "last_run": str(s.last_run) if s.last_run else None,
         }
-    )
+        for s in schedules
+    ])
 
 
 # ── Routes – Manual Scan ─────────────────────────────────────────────────────

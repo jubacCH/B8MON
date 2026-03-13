@@ -1,6 +1,6 @@
 import bcrypt
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from templating import templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,8 +8,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import User, get_db
 
 router = APIRouter(prefix="/users")
+api_router = APIRouter()
 
 VALID_ROLES = {"admin", "editor", "readonly"}
+
+
+@api_router.get("/api/v1/users")
+async def list_users_api(request: Request, db: AsyncSession = Depends(get_db)):
+    """JSON user list for the frontend (session-authenticated)."""
+    user = getattr(request.state, "current_user", None)
+    if not user or getattr(user, "role", None) != "admin":
+        return JSONResponse({"error": "Admin access required"}, status_code=403)
+    result = await db.execute(select(User).order_by(User.created_at))
+    users = result.scalars().all()
+    return JSONResponse([
+        {
+            "id": u.id,
+            "username": u.username,
+            "role": u.role or "admin",
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        for u in users
+    ])
 
 
 @router.post("/me/password")
@@ -34,17 +54,19 @@ async def change_own_password(
     return RedirectResponse(url=ref, status_code=303)
 
 
-@router.get("", response_class=HTMLResponse)
+@router.get("")
 async def users_page(request: Request, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).order_by(User.created_at))
     users = result.scalars().all()
-    return templates.TemplateResponse("users.html", {
-        "request": request,
-        "users": users,
-        "active_page": "users",
-        "saved": request.query_params.get("saved"),
-        "error": request.query_params.get("error"),
-    })
+    return JSONResponse([
+        {
+            "id": u.id,
+            "username": u.username,
+            "role": u.role or "admin",
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        for u in users
+    ])
 
 
 @router.post("/add")
