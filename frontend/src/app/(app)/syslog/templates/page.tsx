@@ -8,7 +8,6 @@ import {
   Search,
   Hash,
   Clock,
-  ArrowLeft,
   TrendingUp,
   Volume2,
   Calendar,
@@ -20,7 +19,6 @@ import {
 import { PageHeader } from '@/components/layout/PageHeader';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { get } from '@/lib/api';
 import type { LogTemplate } from '@/types';

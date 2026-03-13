@@ -8,7 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post, patch, del } from '@/lib/api';
 import { useIsAdmin } from '@/stores/auth';
-import { Plus, Shield, ShieldCheck, Eye, Trash2, Key } from 'lucide-react';
+import { Plus, Trash2, Key } from 'lucide-react';
 import { useState } from 'react';
 
 interface UserInfo {
@@ -17,18 +17,6 @@ interface UserInfo {
   role: string;
   created_at: string;
 }
-
-const roleIcons: Record<string, React.ElementType> = {
-  admin: ShieldCheck,
-  editor: Shield,
-  readonly: Eye,
-};
-
-const roleColors: Record<string, string> = {
-  admin: 'text-violet-400',
-  editor: 'text-sky-400',
-  readonly: 'text-slate-400',
-};
 
 const ROLES = ['admin', 'editor', 'readonly'] as const;
 
@@ -147,7 +135,6 @@ export default function UsersPage() {
                   </tr>
                 ))}
               {users?.map((u) => {
-                const RoleIcon = roleIcons[u.role] ?? Eye;
                 return (
                   <tr key={u.id} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
                     <td className="px-4 py-3 text-slate-200 font-medium">{u.username}</td>
