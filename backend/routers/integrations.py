@@ -201,6 +201,86 @@ async def detail(
     return templates.TemplateResponse(template_name, ctx)
 
 
+# ── JSON API: config fields ──────────────────────────────────────────────────
+
+
+@router.get("/api/integration/{integration_type}/fields")
+async def api_config_fields(integration_type: str):
+    """Return the config fields schema for an integration type."""
+    integration_cls = get_integration(integration_type)
+    if not integration_cls:
+        return JSONResponse({"error": "Unknown integration type"}, status_code=404)
+    fields = []
+    for f in integration_cls.config_fields:
+        fields.append({
+            "key": f.key,
+            "label": f.label,
+            "field_type": f.field_type,
+            "placeholder": f.placeholder or "",
+            "required": f.required,
+            "default": f.default if f.default is not None else "",
+            "options": f.options if hasattr(f, "options") and f.options else None,
+        })
+    return JSONResponse({
+        "type": integration_type,
+        "display_name": integration_cls.display_name,
+        "description": integration_cls.description,
+        "fields": fields,
+    })
+
+
+# ── JSON API: create instance ────────────────────────────────────────────────
+
+
+@router.post("/api/integration/{integration_type}/create")
+async def api_create_instance(
+    request: Request,
+    integration_type: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """JSON API for creating an integration instance."""
+    integration_cls = get_integration(integration_type)
+    if not integration_cls:
+        return JSONResponse({"error": "Unknown integration type"}, status_code=404)
+
+    body = await request.json()
+    name = str(body.get("name", "")).strip()
+    if not name:
+        name = f"{integration_cls.display_name} Instance"
+    config_dict = {}
+    for field in integration_cls.config_fields:
+        val = body.get(field.key, "")
+        if field.field_type == "checkbox":
+            config_dict[field.key] = bool(val)
+        elif field.field_type == "number":
+            try:
+                config_dict[field.key] = int(val) if val else (field.default if field.default is not None else 0)
+            except (ValueError, TypeError):
+                config_dict[field.key] = field.default if field.default is not None else 0
+        else:
+            config_dict[field.key] = str(val).strip() if val else (str(field.default) if field.default is not None else "")
+    cfg = await int_svc.create_config(db, integration_type, name, config_dict)
+    from main import invalidate_nav_cache
+    invalidate_nav_cache()
+    return JSONResponse({"ok": True, "id": cfg.id, "name": cfg.name})
+
+
+# ── JSON API: delete instance ────────────────────────────────────────────────
+
+
+@router.delete("/api/integration/{integration_type}/{config_id}")
+async def api_delete_instance(
+    integration_type: str,
+    config_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """JSON API for deleting an integration instance."""
+    await int_svc.delete_config(db, config_id)
+    from main import invalidate_nav_cache
+    invalidate_nav_cache()
+    return JSONResponse({"ok": True})
+
+
 # ── Add instance ──────────────────────────────────────────────────────────────
 
 

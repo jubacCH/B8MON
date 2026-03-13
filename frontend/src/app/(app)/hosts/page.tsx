@@ -9,13 +9,16 @@ import { useHosts } from '@/hooks/queries/useHosts';
 import { formatLatency } from '@/lib/utils';
 import { Plus, Search } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState } from 'react';
 
 function HostsPageInner() {
   const searchParams = useSearchParams();
-  const [search, setSearch] = useState(searchParams.get('q') ?? '');
+  const router = useRouter();
+  const qParam = searchParams.get('q') ?? '';
+  const [search, setSearch] = useState(qParam);
   const { data: hosts, isLoading } = useHosts();
+  const redirected = useRef(false);
 
   const filteredHosts = hosts?.filter((host) => {
     if (!search) return true;
@@ -25,6 +28,14 @@ function HostsPageInner() {
       host.hostname.toLowerCase().includes(q)
     );
   });
+
+  // Auto-redirect to host detail when ?q= yields exactly 1 match
+  useEffect(() => {
+    if (qParam && !isLoading && filteredHosts && filteredHosts.length === 1 && !redirected.current) {
+      redirected.current = true;
+      router.replace(`/hosts/${filteredHosts[0].id}`);
+    }
+  }, [qParam, isLoading, filteredHosts, router]);
 
   return (
     <div>
