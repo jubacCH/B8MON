@@ -168,6 +168,7 @@ def _collect_logs() -> list[str]:
     return []
 
 
+@router.get("/api/system/status")
 @router.get("/system/status")
 async def system_status(request: Request, db: AsyncSession = Depends(get_db)):
     now = datetime.utcnow()

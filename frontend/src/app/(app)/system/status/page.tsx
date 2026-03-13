@@ -161,7 +161,7 @@ export default function SystemStatusPage() {
 
   const { data: status, isLoading } = useQuery({
     queryKey: ['system-status'],
-    queryFn: () => get<SystemStatus>('/system/status'),
+    queryFn: () => get<SystemStatus>('/api/system/status'),
     refetchInterval: 15_000,
   });
 
