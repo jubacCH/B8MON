@@ -116,7 +116,8 @@ async def _check_single(host: "PingHost", ct: str) -> tuple[bool, float | None]:
             url = hostname
         else:
             scheme = "https" if ct == "https" else "http"
-            port_suffix = f":{host.port}" if host.port else ""
+            default_port = 443 if ct == "https" else 80
+            port_suffix = f":{host.port}" if host.port and host.port != default_port else ""
             url = f"{scheme}://{hostname}{port_suffix}"
         return await check_http(url)
     if ct == "tcp":
