@@ -118,6 +118,40 @@ function savePref(key: string, value: unknown) {
   localStorage.setItem(`ng_pref_${key}`, JSON.stringify(value));
 }
 
+/* ---------- API Doc Helper ---------- */
+
+interface ApiEndpoint {
+  method: string;
+  path: string;
+  desc: string;
+}
+
+const METHOD_COLORS: Record<string, string> = {
+  GET: 'text-emerald-400 bg-emerald-500/10',
+  POST: 'text-sky-400 bg-sky-500/10',
+  PATCH: 'text-amber-400 bg-amber-500/10',
+  DELETE: 'text-red-400 bg-red-500/10',
+};
+
+function ApiSection({ title, endpoints }: { title: string; endpoints: ApiEndpoint[] }) {
+  return (
+    <div>
+      <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">{title}</h4>
+      <div className="space-y-1">
+        {endpoints.map((ep) => (
+          <div key={`${ep.method}-${ep.path}`} className="flex items-start gap-2 py-1">
+            <code className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${METHOD_COLORS[ep.method] ?? 'text-slate-400 bg-white/[0.06]'}`}>
+              {ep.method}
+            </code>
+            <code className="text-xs text-slate-300 font-mono shrink-0">{ep.path}</code>
+            <span className="text-xs text-slate-500">{ep.desc}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Component ---------- */
 
 export default function SettingsPage() {
@@ -835,6 +869,69 @@ export default function SettingsPage() {
       {/* ==================== API TAB ==================== */}
       {activeTab === 'api' && (
         <div className="space-y-4">
+          {/* API Documentation */}
+          <GlassCard className="p-4">
+            <h3 className="text-sm font-medium text-slate-300 mb-3">API Documentation</h3>
+            <p className="text-xs text-slate-400 mb-4">
+              All API endpoints are under <code className="text-sky-400 bg-sky-500/10 px-1 py-0.5 rounded">/api/v1/</code> and require authentication via the <code className="text-sky-400 bg-sky-500/10 px-1 py-0.5 rounded">X-API-Key</code> header.
+            </p>
+
+            <div className="space-y-3">
+              <ApiSection title="Hosts" endpoints={[
+                { method: 'GET', path: '/api/v1/hosts', desc: 'List all hosts with current status' },
+                { method: 'GET', path: '/api/v1/hosts/{id}', desc: 'Host detail with metrics, uptime, agent data' },
+                { method: 'GET', path: '/api/v1/hosts/{id}/history?hours=24', desc: 'Ping history for a host' },
+                { method: 'POST', path: '/api/v1/hosts', desc: 'Create a new host (name, hostname, check_type, port)' },
+                { method: 'PATCH', path: '/api/v1/hosts/{id}', desc: 'Update host (name, hostname, check_type, port, enabled)' },
+                { method: 'DELETE', path: '/api/v1/hosts/{id}', desc: 'Delete a host and its ping results' },
+              ]} />
+
+              <ApiSection title="Agents" endpoints={[
+                { method: 'GET', path: '/api/v1/agents', desc: 'List all registered agents' },
+                { method: 'GET', path: '/api/v1/agents/{id}', desc: 'Agent detail with performance snapshots' },
+                { method: 'DELETE', path: '/api/v1/agents/{id}', desc: 'Decommission agent (removes host + snapshots)' },
+              ]} />
+
+              <ApiSection title="Integrations" endpoints={[
+                { method: 'GET', path: '/api/v1/integrations', desc: 'List all integration instances with status' },
+                { method: 'GET', path: '/api/v1/integrations/{id}', desc: 'Integration detail with latest snapshot' },
+              ]} />
+
+              <ApiSection title="Incidents" endpoints={[
+                { method: 'GET', path: '/api/v1/incidents', desc: 'List incidents (filter: ?status=open)' },
+                { method: 'GET', path: '/api/v1/incidents/{id}', desc: 'Incident detail with event timeline' },
+                { method: 'POST', path: '/api/v1/incidents/{id}/acknowledge', desc: 'Acknowledge an incident' },
+                { method: 'POST', path: '/api/v1/incidents/{id}/resolve', desc: 'Resolve an incident' },
+              ]} />
+
+              <ApiSection title="Rules" endpoints={[
+                { method: 'GET', path: '/api/v1/rules', desc: 'List all alert rules' },
+                { method: 'POST', path: '/api/v1/rules/{id}/toggle', desc: 'Enable/disable a rule' },
+                { method: 'POST', path: '/api/v1/rules/{id}/delete', desc: 'Delete a rule' },
+              ]} />
+
+              <ApiSection title="Syslog" endpoints={[
+                { method: 'GET', path: '/api/v1/syslog', desc: 'Query syslog (?severity=3&host_id=1&limit=100&hours=24)' },
+              ]} />
+
+              <ApiSection title="System" endpoints={[
+                { method: 'GET', path: '/api/v1/status', desc: 'System status overview' },
+                { method: 'GET', path: '/api/v1/keys', desc: 'List API keys (admin only)' },
+                { method: 'POST', path: '/api/v1/keys', desc: 'Create API key (admin only)' },
+                { method: 'DELETE', path: '/api/v1/keys/{id}', desc: 'Delete API key (admin only)' },
+              ]} />
+            </div>
+
+            <div className="mt-4 p-3 rounded-md bg-white/[0.03] border border-white/[0.06]">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Example Request</p>
+              <pre className="text-xs text-slate-300 font-mono">
+{`curl -H "X-API-Key: ng_your_key_here" \\
+  ${typeof window !== 'undefined' ? window.location.origin : 'https://your-instance'}/api/v1/hosts`}
+              </pre>
+            </div>
+          </GlassCard>
+
+          {/* API Keys Management */}
           <GlassCard className="p-4">
             <div className="flex items-center justify-between mb-4">
               <div>
