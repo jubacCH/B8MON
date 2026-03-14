@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useHost, useHostHistory } from '@/hooks/queries/useHosts';
 import { formatLatency, uptimeColor } from '@/lib/utils';
 import { EChart } from '@/components/charts/EChart';
-import { ArrowLeft, RefreshCw, Cpu, MemoryStick, HardDrive, Clock, Activity, Network, Wifi, Pencil } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Cpu, MemoryStick, HardDrive, Clock, Activity, Network, Wifi, Pencil, Cable, Zap, Users, ArrowUpDown } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -71,7 +71,38 @@ const sevColors: Record<number, string> = {
   4: 'text-amber-400', 5: 'text-blue-400', 6: 'text-slate-400', 7: 'text-slate-500',
 };
 
-type Tab = 'overview' | 'syslog';
+type Tab = 'overview' | 'ports' | 'syslog';
+
+interface PortInfo {
+  idx: number;
+  name: string;
+  enable: boolean;
+  up: boolean;
+  speed: number;
+  speed_label: string;
+  is_uplink: boolean;
+  poe_enable: boolean;
+  poe_power: number;
+  rx_bytes_r: number;
+  tx_bytes_r: number;
+  rx_bytes: number;
+  tx_bytes: number;
+  satisfaction: number;
+  op_mode: string;
+}
+
+interface ConnectedClient {
+  mac: string;
+  hostname: string;
+  ip: string;
+  sw_port?: number;
+  is_wireless: boolean;
+  rx_bytes_r: number;
+  tx_bytes_r: number;
+  vlan: number;
+  ssid: string;
+  signal: number;
+}
 
 function pctColor(pct: number): string {
   if (pct >= 90) return 'bg-red-500';
@@ -142,9 +173,12 @@ export default function HostDetailPage() {
   const { data: history, isLoading: historyLoading } = useHostHistory(hostId, 24);
 
   const agent: AgentMetrics | null = host?.agent ?? null;
+  const device = host?.integration?.device ?? null;
+  const hasPorts = device?.has_ports && device?.port_table?.length > 0;
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
+    ...(hasPorts ? [{ key: 'ports' as const, label: `Ports (${device.port_table.length})` }] : []),
     { key: 'syslog', label: 'Syslog' },
   ];
 
@@ -314,6 +348,125 @@ export default function HostDetailPage() {
             </div>
           )}
 
+          {/* Integration Device Metrics (UniFi, Proxmox, etc.) */}
+          {!agent && device && (
+            <div>
+              <h3 className="text-sm font-medium text-slate-300 mb-3">
+                Device Metrics
+                {device.type_label && (
+                  <Badge className="ml-2">{device.type_label}</Badge>
+                )}
+                {device.model && (
+                  <span className="text-xs text-slate-500 ml-2 font-normal">{device.model}</span>
+                )}
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {device.cpu_pct != null && (
+                  <MetricCard
+                    icon={Cpu}
+                    label="CPU"
+                    value={`${device.cpu_pct}%`}
+                    pct={device.cpu_pct}
+                    color="text-sky-400"
+                  />
+                )}
+                {device.mem_pct != null && (
+                  <MetricCard
+                    icon={MemoryStick}
+                    label="Memory"
+                    value={`${device.mem_pct}%`}
+                    pct={device.mem_pct}
+                    color="text-violet-400"
+                  />
+                )}
+                {device.uptime_s != null && device.uptime_s > 0 && (
+                  <MetricCard
+                    icon={Clock}
+                    label="Device Uptime"
+                    value={formatUptime(device.uptime_s)}
+                    color="text-emerald-400"
+                  />
+                )}
+                {(device.clients_wifi != null || device.clients_wired != null) && (
+                  <MetricCard
+                    icon={Users}
+                    label="Clients"
+                    value={String((device.clients_wifi ?? 0) + (device.clients_wired ?? 0))}
+                    sub={`WiFi: ${device.clients_wifi ?? 0} / Wired: ${device.clients_wired ?? 0}`}
+                    color="text-cyan-400"
+                  />
+                )}
+                {(device.rx_bytes != null || device.tx_bytes != null) && (
+                  <MetricCard
+                    icon={Network}
+                    label="Traffic"
+                    value={formatBytes(device.rx_bytes)}
+                    sub={`TX: ${formatBytes(device.tx_bytes)}`}
+                    color="text-orange-400"
+                  />
+                )}
+                {device.satisfaction != null && device.satisfaction >= 0 && (
+                  <MetricCard
+                    icon={Activity}
+                    label="Satisfaction"
+                    value={`${device.satisfaction}%`}
+                    pct={device.satisfaction}
+                    color="text-emerald-400"
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Port Summary (quick view on overview tab) */}
+          {hasPorts && (
+            <GlassCard className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                  <Cable size={14} className="text-sky-400" />
+                  Port Summary
+                </h3>
+                <button
+                  onClick={() => setActiveTab('ports')}
+                  className="text-xs text-sky-400 hover:text-sky-300 transition-colors"
+                >
+                  View all ports →
+                </button>
+              </div>
+              <div className="flex gap-1.5 flex-wrap">
+                {(device.port_table as PortInfo[]).map((port: PortInfo) => (
+                  <div
+                    key={port.idx}
+                    className={`w-8 h-8 rounded flex items-center justify-center text-[10px] font-mono border transition-colors ${
+                      !port.enable
+                        ? 'bg-white/[0.02] border-white/[0.04] text-slate-600'
+                        : port.up
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                          : 'bg-white/[0.04] border-white/[0.06] text-slate-500'
+                    }`}
+                    title={`Port ${port.idx}: ${port.up ? 'Up' : port.enable ? 'Down' : 'Disabled'}${port.speed_label ? ` (${port.speed_label})` : ''}${port.is_uplink ? ' [Uplink]' : ''}${port.poe_enable ? ` PoE: ${port.poe_power}W` : ''}`}
+                  >
+                    {port.idx}
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-4 mt-3 text-[10px] text-slate-500">
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded bg-emerald-500/30 border border-emerald-500/50" />
+                  Up ({(device.port_table as PortInfo[]).filter((p: PortInfo) => p.up).length})
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded bg-white/[0.04] border border-white/[0.08]" />
+                  Down ({(device.port_table as PortInfo[]).filter((p: PortInfo) => p.enable && !p.up).length})
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded bg-white/[0.02] border border-white/[0.04]" />
+                  Disabled ({(device.port_table as PortInfo[]).filter((p: PortInfo) => !p.enable).length})
+                </span>
+              </div>
+            </GlassCard>
+          )}
+
           {/* All Disks (from agent extra data) */}
           {agent?.extra?.disks && agent.extra.disks.length > 0 && (
             <GlassCard className="p-4">
@@ -372,34 +525,63 @@ export default function HostDetailPage() {
             </GlassCard>
           )}
 
-          {/* Integration Data */}
-          {host?.integration && (() => {
-            let data = host.integration.data;
-            if (typeof data === 'string') {
-              try { data = JSON.parse(data); } catch { /* keep as-is */ }
-            }
-            if (!data || typeof data !== 'object') return null;
-            const entries = Object.entries(data as Record<string, unknown>).filter(
-              ([, val]) => val != null && typeof val !== 'object'
-            );
-            if (!entries.length) return null;
-            return (
-              <GlassCard className="p-4">
-                <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
-                  <Wifi size={14} className="text-violet-400" />
-                  Integration: {host.integration.type} — {host.integration.config_name}
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
-                  {entries.map(([key, val]) => (
-                    <div key={key} className="flex justify-between">
-                      <span className="text-xs text-slate-500">{key.replace(/_/g, ' ')}</span>
-                      <span className="text-xs text-slate-300 font-mono truncate max-w-[60%]">{String(val)}</span>
+          {/* Integration Device Details */}
+          {host?.integration && (
+            <GlassCard className="p-4">
+              <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                <Wifi size={14} className="text-violet-400" />
+                Integration: {host.integration.type} — {host.integration.config_name}
+              </h3>
+              {device ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
+                  {device.ip && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-slate-500">IP</span>
+                      <span className="text-xs text-slate-300 font-mono">{device.ip}</span>
                     </div>
-                  ))}
+                  )}
+                  {device.mac && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-slate-500">MAC</span>
+                      <span className="text-xs text-slate-300 font-mono">{device.mac}</span>
+                    </div>
+                  )}
+                  {device.version && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-slate-500">Firmware</span>
+                      <span className="text-xs text-slate-300 font-mono">{device.version}</span>
+                    </div>
+                  )}
+                  {device.type_label && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-slate-500">Type</span>
+                      <span className="text-xs text-slate-300">{device.type_label}</span>
+                    </div>
+                  )}
                 </div>
-              </GlassCard>
-            );
-          })()}
+              ) : (() => {
+                let data = host.integration.data;
+                if (typeof data === 'string') {
+                  try { data = JSON.parse(data); } catch { /* keep as-is */ }
+                }
+                if (!data || typeof data !== 'object') return null;
+                const entries = Object.entries(data as Record<string, unknown>).filter(
+                  ([, val]) => val != null && typeof val !== 'object'
+                );
+                if (!entries.length) return null;
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
+                    {entries.map(([key, val]) => (
+                      <div key={key} className="flex justify-between">
+                        <span className="text-xs text-slate-500">{key.replace(/_/g, ' ')}</span>
+                        <span className="text-xs text-slate-300 font-mono truncate max-w-[60%]">{String(val)}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </GlassCard>
+          )}
 
           {/* Uptime stats */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -536,6 +718,10 @@ export default function HostDetailPage() {
         </div>
       )}
 
+      {activeTab === 'ports' && hasPorts && (
+        <PortsTab ports={device.port_table} clients={device.connected_clients ?? []} />
+      )}
+
       {activeTab === 'syslog' && (
         <HostSyslog hostId={hostId} />
       )}
@@ -552,6 +738,174 @@ export default function HostDetailPage() {
             toast('Host updated', 'success');
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/* ── Ports Tab ── */
+
+function formatRate(bytesPerSec: number | null | undefined): string {
+  if (bytesPerSec == null || bytesPerSec <= 0) return '—';
+  const bits = bytesPerSec * 8;
+  if (bits < 1000) return `${bits.toFixed(0)} bps`;
+  if (bits < 1_000_000) return `${(bits / 1000).toFixed(1)} Kbps`;
+  if (bits < 1_000_000_000) return `${(bits / 1_000_000).toFixed(1)} Mbps`;
+  return `${(bits / 1_000_000_000).toFixed(2)} Gbps`;
+}
+
+function PortsTab({ ports, clients }: { ports: PortInfo[]; clients: ConnectedClient[] }) {
+  // Group clients by switch port
+  const clientsByPort: Record<number, ConnectedClient[]> = {};
+  for (const c of clients) {
+    if (c.sw_port != null) {
+      if (!clientsByPort[c.sw_port]) clientsByPort[c.sw_port] = [];
+      clientsByPort[c.sw_port].push(c);
+    }
+  }
+
+  const portsUp = ports.filter(p => p.up).length;
+  const totalPoe = ports.filter(p => p.poe_enable && p.up).reduce((s, p) => s + p.poe_power, 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard icon={Cable} label="Ports Up" value={`${portsUp} / ${ports.length}`} color="text-emerald-400" />
+        <MetricCard icon={Users} label="Connected Clients" value={String(clients.length)} color="text-cyan-400" />
+        {totalPoe > 0 && (
+          <MetricCard icon={Zap} label="PoE Power" value={`${totalPoe.toFixed(1)}W`} color="text-amber-400" />
+        )}
+        <MetricCard
+          icon={ArrowUpDown}
+          label="Total Traffic"
+          value={formatRate(ports.reduce((s, p) => s + (p.rx_bytes_r || 0), 0))}
+          sub={`TX: ${formatRate(ports.reduce((s, p) => s + (p.tx_bytes_r || 0), 0))}`}
+          color="text-violet-400"
+        />
+      </div>
+
+      {/* Port table */}
+      <GlassCard>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/[0.06]">
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Port</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Speed</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">PoE</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">RX Rate</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">TX Rate</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">Clients</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ports.map((port) => {
+                const portClients = clientsByPort[port.idx] ?? [];
+                return (
+                  <tr key={port.idx} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${
+                          !port.enable ? 'bg-slate-600' : port.up ? 'bg-emerald-400' : 'bg-slate-500'
+                        }`} />
+                        <span className="text-slate-200 font-medium">{port.name}</span>
+                        {port.is_uplink && (
+                          <Badge variant="severity" severity="info">Uplink</Badge>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-medium ${
+                        !port.enable ? 'text-slate-600' : port.up ? 'text-emerald-400' : 'text-slate-500'
+                      }`}>
+                        {!port.enable ? 'Disabled' : port.up ? 'Up' : 'Down'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-slate-300 font-mono">
+                        {port.up && port.speed_label ? port.speed_label : '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {port.poe_enable ? (
+                        <span className="text-xs text-amber-400 flex items-center gap-1">
+                          <Zap size={10} />
+                          {port.poe_power > 0 ? `${port.poe_power}W` : 'On'}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-600">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-slate-300 font-mono">
+                        {port.up ? formatRate(port.rx_bytes_r) : '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-slate-300 font-mono">
+                        {port.up ? formatRate(port.tx_bytes_r) : '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {portClients.length > 0 ? (
+                        <span className="text-xs text-cyan-400">{portClients.length}</span>
+                      ) : (
+                        <span className="text-xs text-slate-600">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </GlassCard>
+
+      {/* Connected clients list */}
+      {clients.length > 0 && (
+        <GlassCard className="p-4">
+          <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+            <Users size={14} className="text-cyan-400" />
+            Connected Clients ({clients.length})
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/[0.06]">
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">Client</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">IP</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">Port</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">Type</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">VLAN</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">Traffic</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clients.map((c) => (
+                  <tr key={c.mac} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                    <td className="px-3 py-2">
+                      <p className="text-xs text-slate-200">{c.hostname}</p>
+                      <p className="text-[10px] text-slate-500 font-mono">{c.mac}</p>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-300 font-mono">{c.ip || '—'}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400">{c.sw_port ?? '—'}</td>
+                    <td className="px-3 py-2">
+                      <span className={`text-xs ${c.is_wireless ? 'text-violet-400' : 'text-cyan-400'}`}>
+                        {c.is_wireless ? `WiFi${c.ssid ? ` (${c.ssid})` : ''}` : 'Wired'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-400">{c.vlan || '—'}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400 font-mono">
+                      ↓{formatRate(c.rx_bytes_r)} ↑{formatRate(c.tx_bytes_r)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </GlassCard>
       )}
     </div>
   );

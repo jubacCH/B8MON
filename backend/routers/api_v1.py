@@ -74,6 +74,47 @@ async def require_admin(api_key: ApiKey = Depends(require_api_key)) -> ApiKey:
     return api_key
 
 
+# ── Integration device extraction ────────────────────────────────────────────
+
+
+def _extract_device_data(int_type: str, raw: dict, host: PingHost) -> dict | None:
+    """Extract device-specific data from an integration snapshot for the given host."""
+    ip = (host.hostname or "").lower().strip()
+    mac = (host.mac_address or "").lower().strip()
+
+    if int_type == "unifi":
+        # Match by IP or MAC in the devices list
+        for d in raw.get("devices", []):
+            d_ip = (d.get("ip") or "").lower().strip()
+            d_mac = (d.get("mac") or "").lower().strip()
+            if (ip and d_ip == ip) or (mac and d_mac == mac):
+                # Find clients connected to this device
+                connected_clients = []
+                for c in raw.get("clients", []):
+                    # Wireless clients connected to this AP
+                    if c.get("ap_mac", "").lower() == d_mac:
+                        connected_clients.append(c)
+                    # Wired clients connected to this switch
+                    elif (c.get("sw_mac") or "").lower() == d_mac:
+                        connected_clients.append(c)
+                return {
+                    **{k: v for k, v in d.items()},
+                    "connected_clients": connected_clients,
+                }
+        return None
+
+    if int_type == "proxmox":
+        # Match by hostname in VMs/containers
+        name_lower = (host.name or "").lower()
+        for vm in raw.get("vms", []) + raw.get("containers", []):
+            vm_name = (vm.get("name") or "").lower()
+            if vm_name == name_lower or vm_name == ip:
+                return vm
+        return None
+
+    return None
+
+
 # ── API Key Management ───────────────────────────────────────────────────────
 
 
@@ -293,13 +334,16 @@ async def get_host(
             )
             snap = snap_q.scalar_one_or_none()
             if snap and snap.data_json:
+                raw = json.loads(snap.data_json) if isinstance(snap.data_json, str) else snap.data_json
+                device_data = _extract_device_data(int_type, raw, host)
                 integration_data = {
                     "type": int_type,
                     "config_id": cfg.id,
                     "config_name": cfg.name,
                     "ok": snap.ok,
                     "timestamp": snap.timestamp.isoformat(),
-                    "data": json.loads(snap.data_json) if isinstance(snap.data_json, str) else snap.data_json,
+                    "data": device_data if device_data else raw,
+                    "device": device_data,
                 }
                 break
 
