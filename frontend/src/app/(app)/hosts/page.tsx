@@ -196,6 +196,7 @@ function HostsPageInner() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Host</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Type</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Source</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Latency</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Availability</th>
               </tr>
@@ -207,6 +208,7 @@ function HostsPageInner() {
                     <td className="px-4 py-3"><Skeleton className="h-5 w-40" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-20" /></td>
                   </tr>
@@ -243,6 +245,9 @@ function HostsPageInner() {
                   </td>
                   <td className="px-4 py-3">
                     <Badge>{host.check_type}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs text-slate-400">{host.source ?? 'manual'}</span>
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-300">
                     {formatLatency(host.latency_ms)}

@@ -179,6 +179,7 @@ async def api_status(db: AsyncSession = Depends(get_db)):
             "maintenance": host.maintenance or False,
             "enabled": host.enabled,
             "source": host.source or "manual",
+            "source_detail": host.source_detail,
             "online": lr.success if lr else None,
             "latency_ms": lr.latency_ms if lr else None,
             "uptime_h24": up.get("h24"),
