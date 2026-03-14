@@ -11,7 +11,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/lib/api';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Wrench, Clock } from 'lucide-react';
+import { Wrench, Clock, ShieldCheck, Bell } from 'lucide-react';
+import { timeAgo } from '@/lib/utils';
 
 interface MaintenanceHost {
   id: number;
@@ -105,7 +106,7 @@ export default function AlertsPage() {
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-200 truncate">{inc.title}</p>
-                    <p className="text-xs text-slate-500">{new Date(inc.created_at).toLocaleString()}</p>
+                    <p className="text-xs text-slate-500">{timeAgo(inc.created_at)}</p>
                   </div>
                   <Badge variant="severity" severity={inc.severity}>{inc.severity}</Badge>
                 </div>
@@ -113,8 +114,12 @@ export default function AlertsPage() {
             </Link>
           ))}
           {!isLoading && openIncidents.length === 0 && (
-            <GlassCard className="p-8">
-              <p className="text-center text-sm text-slate-500">No active alerts</p>
+            <GlassCard className="p-12">
+              <div className="flex flex-col items-center gap-3">
+                <ShieldCheck size={40} className="text-emerald-500/60" />
+                <p className="text-sm font-medium text-slate-300">All clear</p>
+                <p className="text-xs text-slate-500">No active alerts — everything is running smoothly.</p>
+              </div>
             </GlassCard>
           )}
         </div>
@@ -141,7 +146,7 @@ export default function AlertsPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-200 truncate">{inc.title}</p>
                     <p className="text-xs text-slate-500">
-                      {inc.rule} &middot; {new Date(inc.created_at).toLocaleString()}
+                      {inc.rule} &middot; {timeAgo(inc.created_at)}
                     </p>
                   </div>
                   <Badge variant="severity" severity={inc.severity}>{inc.severity}</Badge>
@@ -151,8 +156,12 @@ export default function AlertsPage() {
             </Link>
           ))}
           {!isLoading && (!incidents || incidents.length === 0) && (
-            <GlassCard className="p-8">
-              <p className="text-center text-sm text-slate-500">No incidents</p>
+            <GlassCard className="p-12">
+              <div className="flex flex-col items-center gap-3">
+                <Bell size={40} className="text-slate-600" />
+                <p className="text-sm font-medium text-slate-300">No incidents yet</p>
+                <p className="text-xs text-slate-500">Incidents from correlation rules will appear here.</p>
+              </div>
             </GlassCard>
           )}
         </div>
@@ -195,8 +204,12 @@ export default function AlertsPage() {
             </GlassCard>
           ))}
           {!maintLoading && (!maintHosts || maintHosts.length === 0) && (
-            <GlassCard className="p-8">
-              <p className="text-center text-sm text-slate-500">No hosts currently in maintenance mode</p>
+            <GlassCard className="p-12">
+              <div className="flex flex-col items-center gap-3">
+                <Wrench size={40} className="text-slate-600" />
+                <p className="text-sm font-medium text-slate-300">No maintenance windows</p>
+                <p className="text-xs text-slate-500">Hosts in maintenance mode will appear here.</p>
+              </div>
             </GlassCard>
           )}
         </div>

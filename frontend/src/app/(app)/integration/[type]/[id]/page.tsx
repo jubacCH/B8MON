@@ -23,6 +23,7 @@ import { HassDetail } from '@/components/integrations/HassDetail';
 import { GiteaDetail } from '@/components/integrations/GiteaDetail';
 import { UpsDetail } from '@/components/integrations/UpsDetail';
 import { RedfishDetail } from '@/components/integrations/RedfishDetail';
+import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -56,6 +57,7 @@ export default function IntegrationDetailPage() {
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: type.charAt(0).toUpperCase() + type.slice(1), href: `/integration/${type}` }, { label: snapshot?.entity_type ?? `#${id}` }]} />
       <PageHeader
         title={isLoading ? 'Loading...' : `${type.charAt(0).toUpperCase() + type.slice(1)} #${id}`}
         description={snapshot?.entity_type ?? type}

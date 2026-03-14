@@ -168,8 +168,16 @@ export default function SyslogPage() {
               ))}
               {!isLoading && (!filtered || filtered.length === 0) && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">
-                    No syslog messages found
+                  <td colSpan={4} className="px-4 py-16">
+                    <div className="flex flex-col items-center gap-3">
+                      <MessageSquare size={40} className="text-slate-600" />
+                      <p className="text-sm font-medium text-slate-300">No syslog messages</p>
+                      <p className="text-xs text-slate-500">
+                        {search || selectedSeverity !== undefined
+                          ? 'Try adjusting your search or severity filter.'
+                          : 'Configure a syslog source to start receiving messages.'}
+                      </p>
+                    </div>
                   </td>
                 </tr>
               )}

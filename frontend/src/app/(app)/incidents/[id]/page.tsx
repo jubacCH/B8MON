@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { get, post } from '@/lib/api';
 import { useToastStore } from '@/stores/toast';
 import type { Incident, IncidentEvent } from '@/types';
+import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
 import { ArrowLeft, CheckCircle, Eye } from 'lucide-react';
 import Link from 'next/link';
 
@@ -50,6 +51,7 @@ export default function IncidentDetailPage() {
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: 'Alerts', href: '/alerts' }, { label: data?.title ?? `Incident #${incidentId}` }]} />
       <PageHeader
         title={data?.title ?? `Incident #${incidentId}`}
         actions={

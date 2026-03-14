@@ -2,11 +2,13 @@
 
 import { useParams } from 'next/navigation';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { StatusDot } from '@/components/ui/StatusDot';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { CopyButton } from '@/components/ui/CopyButton';
 import { useHost, useHostHistory, useHosts } from '@/hooks/queries/useHosts';
 import { formatLatency, uptimeColor } from '@/lib/utils';
 import { EChart } from '@/components/charts/EChart';
@@ -197,9 +199,17 @@ export default function HostDetailPage() {
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: 'Hosts', href: '/hosts' }, { label: host?.name ?? `Host #${hostId}` }]} />
       <PageHeader
         title={isLoading ? 'Loading...' : (host?.name ?? 'Host')}
-        description={host?.hostname}
+        description={
+          host?.hostname ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="font-mono">{host.hostname}</span>
+              <CopyButton text={host.hostname} size={12} />
+            </span>
+          ) : undefined
+        }
         actions={
           <div className="flex items-center gap-2">
             <Link href="/hosts">

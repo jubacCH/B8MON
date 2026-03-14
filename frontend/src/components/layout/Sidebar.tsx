@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useThemeStore } from '@/stores/theme';
 import { useAuthStore } from '@/stores/auth';
+import { useDashboard } from '@/hooks/queries/useDashboard';
 import {
   LayoutDashboard, Server, AlertTriangle, Bell, FileText,
   Bot, Scan, Radio, ShieldCheck, KeyRound, ChevronDown,
@@ -75,18 +76,55 @@ export function Sidebar() {
   const [search, setSearch] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const { data: dashData } = useDashboard();
 
-  // Cmd+K shortcut
+  // Badge counts for nav items
+  const navBadges: Record<string, { count: number; color: string }> = {};
+  if (dashData) {
+    const offlineCount = dashData.offline_count ?? 0;
+    if (offlineCount > 0) navBadges['/hosts'] = { count: offlineCount, color: 'bg-red-500/20 text-red-400' };
+    const activeInc = dashData.active_incidents ?? 0;
+    if (activeInc > 0) navBadges['/alerts'] = { count: activeInc, color: 'bg-red-500/20 text-red-400' };
+  }
+
+  // Keyboard shortcuts: Cmd+K for search, g+KEY for navigation
   useEffect(() => {
+    let gPressed = false;
+    let gTimeout: ReturnType<typeof setTimeout>;
+
+    const shortcuts: Record<string, string> = {
+      d: '/', h: '/hosts', a: '/alerts', s: '/syslog',
+      r: '/rules', i: '/settings', t: '/system/status',
+    };
+
     const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         searchRef.current?.focus();
+        return;
+      }
+
+      if (isInput) return;
+
+      if (e.key === 'g' && !gPressed) {
+        gPressed = true;
+        clearTimeout(gTimeout);
+        gTimeout = setTimeout(() => { gPressed = false; }, 500);
+        return;
+      }
+
+      if (gPressed && shortcuts[e.key]) {
+        e.preventDefault();
+        router.push(shortcuts[e.key]);
+        gPressed = false;
       }
     };
     document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, []);
+    return () => { document.removeEventListener('keydown', handler); clearTimeout(gTimeout); };
+  }, [router]);
 
   const searchResults = search.trim()
     ? allSearchItems.filter((item) => item.label.toLowerCase().includes(search.toLowerCase()))
@@ -170,7 +208,7 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                'relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
                 isActive
                   ? 'bg-sky-500/10 text-sky-400'
                   : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200',
@@ -180,7 +218,15 @@ export function Sidebar() {
               {!sidebarCollapsed && (
                 <>
                   <span className="flex-1">{item.label}</span>
+                  {navBadges[item.href] && (
+                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${navBadges[item.href].color}`}>
+                      {navBadges[item.href].count}
+                    </span>
+                  )}
                 </>
+              )}
+              {sidebarCollapsed && navBadges[item.href] && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-400" />
               )}
             </Link>
           );
