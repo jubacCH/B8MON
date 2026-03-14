@@ -342,24 +342,48 @@ export default function HostDetailPage() {
       </GlassCard>
 
       {/* Check Detail */}
-      {host?.check_detail && Object.keys(host.check_detail).length > 1 && (
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <span className="text-xs text-slate-500 uppercase font-semibold">Checks:</span>
-          {Object.entries(host.check_detail).map(([check, ok]) => (
-            <span
-              key={check}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                ok
-                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+      {host && (() => {
+        const types = (host.check_type || 'icmp').split(',').map((t: string) => t.trim()).filter(Boolean);
+        const detail: Record<string, boolean> = host.check_detail || {};
+        // Merge: show all configured types, use detail for status if available
+        const checks = types.map((t: string) => {
+          const label = t === 'tcp' && host.port ? `tcp:${host.port}` : t;
+          const ok = label in detail ? detail[label] : (t in detail ? detail[t] : null);
+          return { type: t, label, ok };
+        });
+        if (checks.length <= 1 && !host.port_error) return null;
+        return (
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <span className="text-xs text-slate-500 uppercase font-semibold">Checks:</span>
+            {checks.map(({ type, label, ok }) => (
+              <span
+                key={label}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                  ok === null ? 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                  : ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                   : 'bg-red-500/10 text-red-400 border border-red-500/20'
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-400' : 'bg-red-400'}`} />
-              {check.toUpperCase()}
-            </span>
-          ))}
-        </div>
-      )}
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${ok === null ? 'bg-slate-400' : ok ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                {label.toUpperCase()}
+                {type !== 'icmp' && types.length > 1 && (
+                  <button
+                    onClick={async () => {
+                      const newTypes = types.filter((tt: string) => tt !== type).join(',') || 'icmp';
+                      await patch(`/api/v1/hosts/${host.id}`, { check_type: newTypes });
+                      qc.invalidateQueries({ queryKey: ['host', hostId] });
+                    }}
+                    className="ml-1 hover:text-white transition-colors"
+                    title={`Remove ${label.toUpperCase()} check`}
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-white/[0.06] mb-6">
