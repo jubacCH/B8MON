@@ -916,11 +916,16 @@ export default function HostDetailPage() {
                         {dp.service && (
                           <Badge>{dp.service}</Badge>
                         )}
-                        {dp.status === 'monitored' && (
-                          <span className="text-[10px] text-emerald-400 flex items-center gap-0.5">
-                            <Check size={10} /> monitored
-                          </span>
-                        )}
+                        {dp.status === 'monitored' && (() => {
+                          const detail = host?.check_detail as Record<string, boolean> | null;
+                          const key = `tcp:${dp.port}`;
+                          const ok = detail ? (detail[key] ?? detail['tcp'] ?? null) : null;
+                          return ok === false
+                            ? <span className="text-[10px] text-red-400 flex items-center gap-0.5"><X size={10} /> failed</span>
+                            : ok === true
+                            ? <span className="text-[10px] text-emerald-400 flex items-center gap-0.5"><Check size={10} /> ok</span>
+                            : <span className="text-[10px] text-slate-400 flex items-center gap-0.5"><Check size={10} /> monitored</span>;
+                        })()}
                         {dp.status === 'dismissed' && (
                           <span className="text-[10px] text-slate-500">dismissed</span>
                         )}
@@ -945,11 +950,15 @@ export default function HostDetailPage() {
                               {dp.ssl_expiry_days}d
                             </Badge>
                           )}
-                          {dp.ssl_status === 'monitored' && (
-                            <span className="text-[10px] text-emerald-400 flex items-center gap-0.5">
-                              <Shield size={10} /> SSL monitored
-                            </span>
-                          )}
+                          {dp.ssl_status === 'monitored' && (() => {
+                            const detail = host?.check_detail as Record<string, boolean> | null;
+                            const ok = detail ? (detail['https'] ?? null) : null;
+                            return ok === false
+                              ? <span className="text-[10px] text-red-400 flex items-center gap-0.5"><X size={10} /> HTTPS failed</span>
+                              : ok === true
+                              ? <span className="text-[10px] text-emerald-400 flex items-center gap-0.5"><Shield size={10} /> HTTPS ok</span>
+                              : <span className="text-[10px] text-slate-400 flex items-center gap-0.5"><Shield size={10} /> SSL monitored</span>;
+                          })()}
                         </div>
                       )}
 
