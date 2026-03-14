@@ -6,7 +6,7 @@ function getCsrfToken(): string {
   if (typeof document === 'undefined') return '';
   const match = document.cookie.match(/ng_csrf=([^;]+)/);
   if (!match) return '';
-  return decodeURIComponent(match[1]).split('.')[0] ?? '';
+  return decodeURIComponent(match[1]);
 }
 
 export class ApiError extends Error {
