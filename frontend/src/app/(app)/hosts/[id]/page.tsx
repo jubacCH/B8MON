@@ -526,7 +526,12 @@ export default function HostDetailPage() {
           {/* Agent Info */}
           {agent && (
             <GlassCard className="p-4">
-              <h3 className="text-sm font-medium text-slate-300 mb-3">Agent Info</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-slate-300">Agent Info</h3>
+                <Link href={`/agents/${agent.agent_id}`}>
+                  <Button variant="ghost" size="sm">Log Settings</Button>
+                </Link>
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-slate-400">Platform</span>
