@@ -49,6 +49,93 @@ body {
   font-family: var(--font-inter), system-ui, sans-serif;
 }
 
+/* ── Light mode: remap dark-first Tailwind utilities ── */
+[data-theme="light"] {
+  /* Invert the slate text scale: light→dark equivalents */
+  .text-slate-100 { color: #0F172A; }
+  .text-slate-200 { color: #1E293B; }
+  .text-slate-300 { color: #334155; }
+  .text-slate-400 { color: #475569; }
+  .text-slate-500 { color: #64748B; }
+  .text-slate-600 { color: #94A3B8; }
+  /* text-white intentionally NOT remapped — used on colored bg buttons/badges */
+
+  /* Placeholder text */
+  .placeholder\:text-slate-500::placeholder { color: #94A3B8; }
+  .placeholder\:text-slate-600::placeholder { color: #94A3B8; }
+
+  /* Semi-transparent white backgrounds → semi-transparent black */
+  .bg-white\/\[0\.02\] { background-color: rgba(0, 0, 0, 0.02); }
+  .bg-white\/\[0\.04\] { background-color: rgba(0, 0, 0, 0.03); }
+  .bg-white\/5,
+  .bg-white\/\[0\.05\] { background-color: rgba(0, 0, 0, 0.03); }
+  .bg-white\/\[0\.06\] { background-color: rgba(0, 0, 0, 0.04); }
+  .bg-white\/\[0\.08\] { background-color: rgba(0, 0, 0, 0.05); }
+  .bg-white\/\[0\.10\] { background-color: rgba(0, 0, 0, 0.06); }
+  .bg-white\/\[0\.14\] { background-color: rgba(0, 0, 0, 0.08); }
+
+  /* Hover states */
+  .hover\:bg-white\/\[0\.04\]:hover { background-color: rgba(0, 0, 0, 0.04); }
+  .hover\:bg-white\/5:hover,
+  .hover\:bg-white\/\[0\.05\]:hover { background-color: rgba(0, 0, 0, 0.04); }
+  .hover\:bg-white\/\[0\.06\]:hover { background-color: rgba(0, 0, 0, 0.05); }
+  .hover\:bg-white\/\[0\.08\]:hover { background-color: rgba(0, 0, 0, 0.06); }
+  .hover\:bg-white\/\[0\.10\]:hover { background-color: rgba(0, 0, 0, 0.07); }
+  .hover\:bg-white\/\[0\.14\]:hover { background-color: rgba(0, 0, 0, 0.09); }
+  .hover\:bg-white\/\[0\.30\]:hover { background-color: rgba(0, 0, 0, 0.08); }
+
+  /* Borders */
+  .border-white\/\[0\.06\] { border-color: rgba(0, 0, 0, 0.08); }
+  .border-white\/\[0\.08\] { border-color: rgba(0, 0, 0, 0.10); }
+  .border-white\/10,
+  .border-white\/\[0\.10\] { border-color: rgba(0, 0, 0, 0.10); }
+  .border-white\/\[0\.12\] { border-color: rgba(0, 0, 0, 0.12); }
+
+  /* Hover text */
+  .hover\:text-slate-200:hover { color: #1E293B; }
+  .hover\:text-slate-300:hover { color: #334155; }
+
+  /* Semantic status colors — darken slightly for light bg readability */
+  .text-emerald-400 { color: #059669; }
+  .text-red-400 { color: #DC2626; }
+  .text-amber-400 { color: #D97706; }
+  .text-sky-400 { color: #0284C7; }
+  .text-violet-400 { color: #7C3AED; }
+  .text-cyan-400 { color: #0891B2; }
+  .text-orange-400 { color: #EA580C; }
+  .text-indigo-400 { color: #4F46E5; }
+  .text-teal-400 { color: #0D9488; }
+  .text-green-400 { color: #16A34A; }
+  .text-yellow-400 { color: #CA8A04; }
+  .text-rose-400 { color: #E11D48; }
+  .text-blue-400 { color: #2563EB; }
+  .text-sky-300\/60 { color: rgba(2, 132, 199, 0.7); }
+
+  /* Gradient text stays vivid */
+  .from-sky-400 { --tw-gradient-from: #0284C7; }
+  .to-violet-400 { --tw-gradient-to: #7C3AED; }
+
+  /* Divider/separator borders */
+  .border-b.border-white\/\[0\.06\] { border-color: rgba(0, 0, 0, 0.08); }
+
+  /* Scrollbar for light mode */
+  ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.12);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.20);
+  }
+
+  /* Resize handle */
+  .react-resizable-handle::after {
+    border-right-color: rgba(0, 0, 0, 0.20);
+    border-bottom-color: rgba(0, 0, 0, 0.20);
+  }
+
+  /* Ring offset */
+  .focus\:ring-offset-1:focus { --tw-ring-offset-color: #F1F5F9; }
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -78,14 +165,21 @@ body {
     @apply backdrop-blur-2xl border shadow-2xl rounded-lg;
   }
   .ng-input {
-    @apply w-full px-3.5 py-2.5 text-sm rounded-lg bg-white/[0.05] border border-white/[0.10] text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 transition-all;
+    @apply w-full px-3.5 py-2.5 text-sm rounded-lg border focus:outline-none focus:ring-2 transition-all;
+    background: var(--ng-glass-bg);
+    border-color: var(--ng-glass-border);
+    color: var(--ng-text-primary);
     --tw-ring-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  .ng-input::placeholder {
+    color: var(--ng-text-muted);
   }
   .ng-input:focus {
     border-color: color-mix(in srgb, var(--accent) 60%, transparent);
   }
   .ng-label {
-    @apply block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider;
+    @apply block text-xs font-medium mb-1.5 uppercase tracking-wider;
+    color: var(--ng-text-secondary);
   }
 }
 
@@ -99,7 +193,8 @@ body {
 
 /* Enterprise table styles */
 table thead th {
-  @apply text-left text-xs font-semibold text-slate-400 uppercase tracking-wider;
+  @apply text-left text-xs font-semibold uppercase tracking-wider;
+  color: var(--ng-text-secondary);
 }
 table tbody tr {
   @apply transition-colors;
@@ -111,7 +206,8 @@ table tbody tr {
   background: rgba(0, 0, 0, 0.02);
 }
 table tbody td {
-  @apply text-sm text-slate-300;
+  @apply text-sm;
+  color: var(--ng-text-primary);
 }
 
 /* Stat card hover */
