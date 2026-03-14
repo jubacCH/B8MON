@@ -510,6 +510,15 @@ function AddHostModal({
   const [interval, setInterval] = useState('300');
   const [preset, setPreset] = useState('standard');
 
+  const { data: credData } = useQuery<{ credentials: { id: number; name: string; type: string }[] }>({
+    queryKey: ['credentials-list'],
+    queryFn: () => get('/api/credentials/list'),
+    enabled: open,
+  });
+  const snmpCreds = (credData?.credentials ?? []).filter((c) =>
+    c.type.toLowerCase().includes('snmp'),
+  );
+
   const createMut = useMutation({
     mutationFn: () =>
       post('/api/snmp/hosts', {
@@ -557,18 +566,25 @@ function AddHostModal({
           </select>
         </div>
 
-        {/* credential id */}
+        {/* credential select */}
         <div>
-          <label className="block text-xs font-medium text-slate-400 mb-1">Credential ID</label>
-          <input
-            type="number"
-            min={1}
-            placeholder="Credential ID"
+          <label className="block text-xs font-medium text-slate-400 mb-1">Credential</label>
+          <select
             value={credentialId}
             onChange={(e) => setCredentialId(e.target.value)}
-            className={inputCls}
+            className={`${inputCls} !bg-[#111621]`}
             required
-          />
+          >
+            <option value="" className="bg-[#111621] text-slate-200">Select a credential...</option>
+            {snmpCreds.map((c) => (
+              <option key={c.id} value={c.id} className="bg-[#111621] text-slate-200">
+                {c.name} ({c.type})
+              </option>
+            ))}
+          </select>
+          {snmpCreds.length === 0 && credData && (
+            <p className="text-[10px] text-amber-400 mt-1">No SNMP credentials found. Create one in Settings &gt; Credentials first.</p>
+          )}
         </div>
 
         {/* port + interval row */}

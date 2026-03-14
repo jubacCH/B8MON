@@ -536,11 +536,48 @@ export default function DashboardPage() {
       });
     }
 
+    // ── Alert Trends ──
+    w.push({
+      id: 'alert-trends',
+      title: 'Alert Trends',
+      defaultLayout: { x: 0, y: 17, w: 2, h: 3, minW: 1, minH: 2 },
+      render: () => (
+        <>
+          <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
+            <TrendingUp size={16} className="text-amber-400" /> Alert Trends (14d)
+          </h3>
+          {isLoading || !data?.incident_trend ? (
+            <Skeleton className="h-[180px] w-full" />
+          ) : data.incident_trend.every((d) => d.critical === 0 && d.warning === 0 && d.info === 0) ? (
+            <p className="text-sm text-emerald-400 flex items-center gap-2 py-4 justify-center">
+              No incidents in the last 14 days
+            </p>
+          ) : (
+            <EChart
+              height={180}
+              option={{
+                tooltip: { trigger: 'axis' },
+                legend: { show: false },
+                grid: { left: 40, right: 12, top: 8, bottom: 24 },
+                xAxis: { type: 'category', data: data.incident_trend.map((d) => d.date), axisLabel: { fontSize: 10 } },
+                yAxis: { type: 'value', minInterval: 1, axisLabel: { fontSize: 10 } },
+                series: [
+                  { name: 'Critical', type: 'bar', stack: 'total', data: data.incident_trend.map((d) => d.critical), color: '#F87171' },
+                  { name: 'Warning', type: 'bar', stack: 'total', data: data.incident_trend.map((d) => d.warning), color: '#FBBF24' },
+                  { name: 'Info', type: 'bar', stack: 'total', data: data.incident_trend.map((d) => d.info), color: '#38BDF8' },
+                ],
+              }}
+            />
+          )}
+        </>
+      ),
+    });
+
     // ── Live Syslog ──
     w.push({
       id: 'live-syslog',
       title: 'Live Syslog',
-      defaultLayout: { x: 0, y: 17, w: 3, h: 3, minW: 1, minH: 2 },
+      defaultLayout: { x: 2, y: 17, w: 1, h: 3, minW: 1, minH: 2 },
       render: () => <LiveSyslogWidget />,
     });
 

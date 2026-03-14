@@ -25,7 +25,7 @@ router = APIRouter()
 VALID_WIDGET_IDS = {
     "integrations", "syslog", "gravity", "offline", "hosts", "proxmox", "top10",
     "speedtest", "heatmap", "storage", "containers", "ups", "ssl", "alerts",
-    "uptime", "clock", "quickstats",
+    "uptime", "clock", "quickstats", "alert-trends",
 }
 DEFAULT_LAYOUT = [
     # Row 0 – Gravity Well + sidebar (6+6)
@@ -684,6 +684,41 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
+    # ── Incident trend (daily counts for 14 days) ──────────────────────────────
+    incident_trend = []
+    try:
+        from sqlalchemy import cast, Date
+        _TREND_DAYS = 14
+        trend_window = now - timedelta(days=_TREND_DAYS)
+        trend_rows = (await db.execute(
+            select(
+                cast(Incident.created_at, Date).label("day"),
+                Incident.severity,
+                func.count().label("cnt"),
+            )
+            .where(Incident.created_at >= trend_window)
+            .group_by(cast(Incident.created_at, Date), Incident.severity)
+        )).all()
+        trend_map: dict[str, dict] = {}
+        for row in trend_rows:
+            day_str = str(row.day)
+            if day_str not in trend_map:
+                trend_map[day_str] = {"critical": 0, "warning": 0, "info": 0}
+            sev = row.severity if row.severity in ("critical", "warning", "info") else "info"
+            trend_map[day_str][sev] += row.cnt
+        for i in range(_TREND_DAYS):
+            d = (now - timedelta(days=_TREND_DAYS - 1 - i)).date()
+            day_str = str(d)
+            counts = trend_map.get(day_str, {"critical": 0, "warning": 0, "info": 0})
+            incident_trend.append({
+                "date": d.strftime("%m/%d"),
+                "critical": counts["critical"],
+                "warning": counts["warning"],
+                "info": counts["info"],
+            })
+    except Exception:
+        pass
+
     # ── Uptime ranking ────────────────────────────────────────────────────────
     uptime_ranking = sorted(
         [{"host_id": s["host"].id, "name": s["host"].name, "uptime": s["uptime_pct"]}
@@ -947,6 +982,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         "ups_data": ups_data,
         "ssl_certs": ssl_certs,
         "recent_incidents": [_incident_dict(inc) for inc in recent_incidents],
+        "incident_trend": incident_trend,
         "uptime_ranking": uptime_ranking,
         "heatmap_data": heatmap_data,
         "heatmap_days": heatmap_days,

@@ -15,6 +15,7 @@ export interface DashboardData {
   ups_data: UpsData | null;
   ssl_certs: SslCert[];
   recent_incidents: RecentIncident[];
+  incident_trend: IncidentTrendDay[];
   heatmap_data: HeatmapHost[];
   heatmap_days: string[];
   layout: WidgetLayout[];
@@ -120,6 +121,13 @@ export interface RecentIncident {
   severity: string;
   status: string;
   created_at: string;
+}
+
+export interface IncidentTrendDay {
+  date: string;
+  critical: number;
+  warning: number;
+  info: number;
 }
 
 export interface HeatmapHost {
