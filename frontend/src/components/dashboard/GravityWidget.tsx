@@ -57,10 +57,10 @@ function orbitRadius(h: HostStat, index: number): number {
   }
   // Online hosts: spread across inner rings based on health
   const health = hostHealth(h);
-  // health 0 → 1.3, health 0.3 → 2.2
-  const base = 1.3 + health * 3.0;
-  // Add small per-host spread so they don't overlap
-  const spread = ((index * 7) % 13) / 13 * 0.4;
+  // health 0 → 1.4-1.9, health 0.3 → 2.3-2.8
+  const base = 1.4 + health * 3.0;
+  // More spread so healthy hosts don't cluster at same radius
+  const spread = ((index * 7) % 13) / 13 * 0.5;
   return base + spread;
 }
 
@@ -177,7 +177,7 @@ function HostNode({ host, radius, angle, inclination, speed }: HostNodeProps) {
       const x = Math.cos(t) * radius;
       const z = Math.sin(t) * radius;
       // Inclined orbit — gives 3D depth
-      const y = Math.sin(t + inclination) * radius * 0.15;
+      const y = Math.sin(t + inclination) * radius * 0.35;
       groupRef.current.position.set(x, y, z);
     }
     if (meshRef.current && isOffline) {
@@ -287,7 +287,8 @@ function Scene({ hosts }: { hosts: HostStat[] }) {
       const r = orbitRadius(h, i);
       const angle = i * golden; // Golden angle for even distribution
       // Each host gets a unique orbit inclination
-      const inclination = ((i * 2.39996) % (Math.PI * 2));
+      // Stronger, more varied inclinations for 3D depth
+      const inclination = ((i * 2.39996 + i * 0.7) % (Math.PI * 2));
       // Speed: outer orbits move slower (Kepler-like)
       const speed = 0.08 + (1 / (r * 0.6)) * 0.12;
       return { host: h, radius: r, angle, inclination, speed };
