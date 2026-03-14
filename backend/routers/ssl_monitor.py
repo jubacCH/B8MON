@@ -23,28 +23,45 @@ async def _get_ssl_info(hostname: str, port: int = 443) -> dict:
         cert_pem = await loop.run_in_executor(
             None, lambda: _ssl.get_server_certificate((hostname, port), timeout=5)
         )
-        # Get expiry date
+
+        # Full text dump for SANs, serial, signature algorithm
+        proc_text = await asyncio.create_subprocess_exec(
+            "openssl", "x509", "-noout", "-text",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        text_stdout, _ = await proc_text.communicate(input=cert_pem.encode())
+        cert_text = text_stdout.decode()
+
+        # Structured fields
         proc = await asyncio.create_subprocess_exec(
-            "openssl", "x509", "-noout", "-enddate", "-startdate", "-issuer", "-subject",
+            "openssl", "x509", "-noout", "-enddate", "-startdate",
+            "-issuer", "-subject", "-serial", "-fingerprint",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await proc.communicate(input=cert_pem.encode())
         lines = stdout.decode().strip().split("\n")
-        info = {}
+        info: dict = {}
         for line in lines:
-            if "=" in line:
-                key, _, val = line.partition("=")
-                key = key.strip().lower()
-                if key == "notafter":
-                    info["expiry"] = val.strip()
-                elif key == "notbefore":
-                    info["issued"] = val.strip()
-                elif key == "issuer":
-                    info["issuer"] = val.strip()
-                elif key == "subject":
-                    info["subject"] = val.strip()
+            if "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip().lower()
+            if key == "notafter":
+                info["expiry"] = val.strip()
+            elif key == "notbefore":
+                info["issued"] = val.strip()
+            elif key == "issuer":
+                info["issuer"] = val.strip()
+            elif key == "subject":
+                info["subject"] = val.strip()
+            elif key == "serial":
+                info["serial"] = val.strip()
+            elif "fingerprint" in key:
+                info["fingerprint"] = val.strip()
 
         # Parse expiry for days calculation
         if "expiry" in info:
@@ -58,18 +75,52 @@ async def _get_ssl_info(hostname: str, port: int = 443) -> dict:
             except Exception:
                 pass
 
-        # Extract CN from issuer/subject
+        # Extract CN and O from issuer/subject
         for field in ("issuer", "subject"):
             raw = info.get(field, "")
-            # Parse "CN = example.com" or "CN=example.com"
             for part in raw.split(","):
                 part = part.strip()
-                if part.upper().startswith("CN"):
+                upper = part.upper()
+                if upper.startswith("CN"):
                     _, _, cn = part.partition("=")
                     info[f"{field}_cn"] = cn.strip()
-                    break
+                elif upper.startswith("O ") or upper.startswith("O="):
+                    _, _, org = part.partition("=")
+                    info[f"{field}_o"] = org.strip()
+
+        # Extract SANs from cert text
+        sans = []
+        for line in cert_text.split("\n"):
+            line = line.strip()
+            if line.startswith("DNS:") or "DNS:" in line:
+                for part in line.split(","):
+                    part = part.strip()
+                    if part.startswith("DNS:"):
+                        sans.append(part[4:].strip())
+                    elif part.startswith("IP Address:"):
+                        sans.append(part[11:].strip())
+        info["sans"] = sans
+
+        # Extract signature algorithm
+        for line in cert_text.split("\n"):
+            line = line.strip()
+            if "Signature Algorithm:" in line:
+                info["signature_algorithm"] = line.split(":", 1)[1].strip()
+                break
+
+        # Extract key size
+        for line in cert_text.split("\n"):
+            line = line.strip()
+            if "Public-Key:" in line or "Public Key:" in line:
+                # e.g. "RSA Public-Key: (2048 bit)"
+                import re
+                m = re.search(r"\((\d+)\s*bit\)", line)
+                if m:
+                    info["key_size"] = int(m.group(1))
+                break
 
         info["ok"] = True
+        info["port"] = port
         return info
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -161,6 +212,32 @@ async def refresh_ssl(host_id: int, db: AsyncSession = Depends(get_db)):
         host.ssl_expiry_days = info["days"]
         await db.commit()
 
+    return JSONResponse(info)
+
+
+@router.get("/api/ssl/detail/{host_id}")
+async def ssl_detail(host_id: int, db: AsyncSession = Depends(get_db)):
+    """Fetch live detailed SSL certificate info for a host."""
+    host = await db.get(PingHost, host_id)
+    if not host:
+        return JSONResponse({"error": "Host not found"}, status_code=404)
+
+    hostname = (host.hostname or "").strip()
+    for prefix in ("https://", "http://"):
+        if hostname.startswith(prefix):
+            hostname = hostname[len(prefix):]
+    hostname = hostname.rstrip("/").split("/")[0]
+
+    port = host.port or 443
+    if ":" in hostname:
+        parts = hostname.rsplit(":", 1)
+        hostname = parts[0]
+        try:
+            port = int(parts[1])
+        except ValueError:
+            pass
+
+    info = await _get_ssl_info(hostname, port)
     return JSONResponse(info)
 
 
