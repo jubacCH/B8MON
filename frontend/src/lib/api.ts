@@ -29,7 +29,9 @@ export async function api<T = unknown>(
   const method = (options.method ?? 'GET').toUpperCase();
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
     headers['x-csrf-token'] = getCsrfToken();
-    if (options.body && typeof options.body === 'string') {
+    if (options.body instanceof URLSearchParams) {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    } else if (options.body && typeof options.body === 'string') {
       headers['Content-Type'] = 'application/json';
     }
   }
