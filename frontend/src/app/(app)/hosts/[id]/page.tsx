@@ -12,7 +12,7 @@ import { CopyButton } from '@/components/ui/CopyButton';
 import { useHost, useHostHistory, useHosts } from '@/hooks/queries/useHosts';
 import { formatLatency, uptimeColor } from '@/lib/utils';
 import { EChart } from '@/components/charts/EChart';
-import { ArrowLeft, RefreshCw, Cpu, MemoryStick, HardDrive, Clock, Activity, Network, Wifi, Pencil, Cable, Zap, Users, ArrowUpDown } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Cpu, MemoryStick, HardDrive, Clock, Activity, Network, Wifi, Pencil, Cable, Zap, Users, ArrowUpDown, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -212,6 +212,13 @@ export default function HostDetailPage() {
         }
         actions={
           <div className="flex items-center gap-2">
+            {agent && (
+              <Link href={`/agents/${agent.agent_id}`}>
+                <Button size="sm" className="accent-bg text-white hover:opacity-90">
+                  <FileText size={14} /> Log Settings
+                </Button>
+              </Link>
+            )}
             <Link href="/hosts">
               <Button variant="ghost" size="sm">
                 <ArrowLeft size={16} />
@@ -526,12 +533,7 @@ export default function HostDetailPage() {
           {/* Agent Info */}
           {agent && (
             <GlassCard className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-slate-300">Agent Info</h3>
-                <Link href={`/agents/${agent.agent_id}`}>
-                  <Button variant="ghost" size="sm">Log Settings</Button>
-                </Link>
-              </div>
+              <h3 className="text-sm font-medium text-slate-300 mb-3">Agent Info</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-slate-400">Platform</span>
