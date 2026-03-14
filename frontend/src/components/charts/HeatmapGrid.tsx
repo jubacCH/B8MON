@@ -9,7 +9,7 @@ interface HeatmapGridProps {
 }
 
 function cellColor(pct: number | null): string {
-  if (pct === null) return 'bg-slate-800/50';
+  if (pct === null) return 'bg-slate-500/20';
   if (pct >= 99.9) return 'bg-emerald-500/70';
   if (pct >= 95) return 'bg-amber-500/70';
   return 'bg-red-500/70';
