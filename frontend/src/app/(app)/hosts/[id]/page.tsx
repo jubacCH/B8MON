@@ -241,11 +241,13 @@ export default function HostDetailPage() {
       ? 'disabled' as const
       : host.maintenance
         ? 'maintenance' as const
-        : host.latest?.online === true
-          ? 'online' as const
-          : host.latest?.online === false
-            ? 'offline' as const
-            : 'unknown' as const;
+        : host.latest?.online === false
+          ? 'offline' as const
+          : host.latest?.online === true && host.port_error
+            ? 'error' as const
+            : host.latest?.online === true
+              ? 'online' as const
+              : 'unknown' as const;
 
   return (
     <div>
@@ -300,7 +302,7 @@ export default function HostDetailPage() {
           </div>
         ) : host ? (
           <div className="flex items-center gap-4">
-            <StatusDot status={hostStatus} pulse={hostStatus === 'offline'} className="w-4 h-4" />
+            <StatusDot status={hostStatus} pulse={hostStatus === 'offline' || hostStatus === 'error'} className="w-4 h-4" />
             <div className="flex-1">
               <p className="text-lg font-semibold text-slate-100">{host.name}</p>
               <p className="text-sm text-slate-400 font-mono">{host.hostname}</p>
@@ -338,6 +340,26 @@ export default function HostDetailPage() {
           <p className="text-slate-400">Host not found</p>
         )}
       </GlassCard>
+
+      {/* Check Detail */}
+      {host?.check_detail && Object.keys(host.check_detail).length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-xs text-slate-500 uppercase font-semibold">Checks:</span>
+          {Object.entries(host.check_detail).map(([check, ok]) => (
+            <span
+              key={check}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                ok
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                  : 'bg-red-500/10 text-red-400 border border-red-500/20'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-400' : 'bg-red-400'}`} />
+              {check.toUpperCase()}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-white/[0.06] mb-6">
@@ -983,7 +1005,10 @@ export default function HostDetailPage() {
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-slate-200 truncate">{inc.title}</p>
-                        <p className="text-xs text-slate-500">{inc.rule} &middot; {timeAgo(inc.created_at)}</p>
+                        {inc.summary && (
+                          <p className="text-xs text-slate-400 truncate mt-0.5">{inc.summary}</p>
+                        )}
+                        <p className="text-xs text-slate-500 mt-0.5">{inc.rule} &middot; {timeAgo(inc.created_at)}</p>
                       </div>
                       <Badge variant="severity" severity={inc.severity}>{inc.severity}</Badge>
                       <Badge>{inc.status}</Badge>

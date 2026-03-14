@@ -407,6 +407,8 @@ async def get_host(
         "ssl_expiry_days": host.ssl_expiry_days,
         "mac_address": host.mac_address,
         "parent_id": host.parent_id,
+        "port_error": host.port_error or False,
+        "check_detail": json.loads(host.check_detail) if host.check_detail else None,
         "created_at": host.created_at.isoformat() if host.created_at else None,
         "latest": {
             "online": lr.success if lr else None,
@@ -809,6 +811,24 @@ async def list_incidents(
     if search:
         q = q.where(Incident.title.ilike(f"%{search}%"))
     result = await db.execute(q)
+    incidents = result.scalars().all()
+
+    # Fetch latest non-system event summary per incident (explains the WHY)
+    incident_ids = [i.id for i in incidents]
+    summary_map: dict[int, str] = {}
+    if incident_ids:
+        # Get the most recent event with a meaningful event_type (not "acknowledged"/"resolved")
+        events_q = await db.execute(
+            select(IncidentEvent)
+            .where(
+                IncidentEvent.incident_id.in_(incident_ids),
+                IncidentEvent.event_type.notin_(["acknowledged", "resolved"]),
+            )
+            .order_by(IncidentEvent.timestamp.desc())
+        )
+        for ev in events_q.scalars().all():
+            if ev.incident_id not in summary_map:
+                summary_map[ev.incident_id] = ev.summary
 
     return [
         {
@@ -817,12 +837,13 @@ async def list_incidents(
             "title": i.title,
             "severity": i.severity,
             "status": i.status,
+            "summary": summary_map.get(i.id),
             "created_at": i.created_at.isoformat(),
             "updated_at": i.updated_at.isoformat(),
             "resolved_at": i.resolved_at.isoformat() if i.resolved_at else None,
             "acknowledged_by": i.acknowledged_by,
         }
-        for i in result.scalars().all()
+        for i in incidents
     ]
 
 

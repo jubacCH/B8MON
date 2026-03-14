@@ -177,36 +177,43 @@ async def run_ping_checks():
 
     async def _check_one(host):
         async with sem:
-            success, latency = await check_host(host)
-            return host, success, latency
+            online, port_error, latency, detail = await check_host(host)
+            return host, online, port_error, latency, detail
 
     results = await _asyncio.gather(*[_check_one(h) for h in active_hosts])
 
     # Batch-write all results in one transaction
+    import json as _json
     now = datetime.utcnow()
     async with AsyncSessionLocal() as db:
-        for host, success, latency in results:
+        for host, online, port_error, latency, detail in results:
             db.add(PingResult(
                 host_id=host.id,
                 timestamp=now,
-                success=success,
+                success=online,
                 latency_ms=latency,
             ))
 
+            # Update port_error flag and check detail on the host
+            host_obj = await db.get(PingHost, host.id)
+            if host_obj:
+                host_obj.port_error = port_error
+                host_obj.check_detail = _json.dumps(detail) if detail else None
+
             # Broadcast live update via WebSocket
             from services.websocket import broadcast_ping_update
-            _asyncio.create_task(broadcast_ping_update(host.id, host.name, success, latency))
+            _asyncio.create_task(broadcast_ping_update(host.id, host.name, online, latency))
 
             # Notify on state change
             prev = prev_success.get(host.id)
-            if prev is True and not success:
+            if prev is True and not online:
                 from notifications import notify
                 _asyncio.create_task(notify(
                     f"Host offline: {host.name}",
                     f"Host {host.hostname} is no longer reachable.",
                     "critical"
                 ))
-            elif prev is False and success:
+            elif prev is False and online:
                 from notifications import notify
                 _asyncio.create_task(notify(
                     f"Host back online: {host.name}",

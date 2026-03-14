@@ -54,6 +54,8 @@ class PingHost(Base):
     maintenance          = Column(Boolean, default=False)
     maintenance_until    = Column(DateTime, nullable=True)
     ssl_expiry_days      = Column(Integer, nullable=True)
+    port_error           = Column(Boolean, default=False)
+    check_detail         = Column(Text, nullable=True)
     source               = Column(String, default="manual")
     source_detail        = Column(String, nullable=True)
     mac_address          = Column(String, nullable=True)
@@ -122,6 +124,8 @@ async def init_db():
             ("source_detail",        "TEXT"),
             ("mac_address",          "TEXT"),
             ("parent_id",            "INTEGER REFERENCES ping_hosts(id)"),
+            ("port_error",           "BOOLEAN DEFAULT FALSE"),
+            ("check_detail",         "TEXT"),
         ]
         for col, definition in migrations:
             try:

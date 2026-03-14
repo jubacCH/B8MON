@@ -61,7 +61,7 @@ export default function DashboardPage() {
                   href={`/hosts/${h.host.id}`}
                   className="flex items-center gap-3 px-2 py-1.5 rounded-md hover:bg-white/[0.04] transition-colors"
                 >
-                  <StatusDot status={h.host.maintenance ? 'maintenance' : h.online === null ? 'unknown' : h.online ? 'online' : 'offline'} />
+                  <StatusDot status={h.host.maintenance ? 'maintenance' : h.online === null ? 'unknown' : h.online === false ? 'offline' : h.host.port_error ? 'error' : 'online'} />
                   <span className="flex-1 text-sm text-slate-200 truncate">{h.host.name}</span>
                   <span className="text-xs font-mono text-slate-500">
                     {formatLatency(h.latency)}
@@ -134,7 +134,12 @@ export default function DashboardPage() {
                   <Badge variant="severity" severity={inc.severity as 'critical' | 'warning' | 'info'}>
                     {inc.severity}
                   </Badge>
-                  <span className="flex-1 text-sm text-slate-200 truncate">{inc.title}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm text-slate-200 truncate block">{inc.title}</span>
+                    {inc.summary && (
+                      <span className="text-xs text-slate-400 truncate block">{inc.summary}</span>
+                    )}
+                  </div>
                   <Badge>{inc.status}</Badge>
                 </Link>
               ))}

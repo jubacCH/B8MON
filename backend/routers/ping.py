@@ -183,6 +183,8 @@ async def api_status(db: AsyncSession = Depends(get_db)):
             "source_detail": host.source_detail,
             "online": lr.success if lr else None,
             "latency_ms": lr.latency_ms if lr else None,
+            "port_error": host.port_error or False,
+            "check_detail": json.loads(host.check_detail) if host.check_detail else None,
             "uptime_h24": up.get("h24"),
             "uptime_d7": up.get("d7"),
             "uptime_d30": up.get("d30"),
@@ -195,8 +197,8 @@ async def test_ping(host_id: int, db: AsyncSession = Depends(get_db)):
     host = await db.get(PingHost, host_id)
     if not host:
         return {"success": False, "error": "Host not found"}
-    ok, latency = await check_host(host)
-    return {"success": ok, "latency_ms": latency}
+    ok, port_error, latency, detail = await check_host(host)
+    return {"success": ok, "port_error": port_error, "latency_ms": latency, "check_detail": detail}
 
 
 # ── HTML views ─────────────────────────────────────────────────────────────────
@@ -699,7 +701,10 @@ async def ping_check_now(host_id: int, db: AsyncSession = Depends(get_db)):
             success = (datetime.utcnow() - agent.last_seen).total_seconds() < 120
         latency = 0 if success else None
     else:
-        success, latency = await check_host(host)
+        import json as _json
+        success, port_err, latency, detail = await check_host(host)
+        host.port_error = port_err
+        host.check_detail = _json.dumps(detail) if detail else None
 
     db.add(PingResult(
         host_id=host.id,

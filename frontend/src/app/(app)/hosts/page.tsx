@@ -82,11 +82,30 @@ function SortHeader({ label, sortKey, currentKey, dir, onSort }: {
 }
 
 function statusOrder(h: HostStatus): number {
-  if (!h.enabled) return 4;
-  if (h.maintenance) return 3;
+  if (!h.enabled) return 5;
+  if (h.maintenance) return 4;
   if (h.online === false) return 0;
-  if (h.online === null) return 2;
+  if (h.online === null) return 3;
+  if (h.port_error) return 2;
   return 1;
+}
+
+function hostStatusKey(h: HostStatus): 'disabled' | 'maintenance' | 'unknown' | 'offline' | 'error' | 'online' {
+  if (!h.enabled) return 'disabled';
+  if (h.maintenance) return 'maintenance';
+  if (h.online === null) return 'unknown';
+  if (h.online === false) return 'offline';
+  if (h.port_error) return 'error';
+  return 'online';
+}
+
+function hostStatusLabel(h: HostStatus): string {
+  const key = hostStatusKey(h);
+  const labels: Record<string, string> = {
+    disabled: 'Disabled', maintenance: 'Maint.', unknown: '—',
+    offline: 'Offline', error: 'Port Error', online: 'Online',
+  };
+  return labels[key];
 }
 
 function HostsPageInner() {
@@ -127,8 +146,9 @@ function HostsPageInner() {
 
     if (statusFilter !== 'all') {
       result = result.filter((h) => {
-        if (statusFilter === 'online') return h.online === true && !h.maintenance;
+        if (statusFilter === 'online') return h.online === true && !h.maintenance && !h.port_error;
         if (statusFilter === 'offline') return h.online === false && !h.maintenance;
+        if (statusFilter === 'error') return h.online === true && h.port_error && !h.maintenance;
         if (statusFilter === 'maintenance') return h.maintenance;
         return true;
       });
@@ -254,8 +274,9 @@ function HostsPageInner() {
     }
   }
 
-  const onlineCount = hosts?.filter((h) => h.online === true && !h.maintenance).length ?? 0;
+  const onlineCount = hosts?.filter((h) => h.online === true && !h.maintenance && !h.port_error).length ?? 0;
   const offlineCount = hosts?.filter((h) => h.online === false && !h.maintenance).length ?? 0;
+  const errorCount = hosts?.filter((h) => h.online === true && h.port_error && !h.maintenance).length ?? 0;
   const maintCount = hosts?.filter((h) => h.maintenance).length ?? 0;
 
   return (
@@ -284,7 +305,7 @@ function HostsPageInner() {
             </Button>
             <ExportButton
               data={(filteredHosts ?? []).map((h) => ({
-                name: h.name, hostname: h.hostname, status: h.online ? 'online' : h.online === false ? 'offline' : 'unknown',
+                name: h.name, hostname: h.hostname, status: hostStatusKey(h),
                 check_type: h.check_type, source: h.source, latency_ms: h.latency_ms,
                 uptime_24h: h.uptime_h24, uptime_7d: h.uptime_d7, uptime_30d: h.uptime_d30,
               }))}
@@ -311,6 +332,7 @@ function HostsPageInner() {
           { key: 'all', label: `All (${hosts?.length ?? 0})` },
           { key: 'online', label: `Online (${onlineCount})`, color: 'text-emerald-400' },
           { key: 'offline', label: `Offline (${offlineCount})`, color: 'text-red-400' },
+          ...(errorCount > 0 ? [{ key: 'error', label: `Port Error (${errorCount})`, color: 'text-orange-400' }] : []),
           { key: 'maintenance', label: `Maintenance (${maintCount})`, color: 'text-amber-400' },
         ].map((f) => (
           <button
@@ -440,20 +462,19 @@ function HostsPageInner() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <StatusDot
-                        status={
-                          !host.enabled ? 'disabled' :
-                          host.maintenance ? 'maintenance' :
-                          host.online === null ? 'unknown' :
-                          host.online ? 'online' : 'offline'
-                        }
-                        pulse={host.online === false}
+                        status={hostStatusKey(host)}
+                        pulse={host.online === false || host.port_error}
                       />
-                      <span className="text-xs text-slate-400">
-                        {!host.enabled ? 'Disabled' :
-                         host.maintenance ? 'Maint.' :
-                         host.online === null ? '—' :
-                         host.online ? 'Online' : 'Offline'}
-                      </span>
+                      <div>
+                        <span className="text-xs text-slate-400 block">
+                          {hostStatusLabel(host)}
+                        </span>
+                        {host.port_error && host.check_detail && (
+                          <span className="text-[10px] text-red-400/80">
+                            {Object.entries(host.check_detail).filter(([, ok]) => !ok).map(([k]) => k.toUpperCase()).join(', ')} failed
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3">

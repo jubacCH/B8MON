@@ -125,17 +125,47 @@ async def _check_single(host: "PingHost", ct: str) -> tuple[bool, float | None]:
     return await ping_host(host.hostname)
 
 
-async def check_host(host: "PingHost") -> tuple[bool, float | None]:
-    """Run all selected check types in parallel. Online only if ALL succeed."""
+async def check_host(host: "PingHost") -> tuple[bool, bool, float | None, dict]:
+    """Run all check types in parallel.
+
+    Returns (online, port_error, latency_ms, check_detail):
+      - online: True if ICMP succeeds (or no ICMP configured and any check passes)
+      - port_error: True if host is online but a port/http/https check failed
+      - latency_ms: ICMP latency preferred, else first available
+      - check_detail: per-check results dict, e.g. {"icmp": true, "https": false}
+    """
     types = [t.strip() for t in (host.check_type or "icmp").split(",") if t.strip()]
     results: list[tuple[bool, float | None]] = await asyncio.gather(
         *[_check_single(host, ct) for ct in types]
     )
-    all_ok = all(r[0] for r in results)
+
+    # Build per-check detail
+    detail: dict = {}
+    for ct, (ok, lat) in zip(types, results):
+        label = ct
+        if ct == "tcp" and host.port:
+            label = f"tcp:{host.port}"
+        detail[label] = ok
+
+    # Determine online status from ICMP only
+    icmp_types = [i for i, t in enumerate(types) if t == "icmp"]
+    service_types = [i for i, t in enumerate(types) if t != "icmp"]
+
+    if icmp_types:
+        online = all(results[i][0] for i in icmp_types)
+    else:
+        # No ICMP configured — use all checks for online status
+        online = any(r[0] for r in results)
+
+    # Port error: host is online but a non-ICMP check failed
+    port_error = False
+    if online and service_types:
+        port_error = any(not results[i][0] for i in service_types)
+
+    # Latency: prefer ICMP
     primary: float | None = None
-    if "icmp" in types:
-        idx = types.index("icmp")
-        primary = results[idx][1]
+    if icmp_types:
+        primary = results[icmp_types[0]][1]
     if primary is None:
         primary = next((r[1] for r in results if r[1] is not None), None)
-    return all_ok, primary
+    return online, port_error, primary, detail

@@ -35,6 +35,8 @@ export interface HostStatus {
   check_type: string;
   enabled: boolean;
   maintenance: boolean;
+  port_error: boolean;
+  check_detail: Record<string, boolean> | null;
   source: string;
   uptime_h24: number | null;
   uptime_d7: number | null;
@@ -42,7 +44,9 @@ export interface HostStatus {
 }
 
 export interface HostDetail extends PingHost {
-  latest: { success: boolean; latency_ms: number | null; timestamp: string } | null;
+  latest: { online: boolean; latency_ms: number | null; timestamp: string } | null;
+  port_error: boolean;
+  check_detail: Record<string, boolean> | null;
   uptime: { h24: number; d7: number; d30: number };
   heatmap: HeatmapDay[];
 }
@@ -124,6 +128,7 @@ export interface Incident {
   title: string;
   severity: 'critical' | 'warning' | 'info';
   status: 'open' | 'acknowledged' | 'resolved';
+  summary: string | null;
   created_at: string;
   updated_at: string;
   resolved_at: string | null;

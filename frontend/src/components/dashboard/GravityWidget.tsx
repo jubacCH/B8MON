@@ -33,6 +33,7 @@ function hostColor(h: HostStat): string {
   if (h.host.maintenance) return '#FBBF24';
   if (h.online === false) return '#F87171';
   if (h.online === null) return '#64748B';
+  if (h.host.port_error) return '#FB923C'; // orange for port errors
   const health = hostHealth(h);
   if (health >= 0.5) return '#F87171';
   if (health >= 0.2) return '#FBBF24';

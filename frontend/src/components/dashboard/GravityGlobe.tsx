@@ -20,6 +20,7 @@ function spiralPosition(index: number, total: number): [number, number, number] 
 function hostColor(host: HostStat): string {
   if (host.host.maintenance) return '#FBBF24';
   if (host.online === false) return '#F87171';
+  if (host.host.port_error) return '#FB923C';
   return '#34D399';
 }
 
@@ -157,6 +158,9 @@ function HostNode({ host, position }: HostNodeProps) {
             )}
             {host.online === false && (
               <span className="ml-2 text-red-400">offline</span>
+            )}
+            {host.online !== false && host.host.port_error && (
+              <span className="ml-2 text-orange-400">port error</span>
             )}
             {host.host.maintenance && (
               <span className="ml-2 text-amber-400">maintenance</span>

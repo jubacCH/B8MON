@@ -27,7 +27,7 @@ export interface DashboardData {
 }
 
 export interface HostStat {
-  host: { id: number; name: string; hostname: string; source: string; check_type: string; maintenance: boolean };
+  host: { id: number; name: string; hostname: string; source: string; check_type: string; maintenance: boolean; port_error: boolean };
   online: boolean | null;
   latency: number | null;
   sparkline: number[];
@@ -120,6 +120,7 @@ export interface RecentIncident {
   title: string;
   severity: string;
   status: string;
+  summary: string | null;
   created_at: string;
 }
 

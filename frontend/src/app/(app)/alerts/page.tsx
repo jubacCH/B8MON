@@ -117,7 +117,10 @@ export default function AlertsPage() {
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-200 truncate">{inc.title}</p>
-                    <p className="text-xs text-slate-500">{timeAgo(inc.created_at)}</p>
+                    {inc.summary && (
+                      <p className="text-xs text-slate-400 truncate mt-0.5">{inc.summary}</p>
+                    )}
+                    <p className="text-xs text-slate-500 mt-0.5">{timeAgo(inc.created_at)}</p>
                   </div>
                   <Badge variant="severity" severity={inc.severity}>{inc.severity}</Badge>
                 </div>
@@ -215,7 +218,10 @@ export default function AlertsPage() {
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-200 truncate">{inc.title}</p>
-                        <p className="text-xs text-slate-500">
+                        {inc.summary && (
+                          <p className="text-xs text-slate-400 truncate mt-0.5">{inc.summary}</p>
+                        )}
+                        <p className="text-xs text-slate-500 mt-0.5">
                           {inc.rule} &middot; {timeAgo(inc.created_at)}
                         </p>
                       </div>

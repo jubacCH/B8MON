@@ -456,7 +456,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         pass
 
     # Active incidents
-    from models.incident import Incident
+    from models.incident import Incident, IncidentEvent
     active_incidents = (await db.execute(
         select(Incident)
         .where(Incident.status.in_(["open", "acknowledged"]))
@@ -675,12 +675,27 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
 
     # ── Recent incidents (for alerts widget) ──────────────────────────────────
     recent_incidents = []
+    incident_summary_map: dict[int, str] = {}
     try:
         recent_incidents = (await db.execute(
             select(Incident)
             .order_by(Incident.created_at.desc())
             .limit(10)
         )).scalars().all()
+        # Fetch latest meaningful event summary per incident
+        if recent_incidents:
+            inc_ids = [inc.id for inc in recent_incidents]
+            ev_rows = (await db.execute(
+                select(IncidentEvent)
+                .where(
+                    IncidentEvent.incident_id.in_(inc_ids),
+                    IncidentEvent.event_type.notin_(["acknowledged", "resolved"]),
+                )
+                .order_by(IncidentEvent.timestamp.desc())
+            )).scalars().all()
+            for ev in ev_rows:
+                if ev.incident_id not in incident_summary_map:
+                    incident_summary_map[ev.incident_id] = ev.summary
     except Exception:
         pass
 
@@ -927,7 +942,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
     def _host_dict(h):
         return {"id": h.id, "name": h.name, "hostname": h.hostname,
                 "source": getattr(h, "source", ""), "check_type": getattr(h, "check_type", ""),
-                "maintenance": h.maintenance}
+                "maintenance": h.maintenance, "port_error": getattr(h, "port_error", False) or False}
 
     def _stat_dict(s):
         return {
@@ -944,6 +959,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         return {
             "id": inc.id, "title": inc.title, "severity": inc.severity,
             "status": inc.status, "created_at": str(inc.created_at),
+            "summary": incident_summary_map.get(inc.id),
         }
 
     for ih in integration_health:
