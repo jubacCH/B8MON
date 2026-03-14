@@ -1,29 +1,21 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, Html } from '@react-three/drei';
+import { useRouter } from 'next/navigation';
+import * as THREE from 'three';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { StatusDot } from '@/components/ui/StatusDot';
 import Link from 'next/link';
 import type { HostStat } from '@/hooks/queries/useDashboard';
 
-function useIsMobile() {
-  const [mobile, setMobile] = useState(false);
-  useEffect(() => {
-    const check = () => setMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-  return mobile;
-}
-
-/* ── Health score per host ── */
+/* ── Health scoring ── */
 
 function hostHealth(h: HostStat): number {
   if (h.host.maintenance) return 0.5;
   if (h.online === false) return 1.0;
   if (h.online === null) return 0.8;
-  // Use latency + uptime as health proxy
   let score = 0;
   if (h.latency != null) {
     if (h.latency > 200) score += 0.3;
@@ -47,59 +39,271 @@ function hostColor(h: HostStat): string {
   return '#34D399';
 }
 
-function hostGlow(h: HostStat): string {
-  if (h.online === false) return 'rgba(248,113,113,0.6)';
-  if (h.host.maintenance) return 'rgba(251,191,36,0.3)';
-  return 'rgba(52,211,153,0.3)';
+/* ── Orbit radius from health: healthy=close, offline=far ── */
+
+function orbitRadius(h: HostStat): number {
+  const health = hostHealth(h);
+  // Earth radius is 1.0
+  // Healthy (0) → 1.6, degraded → further, offline (1.0) → 4.5
+  if (h.online === false) return 4.0 + Math.random() * 1.0;
+  return 1.6 + health * 2.8;
 }
 
-/* ── Orbital layout ── */
+/* ── Earth component ── */
 
-interface PlacedHost {
+function Earth() {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const glowRef = useRef<THREE.Mesh>(null);
+
+  useFrame((_state, delta) => {
+    if (meshRef.current) meshRef.current.rotation.y += delta * 0.05;
+  });
+
+  // Procedural earth-like material
+  const earthMaterial = useMemo(() => {
+    return new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#1a4a7a'),
+      emissive: new THREE.Color('#0a2a4a'),
+      emissiveIntensity: 0.3,
+      roughness: 0.8,
+      metalness: 0.1,
+    });
+  }, []);
+
+  return (
+    <group>
+      {/* Earth sphere */}
+      <mesh ref={meshRef} material={earthMaterial}>
+        <sphereGeometry args={[1, 48, 48]} />
+      </mesh>
+      {/* Atmosphere glow */}
+      <mesh ref={glowRef}>
+        <sphereGeometry args={[1.08, 48, 48]} />
+        <meshBasicMaterial
+          color="#38BDF8"
+          transparent
+          opacity={0.08}
+          side={THREE.BackSide}
+        />
+      </mesh>
+      {/* Outer atmosphere halo */}
+      <mesh>
+        <sphereGeometry args={[1.2, 32, 32]} />
+        <meshBasicMaterial
+          color="#0ea5e9"
+          transparent
+          opacity={0.03}
+          side={THREE.BackSide}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+/* ── Orbit ring guides ── */
+
+function OrbitRings({ radii }: { radii: number[] }) {
+  return (
+    <>
+      {radii.map((r, i) => (
+        <mesh key={i} rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[r - 0.005, r + 0.005, 128]} />
+          <meshBasicMaterial
+            color="#ffffff"
+            transparent
+            opacity={0.04}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
+/* ── Host node in 3D ── */
+
+interface HostNodeProps {
   host: HostStat;
-  x: number;
-  y: number;
-  ring: number;
-  health: number;
-  color: string;
+  radius: number;
+  angle: number;
+  tilt: number;
+  speed: number;
 }
 
-function layoutHosts(hosts: HostStat[], cx: number, cy: number, maxRadius: number): PlacedHost[] {
-  // Sort by health: healthiest first (inner ring)
-  const sorted = [...hosts].sort((a, b) => hostHealth(a) - hostHealth(b));
+function HostNode({ host, radius, angle, tilt, speed }: HostNodeProps) {
+  const groupRef = useRef<THREE.Group>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
+  const [hovered, setHovered] = useState(false);
+  const router = useRouter();
+  const isOffline = host.online === false && !host.host.maintenance;
+  const color = hostColor(host);
+  const startAngle = useRef(angle);
 
-  const ringCount = Math.max(2, Math.ceil(Math.sqrt(hosts.length / 6)));
-  const ringGap = maxRadius / (ringCount + 0.5);
-  const minRing = ringGap * 1.2;
-
-  const result: PlacedHost[] = [];
-  let idx = 0;
-
-  for (let ring = 0; ring < ringCount && idx < sorted.length; ring++) {
-    const radius = minRing + ring * ringGap;
-    const circumference = 2 * Math.PI * radius;
-    const dotSize = 12;
-    const maxOnRing = Math.max(4, Math.floor(circumference / (dotSize + 8)));
-    const countOnRing = Math.min(maxOnRing, sorted.length - idx);
-    const angleStep = (2 * Math.PI) / countOnRing;
-    const angleOffset = ring * 0.4; // Stagger rings
-
-    for (let i = 0; i < countOnRing; i++) {
-      const h = sorted[idx];
-      const angle = angleOffset + i * angleStep;
-      result.push({
-        host: h,
-        x: cx + Math.cos(angle) * radius,
-        y: cy + Math.sin(angle) * radius,
-        ring,
-        health: hostHealth(h),
-        color: hostColor(h),
-      });
-      idx++;
+  useFrame(({ clock }) => {
+    if (groupRef.current) {
+      const t = startAngle.current + clock.getElapsedTime() * speed;
+      const x = Math.cos(t) * radius;
+      const z = Math.sin(t) * radius;
+      const y = Math.sin(t * 0.7) * tilt;
+      groupRef.current.position.set(x, y, z);
     }
-  }
+    if (meshRef.current && isOffline) {
+      const s = 1 + Math.sin(clock.getElapsedTime() * 3) * 0.25;
+      meshRef.current.scale.setScalar(s);
+    }
+  });
 
-  return result;
+  const handleClick = useCallback(() => {
+    router.push(`/hosts/${host.host.id}`);
+  }, [router, host.host.id]);
+
+  const nodeSize = isOffline ? 0.12 : 0.1;
+
+  return (
+    <group ref={groupRef}>
+      {/* Core sphere */}
+      <mesh
+        ref={meshRef}
+        onClick={handleClick}
+        onPointerOver={() => { setHovered(true); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+      >
+        <sphereGeometry args={[nodeSize, 16, 16]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={hovered ? 2.0 : 0.8}
+          transparent
+          opacity={0.95}
+        />
+      </mesh>
+      {/* Glow shell */}
+      <mesh>
+        <sphereGeometry args={[nodeSize * 2.5, 12, 12]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={hovered ? 0.2 : isOffline ? 0.12 : 0.06}
+          depthWrite={false}
+        />
+      </mesh>
+      {/* Tooltip on hover */}
+      {hovered && (
+        <Html distanceFactor={6} style={{ pointerEvents: 'none' }}>
+          <div className="rounded-md bg-[#0B0E14]/95 border border-white/[0.08] px-3 py-2 text-xs text-white whitespace-nowrap backdrop-blur-sm shadow-xl">
+            <p className="font-medium text-slate-200">{host.host.name}</p>
+            <p className="text-[10px] text-slate-500 font-mono">{host.host.hostname}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`text-[10px] ${isOffline ? 'text-red-400' : host.host.maintenance ? 'text-amber-400' : 'text-emerald-400'}`}>
+                {host.online === null ? 'Unknown' : host.online ? 'Online' : 'Offline'}
+              </span>
+              {host.latency != null && (
+                <span className="text-[10px] font-mono text-slate-400">{host.latency.toFixed(0)}ms</span>
+              )}
+              {host.uptime_stats?.h24 != null && (
+                <span className="text-[10px] font-mono text-slate-400">{host.uptime_stats.h24.toFixed(1)}%</span>
+              )}
+            </div>
+          </div>
+        </Html>
+      )}
+    </group>
+  );
+}
+
+/* ── Star particles ── */
+
+function Stars({ count = 300 }: { count?: number }) {
+  const ref = useRef<THREE.Points>(null);
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    const arr = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const r = 8 + Math.random() * 4;
+      arr[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      arr[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      arr[i * 3 + 2] = r * Math.cos(phi);
+    }
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+    return geo;
+  }, [count]);
+
+  useFrame((_state, delta) => {
+    if (ref.current) ref.current.rotation.y += delta * 0.008;
+  });
+
+  return (
+    <points ref={ref} geometry={geometry}>
+      <pointsMaterial size={0.03} color="#94A3B8" transparent opacity={0.5} sizeAttenuation depthWrite={false} />
+    </points>
+  );
+}
+
+/* ── Scene ── */
+
+interface SceneProps {
+  hosts: HostStat[];
+}
+
+function Scene({ hosts }: SceneProps) {
+  // Compute orbital params per host
+  const hostOrbits = useMemo(() => {
+    const sorted = [...hosts].sort((a, b) => hostHealth(a) - hostHealth(b));
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    return sorted.map((h, i) => {
+      const r = orbitRadius(h);
+      const angle = i * golden;
+      const tilt = 0.15 + Math.random() * 0.4;
+      // Slower orbit for far-away hosts
+      const speed = 0.15 + (1 - hostHealth(h)) * 0.2;
+      return { host: h, radius: r, angle, tilt, speed };
+    });
+  }, [hosts]);
+
+  // Unique orbit ring radii (rounded to avoid too many rings)
+  const ringRadii = useMemo(() => {
+    const set = new Set<number>();
+    set.add(1.6);
+    set.add(2.5);
+    set.add(3.5);
+    set.add(4.5);
+    return Array.from(set);
+  }, []);
+
+  return (
+    <>
+      <ambientLight intensity={0.25} />
+      <pointLight position={[5, 3, 5]} intensity={0.9} color="#ffffff" />
+      <pointLight position={[-3, -2, -4]} intensity={0.2} color="#38BDF8" />
+
+      <Stars />
+      <Earth />
+      <OrbitRings radii={ringRadii} />
+
+      {hostOrbits.map((o) => (
+        <HostNode
+          key={o.host.host.id}
+          host={o.host}
+          radius={o.radius}
+          angle={o.angle}
+          tilt={o.tilt}
+          speed={o.speed}
+        />
+      ))}
+
+      <OrbitControls
+        enablePan={false}
+        minDistance={3}
+        maxDistance={12}
+        autoRotate
+        autoRotateSpeed={0.15}
+        enableDamping
+        dampingFactor={0.05}
+      />
+    </>
+  );
 }
 
 /* ── Mobile fallback ── */
@@ -132,31 +336,6 @@ function MobileGrid({ hosts }: { hosts: HostStat[] }) {
   );
 }
 
-/* ── Tooltip ── */
-
-function Tooltip({ host, x, y }: { host: HostStat; x: number; y: number }) {
-  return (
-    <div
-      className="absolute z-20 pointer-events-none bg-[#0B0E14]/95 border border-white/[0.08] rounded-lg px-3 py-2 shadow-xl"
-      style={{ left: x + 16, top: y - 10 }}
-    >
-      <p className="text-xs font-medium text-slate-200">{host.host.name}</p>
-      <p className="text-[10px] text-slate-500 font-mono">{host.host.hostname}</p>
-      <div className="flex items-center gap-3 mt-1">
-        <span className="text-[10px] text-slate-400">
-          {host.online === null ? 'Unknown' : host.online ? 'Online' : 'Offline'}
-        </span>
-        {host.latency != null && (
-          <span className="text-[10px] font-mono text-slate-400">{host.latency.toFixed(0)}ms</span>
-        )}
-        {host.uptime_stats?.h24 != null && (
-          <span className="text-[10px] font-mono text-slate-400">{host.uptime_stats.h24.toFixed(1)}%</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /* ── Main Widget ── */
 
 export interface GravityWidgetProps {
@@ -164,43 +343,22 @@ export interface GravityWidgetProps {
 }
 
 export function GravityWidget({ hosts }: GravityWidgetProps) {
-  const isMobile = useIsMobile();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 600, height: 360 });
-  const [hovered, setHovered] = useState<{ host: HostStat; x: number; y: number } | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      setDimensions({ width, height: Math.max(height, 300) });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
   }, []);
 
   const onlineCount = hosts.filter((h) => h.online === true && !h.host.maintenance).length;
   const offlineCount = hosts.filter((h) => h.online === false && !h.host.maintenance).length;
   const maintCount = hosts.filter((h) => h.host.maintenance).length;
 
-  const cx = dimensions.width / 2;
-  const cy = dimensions.height / 2;
-  const maxRadius = Math.min(cx, cy) - 24;
-
-  const placed = useMemo(
-    () => layoutHosts(hosts, cx, cy, maxRadius),
-    [hosts, cx, cy, maxRadius],
-  );
-
-  // Concentric guide rings
-  const ringCount = Math.max(2, Math.ceil(Math.sqrt(hosts.length / 6)));
-  const ringGap = maxRadius / (ringCount + 0.5);
-  const guideRings = Array.from({ length: ringCount }, (_, i) => ringGap * 1.2 + i * ringGap);
-
   return (
-    <GlassCard className="relative overflow-hidden" style={{ minHeight: isMobile ? 200 : 360 }}>
-      {/* HUD counters */}
+    <GlassCard className="relative overflow-hidden" style={{ minHeight: isMobile ? 200 : 420 }}>
+      {/* HUD overlay */}
       <div className="absolute top-3 left-3 z-10 flex items-center gap-3">
         <span className="flex items-center gap-1.5 text-xs">
           <StatusDot status="online" />
@@ -219,120 +377,23 @@ export function GravityWidget({ hosts }: GravityWidgetProps) {
         <span className="text-xs text-slate-500">{hosts.length} total</span>
       </div>
 
-      {/* Legend */}
       <div className="absolute top-3 right-3 z-10 flex gap-3 text-[10px] text-slate-500">
-        <span>Inner = healthy</span>
-        <span>Outer = degraded</span>
+        <span>Close orbit = healthy</span>
+        <span>Far orbit = degraded</span>
       </div>
 
       {isMobile ? (
         <MobileGrid hosts={hosts} />
       ) : (
-        <div ref={containerRef} className="w-full" style={{ minHeight: 360 }}>
-          <svg
-            width={dimensions.width}
-            height={dimensions.height}
-            className="w-full"
-            viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
+        <div style={{ height: 420 }}>
+          <Canvas
+            camera={{ position: [0, 2.5, 6], fov: 50 }}
+            style={{ background: 'transparent' }}
+            gl={{ alpha: true, antialias: true }}
+            dpr={[1, 2]}
           >
-            <defs>
-              {/* Glow filter */}
-              <filter id="glow">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-              {/* Radial gradient background */}
-              <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="rgba(56,189,248,0.03)" />
-                <stop offset="100%" stopColor="rgba(0,0,0,0)" />
-              </radialGradient>
-            </defs>
-
-            {/* Background glow */}
-            <circle cx={cx} cy={cy} r={maxRadius} fill="url(#bgGrad)" />
-
-            {/* Guide rings */}
-            {guideRings.map((r, i) => (
-              <circle
-                key={i}
-                cx={cx}
-                cy={cy}
-                r={r}
-                fill="none"
-                stroke="rgba(255,255,255,0.03)"
-                strokeWidth={1}
-                strokeDasharray="4 6"
-              />
-            ))}
-
-            {/* Center dot */}
-            <circle cx={cx} cy={cy} r={3} fill="rgba(56,189,248,0.4)" />
-            <circle cx={cx} cy={cy} r={1.5} fill="#38BDF8" />
-
-            {/* Host dots */}
-            {placed.map((p) => (
-              <Link key={p.host.host.id} href={`/hosts/${p.host.host.id}`}>
-                <g
-                  onMouseEnter={(e) => setHovered({ host: p.host, x: e.clientX - (containerRef.current?.getBoundingClientRect().left ?? 0), y: e.clientY - (containerRef.current?.getBoundingClientRect().top ?? 0) })}
-                  onMouseLeave={() => setHovered(null)}
-                  className="cursor-pointer"
-                >
-                  {/* Glow */}
-                  <circle
-                    cx={p.x}
-                    cy={p.y}
-                    r={8}
-                    fill={hostGlow(p.host)}
-                    opacity={p.host.online === false ? 0.8 : 0.4}
-                    filter="url(#glow)"
-                  />
-                  {/* Dot */}
-                  <circle
-                    cx={p.x}
-                    cy={p.y}
-                    r={5}
-                    fill={p.color}
-                    stroke="rgba(255,255,255,0.1)"
-                    strokeWidth={0.5}
-                    className="transition-all duration-300 hover:r-[7]"
-                  />
-                  {/* Pulse for offline */}
-                  {p.host.online === false && (
-                    <circle
-                      cx={p.x}
-                      cy={p.y}
-                      r={5}
-                      fill="none"
-                      stroke={p.color}
-                      strokeWidth={1}
-                      opacity={0.5}
-                    >
-                      <animate
-                        attributeName="r"
-                        values="5;12;5"
-                        dur="2s"
-                        repeatCount="indefinite"
-                      />
-                      <animate
-                        attributeName="opacity"
-                        values="0.5;0;0.5"
-                        dur="2s"
-                        repeatCount="indefinite"
-                      />
-                    </circle>
-                  )}
-                </g>
-              </Link>
-            ))}
-          </svg>
-
-          {/* Tooltip */}
-          {hovered && (
-            <Tooltip host={hovered.host} x={hovered.x} y={hovered.y} />
-          )}
+            <Scene hosts={hosts} />
+          </Canvas>
         </div>
       )}
     </GlassCard>
