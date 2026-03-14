@@ -32,7 +32,8 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${inter.variable} ${jetbrains.variable} font-sans antialiased bg-[#0B0E14] text-slate-100`}
+        className={`${inter.variable} ${jetbrains.variable} font-sans antialiased text-slate-100`}
+        style={{ backgroundColor: 'var(--ng-bg)' }}
       >
         <Providers>{children}</Providers>
       </body>

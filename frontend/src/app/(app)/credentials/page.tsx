@@ -89,7 +89,7 @@ const inputCls =
   'w-full rounded-md border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/40 transition-colors';
 
 const selectCls =
-  'w-full rounded-md border border-white/[0.08] bg-[#111621] px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/40 transition-colors [&>option]:bg-[#111621] [&>option]:text-slate-200';
+  'w-full rounded-md border border-white/[0.08] bg-[var(--ng-surface)] px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/40 transition-colors [&>option]:text-slate-200';
 
 /* ---------- Component ---------- */
 

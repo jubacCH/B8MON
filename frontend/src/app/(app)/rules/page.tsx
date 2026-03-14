@@ -52,7 +52,7 @@ const inputClass =
   'w-full rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/30';
 const labelClass = 'block text-xs font-medium text-slate-400 mb-1';
 const selectClass =
-  'w-full rounded-md border border-white/10 bg-[#111621] px-3 py-2 text-sm text-slate-200 focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/30 [&>option]:bg-[#111621] [&>option]:text-slate-200';
+  'w-full rounded-md border border-white/10 bg-[var(--ng-surface)] px-3 py-2 text-sm text-slate-200 focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/30 [&>option]:text-slate-200';
 
 interface RuleFormState {
   name: string;

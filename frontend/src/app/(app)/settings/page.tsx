@@ -475,7 +475,7 @@ export default function SettingsPage() {
                   <select
                     value={timezone}
                     onChange={(e) => setTimezone(e.target.value)}
-                    className="w-full max-w-sm px-3 py-1.5 rounded-md bg-[#111621] border border-white/[0.06] text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 transition-colors [&>option]:bg-[#111621] [&>option]:text-slate-200"
+                    className="w-full max-w-sm px-3 py-1.5 rounded-md bg-[var(--ng-surface)] border border-white/[0.06] text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 transition-colors [&>option]:text-slate-200"
                   >
                     {TIMEZONES.map((tz) => (
                       <option key={tz} value={tz}>{tz}</option>
@@ -1070,13 +1070,13 @@ export default function SettingsPage() {
             <div>
               <label className="ng-label">Role</label>
               <select
-                className="w-full max-w-sm rounded-md border border-white/[0.08] bg-[#111621] px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 transition-colors"
+                className="w-full max-w-sm rounded-md border border-white/[0.08] bg-[var(--ng-surface)] px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 transition-colors"
                 value={newKeyRole}
                 onChange={(e) => setNewKeyRole(e.target.value as 'readonly' | 'editor' | 'admin')}
               >
-                <option value="readonly" className="bg-[#111621] text-slate-200">Read-only</option>
-                <option value="editor" className="bg-[#111621] text-slate-200">Editor</option>
-                <option value="admin" className="bg-[#111621] text-slate-200">Admin</option>
+                <option value="readonly" className="text-slate-200">Read-only</option>
+                <option value="editor" className="text-slate-200">Editor</option>
+                <option value="admin" className="text-slate-200">Admin</option>
               </select>
             </div>
             <div className="flex justify-end gap-2 pt-2">

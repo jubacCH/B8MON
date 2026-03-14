@@ -32,7 +32,8 @@ export function ToastContainer() {
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg border bg-[#111621] backdrop-blur-xl shadow-xl ${styles[t.type]}`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg border backdrop-blur-xl shadow-xl ${styles[t.type]}`}
+              style={{ background: 'var(--ng-surface)' }}
             >
               <Icon size={18} />
               <span className="text-sm text-slate-200">{t.message}</span>

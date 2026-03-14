@@ -217,7 +217,7 @@ function HostNode({ host, radius, angle, inclination, speed }: HostNodeProps) {
       {/* Tooltip on hover */}
       {hovered && (
         <Html distanceFactor={8} style={{ pointerEvents: 'none' }}>
-          <div className="rounded-md bg-[#0B0E14]/95 border border-white/[0.08] px-3 py-2 text-xs text-white whitespace-nowrap backdrop-blur-sm shadow-xl">
+          <div className="rounded-md border px-3 py-2 text-xs text-white whitespace-nowrap backdrop-blur-sm shadow-xl" style={{ background: 'var(--ng-surface)', borderColor: 'var(--ng-glass-border)' }}>
             <p className="font-medium text-slate-200">{host.host.name}</p>
             <p className="text-[10px] text-slate-500 font-mono">{host.host.hostname}</p>
             <div className="flex items-center gap-2 mt-1">

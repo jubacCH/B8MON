@@ -39,7 +39,8 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             exit={{ opacity: 0 }}
           >
             <motion.div
-              className="relative w-full max-w-lg rounded-xl bg-[#111621] border border-white/[0.08] shadow-2xl"
+              className="relative w-full max-w-lg rounded-xl border shadow-2xl"
+              style={{ background: 'var(--ng-surface)', borderColor: 'var(--ng-glass-border-elevated)' }}
               initial={{ y: 20, scale: 0.97 }}
               animate={{ y: 0, scale: 1 }}
               exit={{ y: 20, scale: 0.97 }}

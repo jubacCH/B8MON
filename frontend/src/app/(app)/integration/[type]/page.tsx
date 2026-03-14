@@ -34,7 +34,7 @@ interface FieldsResponse {
   fields: ConfigField[];
 }
 
-const selectClass = 'w-full px-3 py-2 text-sm bg-[#111621] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-sky-500/50 [&>option]:bg-[#111621] [&>option]:text-slate-200';
+const selectClass = 'w-full px-3 py-2 text-sm bg-[var(--ng-surface)] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-sky-500/50 [&>option]:text-slate-200';
 const inputClass = 'w-full px-3 py-2 text-sm bg-white/[0.06] border border-white/[0.08] rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50';
 
 export default function IntegrationListPage() {
