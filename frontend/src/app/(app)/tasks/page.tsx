@@ -8,10 +8,10 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToastStore } from '@/stores/toast';
-import { get, patch } from '@/lib/api';
+import { get, patch, post } from '@/lib/api';
 import { timeAgo } from '@/lib/utils';
 import {
-  Check, X, Lock, Shield, Cable, CheckCircle, ExternalLink,
+  Check, X, Lock, Shield, Cable, CheckCircle, ExternalLink, RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -77,6 +77,16 @@ export default function TasksPage() {
     onError: () => toast.show('Action failed', 'error'),
   });
 
+  const scanAllMut = useMutation({
+    mutationFn: () => post('/api/tasks/scan-all'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['nav-counts'] });
+      toast.show('Port scan completed for all hosts', 'success');
+    },
+    onError: () => toast.show('Scan failed', 'error'),
+  });
+
   const bulkAction = async (items: { hostId: number; portId: number }[], action: string) => {
     for (const item of items) {
       await patch(`/hosts/api/${item.hostId}/discovered-ports/${item.portId}`, { action });
@@ -98,9 +108,21 @@ export default function TasksPage() {
       <PageHeader
         title="Tasks"
         description="Items requiring admin attention"
-        actions={totalPending > 0 ? (
-          <span className="text-xs text-amber-400 font-mono">{totalPending} pending</span>
-        ) : undefined}
+        actions={
+          <div className="flex items-center gap-3">
+            {totalPending > 0 && (
+              <span className="text-xs text-amber-400 font-mono">{totalPending} pending</span>
+            )}
+            <Button
+              size="sm"
+              onClick={() => scanAllMut.mutate()}
+              disabled={scanAllMut.isPending}
+            >
+              <RefreshCw size={14} className={scanAllMut.isPending ? 'animate-spin' : ''} />
+              {scanAllMut.isPending ? 'Scanning...' : 'Scan All Hosts'}
+            </Button>
+          </div>
+        }
       />
 
       {/* Summary cards */}

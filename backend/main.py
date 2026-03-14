@@ -81,6 +81,14 @@ async def nav_counts_api():
     return counts
 
 
+@app.post("/api/tasks/scan-all")
+async def scan_all_hosts():
+    """Trigger port discovery on all enabled hosts."""
+    from services.port_discovery import run_port_discovery
+    await run_port_discovery()
+    return {"ok": True}
+
+
 @app.get("/health")
 async def health():
     from sqlalchemy import text as sa_text
