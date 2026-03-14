@@ -2,6 +2,8 @@
 
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Badge } from '@/components/ui/Badge';
+import { EChart } from '@/components/charts/EChart';
+import { Download, Upload, Gauge } from 'lucide-react';
 import Link from 'next/link';
 
 interface UnifiPort {
@@ -36,8 +38,17 @@ interface UnifiDevice {
   port_table?: UnifiPort[];
 }
 
+interface SpeedtestResult {
+  timestamp: string;
+  download_mbps: number;
+  upload_mbps: number;
+  latency_ms: number;
+}
+
 interface UnifiData {
   devices: UnifiDevice[];
+  speedtest?: SpeedtestResult[];
+  speedtest_latest?: SpeedtestResult | null;
 }
 
 function barColor(pct: number): string {
@@ -90,6 +101,95 @@ export function UnifiDetail({ data }: { data: UnifiData }) {
         <StatCard label="Wired Clients" value={totalWired} />
         <StatCard label="Total Clients" value={totalWifi + totalWired} />
       </div>
+
+      {/* Speedtest */}
+      {data.speedtest_latest && (
+        <div>
+          <h3 className="text-sm font-medium text-slate-300 mb-3">Gateway Speedtest</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <GlassCard className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Download size={14} className="text-emerald-400" />
+                <span className="text-xs text-slate-500 uppercase tracking-wider">Download</span>
+              </div>
+              <p className="text-2xl font-bold text-emerald-400">
+                {data.speedtest_latest.download_mbps.toFixed(1)}
+                <span className="text-sm font-normal text-slate-500 ml-1">Mbps</span>
+              </p>
+            </GlassCard>
+            <GlassCard className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Upload size={14} className="text-sky-400" />
+                <span className="text-xs text-slate-500 uppercase tracking-wider">Upload</span>
+              </div>
+              <p className="text-2xl font-bold text-sky-400">
+                {data.speedtest_latest.upload_mbps.toFixed(1)}
+                <span className="text-sm font-normal text-slate-500 ml-1">Mbps</span>
+              </p>
+            </GlassCard>
+            <GlassCard className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Gauge size={14} className="text-amber-400" />
+                <span className="text-xs text-slate-500 uppercase tracking-wider">Latency</span>
+              </div>
+              <p className="text-2xl font-bold text-amber-400">
+                {data.speedtest_latest.latency_ms}
+                <span className="text-sm font-normal text-slate-500 ml-1">ms</span>
+              </p>
+            </GlassCard>
+          </div>
+          {data.speedtest && data.speedtest.length > 1 && (
+            <GlassCard className="p-4">
+              <EChart
+                height={220}
+                option={{
+                  tooltip: { trigger: 'axis' },
+                  legend: { data: ['Download', 'Upload', 'Latency'] },
+                  xAxis: {
+                    type: 'category',
+                    data: [...data.speedtest].reverse().map((s) => s.timestamp),
+                  },
+                  yAxis: [
+                    { type: 'value', name: 'Mbps', axisLabel: { formatter: '{value}' } },
+                    { type: 'value', name: 'ms', axisLabel: { formatter: '{value}' } },
+                  ],
+                  series: [
+                    {
+                      name: 'Download',
+                      type: 'line',
+                      data: [...data.speedtest].reverse().map((s) => s.download_mbps),
+                      color: '#34D399',
+                      smooth: true,
+                      areaStyle: { opacity: 0.08 },
+                    },
+                    {
+                      name: 'Upload',
+                      type: 'line',
+                      data: [...data.speedtest].reverse().map((s) => s.upload_mbps),
+                      color: '#38BDF8',
+                      smooth: true,
+                      areaStyle: { opacity: 0.08 },
+                    },
+                    {
+                      name: 'Latency',
+                      type: 'line',
+                      yAxisIndex: 1,
+                      data: [...data.speedtest].reverse().map((s) => s.latency_ms),
+                      color: '#FBBF24',
+                      smooth: true,
+                    },
+                  ],
+                }}
+              />
+              {data.speedtest_latest.timestamp && (
+                <p className="text-[10px] text-slate-500 mt-2 text-right">
+                  Last test: {data.speedtest_latest.timestamp}
+                </p>
+              )}
+            </GlassCard>
+          )}
+        </div>
+      )}
 
       {/* Device cards */}
       {devices.length > 0 && (
