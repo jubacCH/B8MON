@@ -355,7 +355,7 @@ export default function HostDetailPage() {
         return (
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <span className="text-xs text-slate-500 uppercase font-semibold">Checks:</span>
-            {checks.map(({ type, label, ok }) => (
+            {checks.map(({ type, label, ok }: { type: string; label: string; ok: boolean | null }) => (
               <span
                 key={label}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
