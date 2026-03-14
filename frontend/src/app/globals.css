@@ -46,20 +46,38 @@ body {
     @apply bg-white/[0.06] backdrop-blur-2xl border border-white/[0.08] shadow-2xl rounded-lg;
   }
   .ng-input {
-    @apply w-full px-3 py-2 text-sm rounded-md bg-white/[0.04] border border-white/[0.06] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 transition-all;
+    @apply w-full px-3.5 py-2.5 text-sm rounded-lg bg-white/[0.05] border border-white/[0.10] text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 transition-all;
     --tw-ring-color: color-mix(in srgb, var(--accent) 50%, transparent);
-    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  .ng-input:focus {
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  }
+  .ng-label {
+    @apply block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider;
   }
 }
 
 /* Accent color overrides — driven by theme store */
 .nav-active {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
 .accent-text { color: var(--accent); }
 .accent-bg { background: var(--accent); }
-.accent-ring:focus { --tw-ring-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+
+/* Enterprise table styles */
+table thead th {
+  @apply text-left text-xs font-semibold text-slate-400 uppercase tracking-wider;
+}
+table tbody tr {
+  @apply transition-colors;
+}
+table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+table tbody td {
+  @apply text-sm text-slate-300;
+}
 
 /* Glow pulse animation */
 @keyframes glow-pulse {

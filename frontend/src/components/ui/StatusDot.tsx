@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 interface StatusDotProps {
   status: 'online' | 'offline' | 'maintenance' | 'unknown' | 'disabled';
   pulse?: boolean;
+  size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
 
@@ -24,11 +25,18 @@ const glowColors: Record<StatusDotProps['status'], string> = {
   disabled: '',
 };
 
-export function StatusDot({ status, pulse, className }: StatusDotProps) {
+const sizeClasses = {
+  sm: 'w-2 h-2',
+  md: 'w-3 h-3',
+  lg: 'w-3.5 h-3.5',
+};
+
+export function StatusDot({ status, pulse, size = 'md', className }: StatusDotProps) {
   return (
     <span
       className={cn(
-        'inline-block w-2.5 h-2.5 rounded-full',
+        'inline-block rounded-full shrink-0',
+        sizeClasses[size],
         dotColors[status],
         pulse && status === 'offline' && 'animate-pulse',
         pulse && glowColors[status] && `shadow-[0_0_6px_2px] ${glowColors[status]}`,

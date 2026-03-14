@@ -45,7 +45,7 @@ export default function DashboardPage() {
       defaultLayout: { x: 0, y: 0, w: 1, h: 4, minW: 1, minH: 2 },
       render: () => (
         <>
-          <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+          <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
             <Server size={16} className="text-sky-400" /> Hosts
           </h3>
           {isLoading ? (
@@ -80,7 +80,7 @@ export default function DashboardPage() {
       defaultLayout: { x: 1, y: 0, w: 1, h: 4, minW: 1, minH: 2 },
       render: () => (
         <>
-          <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+          <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
             <Zap size={16} className="text-violet-400" /> Integrations
           </h3>
           {isLoading ? (
@@ -115,7 +115,7 @@ export default function DashboardPage() {
       defaultLayout: { x: 2, y: 0, w: 1, h: 4, minW: 1, minH: 2 },
       render: () => (
         <>
-          <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+          <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
             <ShieldAlert size={16} className="text-red-400" /> Recent Incidents
           </h3>
           {isLoading ? (
@@ -154,7 +154,7 @@ export default function DashboardPage() {
       defaultLayout: { x: 0, y: 4, w: 2, h: 3, minW: 1, minH: 2 },
       render: () => (
         <>
-          <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+          <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
             <ArrowUpDown size={16} className="text-sky-400" /> Syslog Rate (24h)
             {data?.syslog_stats && (
               <span className="ml-auto text-xs text-slate-500 font-mono">
@@ -194,7 +194,7 @@ export default function DashboardPage() {
         defaultLayout: { x: 2, y: 4, w: 1, h: 3, minW: 1, minH: 2 },
         render: () => (
           <>
-            <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
               <AlertTriangle size={16} className="text-amber-400" /> Anomalies
               {anomalyCount > 0 && (
                 <span className="ml-auto text-xs font-mono text-amber-400">{anomalyCount}</span>
@@ -243,7 +243,7 @@ export default function DashboardPage() {
       defaultLayout: { x: 0, y: 7, w: 3, h: 3, minW: 2, minH: 2 },
       render: () => (
         <>
-          <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+          <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
             <Activity size={16} className="text-sky-400" /> 30-Day Availability
           </h3>
           {isLoading ? (
@@ -264,7 +264,7 @@ export default function DashboardPage() {
       defaultLayout: { x: 0, y: 10, w: 1, h: 3, minW: 1, minH: 2 },
       render: () => (
         <>
-          <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+          <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
             <Trophy size={16} className="text-amber-400" /> Uptime Ranking
           </h3>
           {isLoading ? (
@@ -303,7 +303,7 @@ export default function DashboardPage() {
       defaultLayout: { x: 1, y: 10, w: 1, h: 3, minW: 1, minH: 2 },
       render: () => (
         <>
-          <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+          <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
             <Timer size={16} className="text-rose-400" /> Highest Latency
           </h3>
           {isLoading ? (
@@ -340,7 +340,7 @@ export default function DashboardPage() {
         defaultLayout: { x: 2, y: 10, w: 1, h: 3, minW: 1, minH: 2 },
         render: () => (
           <>
-            <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
               <HardDrive size={16} className="text-sky-400" /> Storage
             </h3>
             <div className="space-y-3 max-h-[260px] overflow-y-auto">
@@ -388,7 +388,7 @@ export default function DashboardPage() {
         defaultLayout: { x: 0, y: 13, w: 1, h: 2, minW: 1, minH: 2 },
         render: () => (
           <>
-            <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
               <Wifi size={16} className="text-blue-400" /> Speedtest
             </h3>
             <div className="grid grid-cols-3 gap-3 text-center">
@@ -422,7 +422,7 @@ export default function DashboardPage() {
         defaultLayout: { x: 1, y: 13, w: 1, h: 2, minW: 1, minH: 2 },
         render: () => (
           <>
-            <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
               <BatteryCharging size={16} className={data!.ups_data!.on_battery ? 'text-amber-400' : 'text-emerald-400'} />
               UPS
               {data!.ups_data!.on_battery && (
@@ -468,7 +468,7 @@ export default function DashboardPage() {
         defaultLayout: { x: 2, y: 13, w: 1, h: 2, minW: 1, minH: 2 },
         render: () => (
           <>
-            <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
               <Lock size={16} className="text-emerald-400" /> SSL Certificates
             </h3>
             <div className="space-y-1 max-h-[160px] overflow-y-auto">
@@ -505,7 +505,7 @@ export default function DashboardPage() {
         defaultLayout: { x: 0, y: 15, w: 1, h: 2, minW: 1, minH: 2 },
         render: () => (
           <>
-            <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
               <Container size={16} className="text-cyan-400" /> Containers
             </h3>
             <div className="grid grid-cols-2 gap-3 text-center mb-3">
@@ -597,16 +597,16 @@ function StatCard({
   suffix?: string;
 }) {
   return (
-    <GlassCard className="p-3 flex items-center gap-3">
-      <div className={`p-1.5 rounded-lg bg-white/[0.04] ${color}`}>
-        <Icon size={16} />
+    <GlassCard className="p-4 flex items-center gap-4">
+      <div className={`p-2.5 rounded-xl bg-white/[0.06] ${color}`}>
+        <Icon size={20} />
       </div>
       <div>
-        <p className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</p>
+        <p className="text-[11px] text-slate-500 uppercase tracking-wider font-medium">{label}</p>
         {loading ? (
-          <Skeleton className="h-6 w-12 mt-0.5" />
+          <Skeleton className="h-8 w-16 mt-1" />
         ) : (
-          <p className={`text-xl font-bold ${color}`}>
+          <p className={`text-3xl font-bold tracking-tight ${color}`}>
             <AnimatedCounter value={value ?? 0} suffix={suffix} />
           </p>
         )}
@@ -688,7 +688,7 @@ function LiveSyslogWidget() {
           {messages.map((msg, i) => (
             <div
               key={`${msg.timestamp}-${i}`}
-              className="flex items-start gap-2 px-1 py-1 hover:bg-white/[0.02] transition-colors"
+              className="flex items-start gap-2 px-1 py-1 hover:bg-white/[0.06] transition-colors"
             >
               <span className="text-[10px] text-slate-600 font-mono whitespace-nowrap shrink-0 pt-0.5 w-12">
                 {msg.timestamp?.slice(-8, -3) || ''}

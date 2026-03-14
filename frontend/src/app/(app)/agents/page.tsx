@@ -91,7 +91,7 @@ function AddAgentDialog({ onClose }: { onClose: () => void }) {
             <button
               onClick={() => setTab('linux')}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
-                tab === 'linux' ? 'text-sky-400 border-b-2 border-sky-400' : 'text-slate-400 hover:text-slate-200'
+                tab === 'linux' ? 'accent-text border-b-2 border-current' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Terminal size={12} /> Linux
@@ -99,7 +99,7 @@ function AddAgentDialog({ onClose }: { onClose: () => void }) {
             <button
               onClick={() => setTab('windows')}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
-                tab === 'windows' ? 'text-sky-400 border-b-2 border-sky-400' : 'text-slate-400 hover:text-slate-200'
+                tab === 'windows' ? 'accent-text border-b-2 border-current' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Monitor size={12} /> Windows

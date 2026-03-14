@@ -132,7 +132,7 @@ export default function UsersPage() {
             <tbody>
               {isLoading &&
                 Array.from({ length: 3 }).map((_, i) => (
-                  <tr key={i} className="border-b border-white/[0.03]">
+                  <tr key={i} className="border-b border-white/[0.06]">
                     <td className="px-4 py-3"><Skeleton className="h-5 w-32" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-20" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-24" /></td>
@@ -141,7 +141,7 @@ export default function UsersPage() {
                 ))}
               {users?.map((u) => {
                 return (
-                  <tr key={u.id} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                  <tr key={u.id} className="border-b border-white/[0.06] hover:bg-white/[0.06]">
                     <td className="px-4 py-3 text-slate-200 font-medium">{u.username}</td>
                     <td className="px-4 py-3">
                       <select

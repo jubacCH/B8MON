@@ -17,8 +17,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { HostStatus } from '@/types';
 
-const inputClass = 'w-full px-3 py-2 text-sm bg-white/[0.06] border border-white/[0.08] rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50';
-const selectClass = 'w-full px-3 py-2 text-sm bg-[#111621] border border-white/[0.08] rounded-lg text-slate-200 focus:outline-none focus:border-sky-500/50 [&>option]:bg-[#111621] [&>option]:text-slate-200';
+const inputClass = 'ng-input';
+const selectClass = 'ng-input bg-[#111621] [&>option]:bg-[#111621] [&>option]:text-slate-200';
 
 function UptimeBar({ h24, d7, d30 }: { h24: number | null; d7: number | null; d30: number | null }) {
   const bars = [
@@ -62,7 +62,7 @@ function SortHeader({ label, sortKey, currentKey, dir, onSort }: {
   const active = currentKey === sortKey;
   return (
     <th
-      className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300 transition-colors select-none"
+      className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-300 transition-colors select-none"
       onClick={() => onSort(sortKey)}
     >
       <span className="inline-flex items-center gap-1">
@@ -280,22 +280,22 @@ function HostsPageInner() {
       {showAdd && (
         <GlassCard className="p-6 mb-6 border border-sky-500/20">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-slate-200">Add New Host</h3>
+            <h3 className="text-base font-semibold text-slate-200">Add New Host</h3>
             <button onClick={() => setShowAdd(false)} className="text-slate-400 hover:text-slate-200">
               <X size={16} />
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Name <span className="text-red-400">*</span></label>
+              <label className="ng-label">Name <span className="text-red-400">*</span></label>
               <input type="text" placeholder="My Server" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Hostname / IP <span className="text-red-400">*</span></label>
+              <label className="ng-label">Hostname / IP <span className="text-red-400">*</span></label>
               <input type="text" placeholder="192.168.1.1 or example.com" value={form.hostname} onChange={(e) => setForm({ ...form, hostname: e.target.value })} className={inputClass} />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Check Type</label>
+              <label className="ng-label">Check Type</label>
               <select value={form.check_type} onChange={(e) => setForm({ ...form, check_type: e.target.value })} className={selectClass}>
                 <option value="icmp">ICMP (Ping)</option>
                 <option value="http">HTTP</option>
@@ -305,7 +305,7 @@ function HostsPageInner() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Port (optional)</label>
+              <label className="ng-label">Port (optional)</label>
               <input type="text" placeholder="443" value={form.port} onChange={(e) => setForm({ ...form, port: e.target.value })} className={inputClass} />
             </div>
           </div>
@@ -339,7 +339,7 @@ function HostsPageInner() {
             <tbody>
               {isLoading &&
                 Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i} className="border-b border-white/[0.03]">
+                  <tr key={i} className="border-b border-white/[0.06]">
                     <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-40" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
@@ -352,7 +352,7 @@ function HostsPageInner() {
               {filteredHosts.map((host) => (
                 <tr
                   key={host.id}
-                  className={`border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors cursor-pointer ${selected.has(host.id) ? 'bg-sky-500/5' : ''}`}
+                  className={`border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors cursor-pointer ${selected.has(host.id) ? 'bg-sky-500/5' : ''}`}
                 >
                   <td className="px-4 py-3">
                     <button onClick={() => toggleSelect(host.id)} className="text-slate-500 hover:text-slate-300">
@@ -404,14 +404,17 @@ function HostsPageInner() {
               {!isLoading && filteredHosts.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center">
-                    <Server size={32} className="mx-auto mb-3 text-slate-600" />
-                    <p className="text-sm text-slate-400 mb-1">
+                    <Server size={48} className="mx-auto mb-4 text-slate-600" />
+                    <p className="text-base font-medium text-slate-300 mb-1">
                       {search ? 'No hosts match your search' : 'No hosts configured yet'}
                     </p>
+                    <p className="text-sm text-slate-500 mb-4">
+                      {search ? 'Try adjusting your search terms.' : 'Add a host to start monitoring your infrastructure.'}
+                    </p>
                     {!search && (
-                      <button onClick={() => setShowAdd(true)} className="text-sm text-sky-400 hover:text-sky-300 transition-colors">
-                        Add your first host
-                      </button>
+                      <Button size="sm" onClick={() => setShowAdd(true)}>
+                        <Plus size={16} /> Add your first host
+                      </Button>
                     )}
                   </td>
                 </tr>

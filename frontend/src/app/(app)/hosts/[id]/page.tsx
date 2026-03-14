@@ -290,7 +290,7 @@ export default function HostDetailPage() {
             onClick={() => setActiveTab(tab.key)}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === tab.key
-                ? 'text-sky-400 border-b-2 border-sky-400'
+                ? 'accent-text border-b-2 border-current'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -871,7 +871,7 @@ function PortsTab({ ports, clients, allHosts }: { ports: PortInfo[]; clients: Co
               {ports.map((port) => {
                 const portClients = clientsByPort[port.idx] ?? [];
                 return (
-                  <tr key={port.idx} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                  <tr key={port.idx} className="border-b border-white/[0.06] hover:bg-white/[0.06]">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${
@@ -953,7 +953,7 @@ function PortsTab({ ports, clients, allHosts }: { ports: PortInfo[]; clients: Co
                 {clients.map((c) => {
                   const hid = clientHostId(c);
                   const row = (
-                    <tr key={c.mac} className={`border-b border-white/[0.03] hover:bg-white/[0.02] ${hid ? 'cursor-pointer' : ''}`}>
+                    <tr key={c.mac} className={`border-b border-white/[0.06] hover:bg-white/[0.06] ${hid ? 'cursor-pointer' : ''}`}>
                       <td className="px-3 py-2">
                         <p className={`text-xs ${hid ? 'text-sky-400' : 'text-slate-200'}`}>{c.hostname}</p>
                         <p className="text-[10px] text-slate-500 font-mono">{c.mac}</p>
@@ -1110,7 +1110,7 @@ function HostSyslog({ hostId }: { hostId: number }) {
           <tbody>
             {syslogLoading &&
               Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="border-b border-white/[0.03]">
+                <tr key={i} className="border-b border-white/[0.06]">
                   <td className="px-4 py-3"><Skeleton className="h-5 w-32" /></td>
                   <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
                   <td className="px-4 py-3"><Skeleton className="h-5 w-20" /></td>
@@ -1118,7 +1118,7 @@ function HostSyslog({ hostId }: { hostId: number }) {
                 </tr>
               ))}
             {logs?.map((entry, i) => (
-              <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+              <tr key={i} className="border-b border-white/[0.06] hover:bg-white/[0.06]">
                 <td className="px-4 py-3 text-xs text-slate-400 font-mono whitespace-nowrap">
                   {new Date(entry.timestamp).toLocaleString()}
                 </td>

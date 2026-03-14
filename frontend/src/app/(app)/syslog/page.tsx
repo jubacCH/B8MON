@@ -141,7 +141,7 @@ export default function SyslogPage() {
             <tbody>
               {isLoading &&
                 Array.from({ length: 12 }).map((_, i) => (
-                  <tr key={i} className="border-b border-white/[0.03]">
+                  <tr key={i} className="border-b border-white/[0.06]">
                     <td className="px-4 py-3"><Skeleton className="h-5 w-36" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-24" /></td>
@@ -149,7 +149,7 @@ export default function SyslogPage() {
                   </tr>
                 ))}
               {filtered?.map((msg, i) => (
-                <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                <tr key={i} className="border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors">
                   <td className="px-4 py-3 text-xs text-slate-400 font-mono whitespace-nowrap">
                     {new Date(msg.timestamp).toLocaleString()}
                   </td>

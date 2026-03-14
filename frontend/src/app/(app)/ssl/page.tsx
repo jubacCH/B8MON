@@ -106,7 +106,7 @@ export default function SslPage() {
             <tbody>
               {isLoading &&
                 Array.from({ length: 4 }).map((_, i) => (
-                  <tr key={i} className="border-b border-white/[0.03]">
+                  <tr key={i} className="border-b border-white/[0.06]">
                     <td className="px-4 py-3"><Skeleton className="h-5 w-32" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-40" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-16 ml-auto" /></td>
@@ -116,7 +116,7 @@ export default function SslPage() {
               {certs.map((c) => {
                 const badge = expiryBadge(c.days);
                 return (
-                  <tr key={c.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                  <tr key={c.id} className="border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors">
                     <td className="px-4 py-3">
                       <Link href={`/hosts/${c.id}`} className="flex items-center gap-2 text-slate-200 hover:text-sky-400">
                         <ShieldCheck size={14} className={expiryColor(c.days)} />

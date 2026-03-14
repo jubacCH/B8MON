@@ -104,11 +104,9 @@ const TAB_ICONS: Record<Tab, typeof Settings> = {
   api: Key,
 };
 
-const inputCls =
-  'w-full max-w-sm px-3 py-1.5 rounded-md bg-white/[0.04] border border-white/[0.06] text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 transition-colors';
+const inputCls = 'ng-input max-w-sm';
 
-const inputSmCls =
-  'w-40 px-3 py-1.5 rounded-md bg-white/[0.04] border border-white/[0.06] text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 transition-colors';
+const inputSmCls = 'ng-input w-40';
 
 /* ---------- Helpers ---------- */
 
@@ -430,7 +428,7 @@ export default function SettingsPage() {
               onClick={() => setActiveTab(tab.key)}
               className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors ${
                 activeTab === tab.key
-                  ? 'text-sky-400 border-b-2 border-sky-400'
+                  ? 'accent-text border-b-2 border-current'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -445,7 +443,7 @@ export default function SettingsPage() {
       {activeTab === 'system' && (
         <div className="space-y-4">
           <GlassCard className="p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3">General</h3>
+            <h3 className="text-base font-semibold text-slate-200 mb-3">General</h3>
             {settingsLoading ? (
               <div className="space-y-3">
                 <Skeleton className="h-8 w-80" />
@@ -454,7 +452,7 @@ export default function SettingsPage() {
             ) : (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Instance Name</label>
+                  <label className="ng-label">Instance Name</label>
                   <input
                     type="text"
                     value={siteName}
@@ -464,7 +462,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Timezone</label>
+                  <label className="ng-label">Timezone</label>
                   <select
                     value={timezone}
                     onChange={(e) => setTimezone(e.target.value)}
@@ -494,7 +492,7 @@ export default function SettingsPage() {
       {activeTab === 'monitoring' && (
         <div className="space-y-4">
           <GlassCard className="p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3">Ping Settings</h3>
+            <h3 className="text-base font-semibold text-slate-200 mb-3">Ping Settings</h3>
             {settingsLoading ? (
               <div className="space-y-3">
                 <Skeleton className="h-8 w-40" />
@@ -504,7 +502,7 @@ export default function SettingsPage() {
             ) : (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Check Interval (seconds)</label>
+                  <label className="ng-label">Check Interval (seconds)</label>
                   <input
                     type="number"
                     value={pingInterval}
@@ -515,7 +513,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Timeout (ms)</label>
+                  <label className="ng-label">Timeout (ms)</label>
                   <input
                     type="number"
                     value={latencyThreshold}
@@ -525,7 +523,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Integration Interval (seconds)</label>
+                  <label className="ng-label">Integration Interval (seconds)</label>
                   <input
                     type="number"
                     value={proxmoxInterval}
@@ -553,7 +551,7 @@ export default function SettingsPage() {
           <GlassCard className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-medium text-slate-300">Enable Notifications</h3>
+                <h3 className="text-base font-semibold text-slate-200">Enable Notifications</h3>
                 <p className="text-xs text-slate-500 mt-0.5">Send alerts when incidents are created or resolved.</p>
               </div>
               <button
@@ -574,7 +572,7 @@ export default function SettingsPage() {
           {/* Telegram */}
           <GlassCard className="p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-slate-300">Telegram</h3>
+              <h3 className="text-base font-semibold text-slate-200">Telegram</h3>
               <Button
                 size="sm"
                 variant="ghost"
@@ -587,7 +585,7 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Bot Token</label>
+                <label className="ng-label">Bot Token</label>
                 <input
                   type="password"
                   value={telegramToken}
@@ -597,7 +595,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Chat ID</label>
+                <label className="ng-label">Chat ID</label>
                 <input
                   type="text"
                   value={telegramChat}
@@ -612,7 +610,7 @@ export default function SettingsPage() {
           {/* Discord */}
           <GlassCard className="p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-slate-300">Discord</h3>
+              <h3 className="text-base font-semibold text-slate-200">Discord</h3>
               <Button
                 size="sm"
                 variant="ghost"
@@ -624,7 +622,7 @@ export default function SettingsPage() {
               </Button>
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">Webhook URL</label>
+              <label className="ng-label">Webhook URL</label>
               <input
                 type="text"
                 value={discordWebhook}
@@ -638,7 +636,7 @@ export default function SettingsPage() {
           {/* Webhook */}
           <GlassCard className="p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-slate-300">Webhook</h3>
+              <h3 className="text-base font-semibold text-slate-200">Webhook</h3>
               <Button
                 size="sm"
                 variant="ghost"
@@ -651,7 +649,7 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-slate-500 mb-1">URL</label>
+                <label className="ng-label">URL</label>
                 <input
                   type="text"
                   value={webhookUrl}
@@ -661,7 +659,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Secret</label>
+                <label className="ng-label">Secret</label>
                 <input
                   type="password"
                   value={webhookSecret}
@@ -676,7 +674,7 @@ export default function SettingsPage() {
           {/* Email / SMTP */}
           <GlassCard className="p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-slate-300">Email / SMTP</h3>
+              <h3 className="text-base font-semibold text-slate-200">Email / SMTP</h3>
               <Button
                 size="sm"
                 variant="ghost"
@@ -689,7 +687,7 @@ export default function SettingsPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-slate-500 mb-1">SMTP Host</label>
+                <label className="ng-label">SMTP Host</label>
                 <input
                   type="text"
                   value={smtpHost}
@@ -699,7 +697,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Port</label>
+                <label className="ng-label">Port</label>
                 <input
                   type="number"
                   value={smtpPort}
@@ -709,7 +707,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Username</label>
+                <label className="ng-label">Username</label>
                 <input
                   type="text"
                   value={smtpUser}
@@ -719,7 +717,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">
+                <label className="ng-label">
                   Password {settings?.smtp_has_pw && <span className="text-emerald-400 ml-1">(set)</span>}
                 </label>
                 <input
@@ -731,7 +729,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">From Address</label>
+                <label className="ng-label">From Address</label>
                 <input
                   type="text"
                   value={smtpFrom}
@@ -741,7 +739,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">To Address</label>
+                <label className="ng-label">To Address</label>
                 <input
                   type="text"
                   value={smtpTo}
@@ -762,7 +760,7 @@ export default function SettingsPage() {
           {/* Notification History */}
           {notifHistory && notifHistory.length > 0 && (
             <GlassCard className="p-4">
-              <h3 className="text-sm font-medium text-slate-300 mb-3">Recent Notifications</h3>
+              <h3 className="text-base font-semibold text-slate-200 mb-3">Recent Notifications</h3>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {notifHistory.map((n) => (
                   <div
@@ -802,7 +800,7 @@ export default function SettingsPage() {
       {activeTab === 'appearance' && (
         <div className="space-y-4">
           <GlassCard className="p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3">Accent Color</h3>
+            <h3 className="text-base font-semibold text-slate-200 mb-3">Accent Color</h3>
             <div className="flex gap-3">
               {ACCENT_COLORS.map((c) => (
                 <button
@@ -819,7 +817,7 @@ export default function SettingsPage() {
           </GlassCard>
 
           <GlassCard className="p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3">Sidebar Position</h3>
+            <h3 className="text-base font-semibold text-slate-200 mb-3">Sidebar Position</h3>
             <div className="flex gap-2">
               {(['left', 'right'] as const).map((pos) => (
                 <button
@@ -838,7 +836,7 @@ export default function SettingsPage() {
           </GlassCard>
 
           <GlassCard className="p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3">Density</h3>
+            <h3 className="text-base font-semibold text-slate-200 mb-3">Density</h3>
             <div className="flex gap-2">
               {(['comfortable', 'compact'] as const).map((d) => (
                 <button
@@ -857,7 +855,7 @@ export default function SettingsPage() {
           </GlassCard>
 
           <GlassCard className="p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3">Font Size</h3>
+            <h3 className="text-base font-semibold text-slate-200 mb-3">Font Size</h3>
             <div className="flex gap-2">
               {([
                 { key: 'sm' as const, label: 'Small' },
@@ -890,7 +888,7 @@ export default function SettingsPage() {
         <div className="space-y-4">
           {/* API Documentation */}
           <GlassCard className="p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3">API Documentation</h3>
+            <h3 className="text-base font-semibold text-slate-200 mb-3">API Documentation</h3>
             <p className="text-xs text-slate-400 mb-4">
               All API endpoints are under <code className="text-sky-400 bg-sky-500/10 px-1 py-0.5 rounded">/api/v1/</code> and require authentication via the <code className="text-sky-400 bg-sky-500/10 px-1 py-0.5 rounded">X-API-Key</code> header.
             </p>
@@ -954,7 +952,7 @@ export default function SettingsPage() {
           <GlassCard className="p-4">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-sm font-medium text-slate-300">API Keys</h3>
+                <h3 className="text-base font-semibold text-slate-200">API Keys</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Manage API keys for programmatic access. Keys use the <code className="text-sky-400">ng_</code> prefix.
                 </p>
@@ -973,8 +971,9 @@ export default function SettingsPage() {
               </div>
             ) : !apiKeys?.length ? (
               <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-                <Key size={36} className="mb-3 text-slate-600" />
-                <p className="text-sm">No API keys created yet.</p>
+                <Key size={48} className="mb-4 text-slate-600" />
+                <p className="text-base font-semibold text-slate-300 mb-1">No API keys created yet</p>
+                <p className="text-sm text-slate-500">Create an API key to integrate with external systems.</p>
               </div>
             ) : (
               <table className="w-full text-sm">
@@ -990,7 +989,7 @@ export default function SettingsPage() {
                 </thead>
                 <tbody className="divide-y divide-white/[0.04]">
                   {apiKeys.map((k) => (
-                    <tr key={k.id} className="hover:bg-white/[0.02] transition-colors">
+                    <tr key={k.id} className="hover:bg-white/[0.06] transition-colors">
                       <td className="py-2.5 text-slate-200 font-medium">{k.name}</td>
                       <td className="py-2.5">
                         <code className="text-xs text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded">
@@ -1050,7 +1049,7 @@ export default function SettingsPage() {
         ) : (
           <form onSubmit={handleCreateKey} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Key Name</label>
+              <label className="ng-label">Key Name</label>
               <input
                 className={inputCls}
                 value={newKeyName}
@@ -1060,7 +1059,7 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Role</label>
+              <label className="ng-label">Role</label>
               <select
                 className="w-full max-w-sm rounded-md border border-white/[0.08] bg-[#111621] px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 transition-colors"
                 value={newKeyRole}

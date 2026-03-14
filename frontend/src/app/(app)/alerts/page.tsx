@@ -65,7 +65,7 @@ export default function AlertsPage() {
             onClick={() => setActiveTab(tab.key)}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === tab.key
-                ? 'text-sky-400 border-b-2 border-sky-400'
+                ? 'accent-text border-b-2 border-current'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -116,9 +116,9 @@ export default function AlertsPage() {
           {!isLoading && openIncidents.length === 0 && (
             <GlassCard className="p-12">
               <div className="flex flex-col items-center gap-3">
-                <ShieldCheck size={40} className="text-emerald-500/60" />
-                <p className="text-sm font-medium text-slate-300">All clear</p>
-                <p className="text-xs text-slate-500">No active alerts — everything is running smoothly.</p>
+                <ShieldCheck size={48} className="text-emerald-500/60" />
+                <p className="text-base font-semibold text-slate-300">All clear</p>
+                <p className="text-sm text-slate-500">No active alerts — everything is running smoothly.</p>
               </div>
             </GlassCard>
           )}
@@ -158,9 +158,9 @@ export default function AlertsPage() {
           {!isLoading && (!incidents || incidents.length === 0) && (
             <GlassCard className="p-12">
               <div className="flex flex-col items-center gap-3">
-                <Bell size={40} className="text-slate-600" />
-                <p className="text-sm font-medium text-slate-300">No incidents yet</p>
-                <p className="text-xs text-slate-500">Incidents from correlation rules will appear here.</p>
+                <Bell size={48} className="text-slate-600" />
+                <p className="text-base font-semibold text-slate-300">No incidents yet</p>
+                <p className="text-sm text-slate-500">Incidents from correlation rules will appear here.</p>
               </div>
             </GlassCard>
           )}
@@ -206,9 +206,9 @@ export default function AlertsPage() {
           {!maintLoading && (!maintHosts || maintHosts.length === 0) && (
             <GlassCard className="p-12">
               <div className="flex flex-col items-center gap-3">
-                <Wrench size={40} className="text-slate-600" />
-                <p className="text-sm font-medium text-slate-300">No maintenance windows</p>
-                <p className="text-xs text-slate-500">Hosts in maintenance mode will appear here.</p>
+                <Wrench size={48} className="text-slate-600" />
+                <p className="text-base font-semibold text-slate-300">No maintenance windows</p>
+                <p className="text-sm text-slate-500">Hosts in maintenance mode will appear here.</p>
               </div>
             </GlassCard>
           )}

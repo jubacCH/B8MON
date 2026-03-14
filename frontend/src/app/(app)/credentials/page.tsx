@@ -237,7 +237,7 @@ export default function CredentialsPage() {
                 const meta = TYPE_META[cred.type];
                 const Icon = meta.icon;
                 return (
-                  <tr key={cred.id} className="hover:bg-white/[0.02] transition-colors">
+                  <tr key={cred.id} className="hover:bg-white/[0.06] transition-colors">
                     <td className="px-6 py-3 text-slate-200 font-medium">
                       <div className="flex items-center gap-2">
                         <KeyRound size={14} className="text-slate-500" />

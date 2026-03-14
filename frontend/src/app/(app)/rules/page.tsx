@@ -257,7 +257,7 @@ export default function RulesPage() {
         ) : (
           <div className="divide-y divide-white/[0.04]">
             {rules.map((rule) => (
-              <div key={rule.id} className="px-4 py-3 flex items-center gap-4 group hover:bg-white/[0.02] transition-colors">
+              <div key={rule.id} className="px-4 py-3 flex items-center gap-4 group hover:bg-white/[0.06] transition-colors">
                 <StatusDot status={rule.enabled ? 'online' : 'disabled'} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">

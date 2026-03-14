@@ -282,7 +282,7 @@ export default function ScannerPage() {
                     {scanResult.alive.map((host) => (
                       <tr
                         key={host.ip}
-                        className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+                        className="border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors"
                       >
                         <td className="px-4 py-3">
                           {!host.is_monitored && (
@@ -364,7 +364,7 @@ export default function ScannerPage() {
             <tbody>
               {schedulesLoading &&
                 Array.from({ length: 3 }).map((_, i) => (
-                  <tr key={i} className="border-b border-white/[0.03]">
+                  <tr key={i} className="border-b border-white/[0.06]">
                     <td className="px-4 py-3"><Skeleton className="h-5 w-32" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-28" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-16" /></td>
@@ -377,7 +377,7 @@ export default function ScannerPage() {
               {schedules?.map((sched) => (
                 <tr
                   key={sched.id}
-                  className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
+                  className="border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors"
                 >
                   <td className="px-4 py-3 font-medium text-slate-200">
                     {sched.name}

@@ -236,7 +236,7 @@ function MibLibraryTab() {
             <tbody>
               {isLoading &&
                 Array.from({ length: 4 }).map((_, i) => (
-                  <tr key={i} className="border-b border-white/[0.03]">
+                  <tr key={i} className="border-b border-white/[0.06]">
                     <td className="px-4 py-3"><Skeleton className="h-5 w-40" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-24" /></td>
@@ -251,7 +251,7 @@ function MibLibraryTab() {
                 </tr>
               )}
               {mibs.map((mib) => (
-                <tr key={mib.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                <tr key={mib.id} className="border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors">
                   <td className="px-4 py-3 font-medium text-slate-200 font-mono text-xs">{mib.name}</td>
                   <td className="px-4 py-3">
                     <Badge>{mib.oid_count}</Badge>
@@ -314,7 +314,7 @@ function MibLibraryTab() {
               {libraryResults.map((m) => (
                 <div
                   key={m.name}
-                  className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-white/[0.02] transition-colors"
+                  className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-white/[0.06] transition-colors"
                 >
                   <div>
                     <span className="text-sm font-mono text-slate-200">{m.name}</span>
@@ -414,7 +414,7 @@ function HostConfigsTab() {
             <tbody>
               {isLoading &&
                 Array.from({ length: 4 }).map((_, i) => (
-                  <tr key={i} className="border-b border-white/[0.03]">
+                  <tr key={i} className="border-b border-white/[0.06]">
                     <td className="px-4 py-3"><Skeleton className="h-5 w-32" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-20" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
@@ -432,7 +432,7 @@ function HostConfigsTab() {
                 </tr>
               )}
               {configs.map((cfg) => (
-                <tr key={cfg.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                <tr key={cfg.id} className="border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors">
                   <td className="px-4 py-3">
                     <p className="font-medium text-slate-200">{cfg.hostname}</p>
                   </td>
@@ -714,7 +714,7 @@ function OidBrowserTab() {
           <tbody>
             {(isLoading || isFetching) &&
               Array.from({ length: 6 }).map((_, i) => (
-                <tr key={i} className="border-b border-white/[0.03]">
+                <tr key={i} className="border-b border-white/[0.06]">
                   <td className="px-4 py-3"><Skeleton className="h-5 w-48" /></td>
                   <td className="px-4 py-3"><Skeleton className="h-5 w-32" /></td>
                   <td className="px-4 py-3"><Skeleton className="h-5 w-24" /></td>
@@ -737,7 +737,7 @@ function OidBrowserTab() {
             )}
             {!isFetching &&
               oids?.map((oid, i) => (
-                <tr key={`${oid.oid}-${i}`} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                <tr key={`${oid.oid}-${i}`} className="border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors">
                   <td className="px-4 py-3 font-mono text-xs text-slate-300 select-all">{oid.oid}</td>
                   <td className="px-4 py-3 text-sm text-slate-200">{oid.name}</td>
                   <td className="px-4 py-3">

@@ -211,7 +211,7 @@ export function Sidebar() {
                 'relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
                 isActive
                   ? 'nav-active'
-                  : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200',
+                  : 'text-slate-400 hover:bg-white/[0.08] hover:text-slate-200',
               )}
             >
               <item.icon size={18} />
@@ -256,7 +256,7 @@ export function Sidebar() {
                       'flex items-center gap-3 px-3 py-1.5 rounded-md text-sm transition-colors pl-7',
                       isActive
                         ? 'nav-active'
-                        : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200',
+                        : 'text-slate-400 hover:bg-white/[0.08] hover:text-slate-200',
                     )}
                   >
                     <span className="flex-1">{int.label}</span>
@@ -292,7 +292,7 @@ export function Sidebar() {
                   'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
                   isActive
                     ? 'nav-active'
-                    : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200',
+                    : 'text-slate-400 hover:bg-white/[0.08] hover:text-slate-200',
                 )}
               >
                 <item.icon size={18} />
