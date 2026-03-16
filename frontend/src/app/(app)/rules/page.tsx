@@ -47,6 +47,7 @@ const OPERATORS = [
 ];
 
 const SEVERITIES = ['critical', 'warning', 'info'] as const;
+const NOTIFY_CHANNELS = ['telegram', 'discord', 'webhook', 'email'] as const;
 
 const inputClass =
   'w-full rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/30';
@@ -480,14 +481,32 @@ export default function RulesPage() {
 
           {/* Notify Channels */}
           <div>
-            <label className={labelClass}>Notify Channels <span className="text-slate-600">(optional, comma-separated)</span></label>
-            <input
-              type="text"
-              className={inputClass}
-              placeholder="e.g. email,slack"
-              value={form.notify_channels}
-              onChange={(e) => updateForm('notify_channels', e.target.value)}
-            />
+            <label className={labelClass}>Notify Channels <span className="text-slate-600">(optional — empty = all configured)</span></label>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {NOTIFY_CHANNELS.map((ch) => {
+                const selected = form.notify_channels.split(',').filter(Boolean).includes(ch);
+                return (
+                  <button
+                    key={ch}
+                    type="button"
+                    onClick={() => {
+                      const current = form.notify_channels.split(',').filter(Boolean);
+                      const next = selected
+                        ? current.filter((c) => c !== ch)
+                        : [...current, ch];
+                      updateForm('notify_channels', next.join(','));
+                    }}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                      selected
+                        ? 'bg-sky-500/20 border-sky-500/40 text-sky-300'
+                        : 'bg-white/[0.04] border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20'
+                    }`}
+                  >
+                    {ch}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Message Template */}
