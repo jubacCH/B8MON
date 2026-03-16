@@ -1,6 +1,7 @@
 use crate::collector::*;
 use std::collections::HashMap;
 use tokio::process::Command;
+#[allow(unused_imports)]
 use tracing::debug;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -160,7 +161,7 @@ async fn read_swap() -> anyhow::Result<(u64, u64, f64)> {
 async fn read_disks() -> anyhow::Result<Vec<DiskInfo>> {
     let mounts = tokio::fs::read_to_string("/proc/mounts").await?;
     let mut disks = Vec::new();
-    let seen_devices = std::collections::HashSet::<String>::new();
+    let mut seen_devices = std::collections::HashSet::<String>::new();
 
     for line in mounts.lines() {
         let parts: Vec<&str> = line.split_whitespace().collect();
@@ -175,7 +176,7 @@ async fn read_disks() -> anyhow::Result<Vec<DiskInfo>> {
         if !device.starts_with('/') || fs == "squashfs" || fs == "tmpfs" {
             continue;
         }
-        if seen_devices.contains(device) {
+        if !seen_devices.insert(device.to_string()) {
             continue;
         }
 

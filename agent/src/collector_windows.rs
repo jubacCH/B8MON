@@ -1,7 +1,7 @@
 use crate::collector::*;
 use std::collections::HashMap;
-use sysinfo::{CpuRefreshKind, Disks, Networks, System, RefreshKind, MemoryRefreshKind};
 use tokio::process::Command;
+#[allow(unused_imports)]
 use tracing::debug;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -12,13 +12,9 @@ pub async fn collect_metrics() -> anyhow::Result<SystemMetrics> {
         .unwrap_or_else(|_| "unknown".into());
 
     // sysinfo needs a brief delay between refreshes for CPU measurement
-    let mut sys = System::new_with_specifics(
-        RefreshKind::nothing()
-            .with_cpu(CpuRefreshKind::everything())
-            .with_memory(MemoryRefreshKind::everything()),
-    );
+    let mut sys = sysinfo::System::new_all();
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    sys.refresh_cpu_all();
+    sys.refresh_all();
 
     let cpu_pct = {
         let usage: f64 = sys.cpus().iter().map(|c| c.cpu_usage() as f64).sum::<f64>()
@@ -43,7 +39,7 @@ pub async fn collect_metrics() -> anyhow::Result<SystemMetrics> {
     };
 
     // Disks
-    let disk_data = Disks::new_with_refreshed_list();
+    let disk_data = sysinfo::Disks::new_with_refreshed_list();
     let mut disks = Vec::new();
     for d in disk_data.list() {
         let total = d.total_space();
@@ -69,7 +65,7 @@ pub async fn collect_metrics() -> anyhow::Result<SystemMetrics> {
         .unwrap_or(disks.first().map(|d| d.pct).unwrap_or(0.0));
 
     // Network
-    let networks = Networks::new_with_refreshed_list();
+    let networks = sysinfo::Networks::new_with_refreshed_list();
     let mut net_interfaces = Vec::new();
     let mut total_rx = 0u64;
     let mut total_tx = 0u64;
@@ -86,31 +82,16 @@ pub async fn collect_metrics() -> anyhow::Result<SystemMetrics> {
     }
 
     // Uptime
-    let uptime_s = System::uptime();
+    let uptime_s = sysinfo::System::uptime();
 
-    // Processes (top 10 by CPU)
-    let mut proc_sys = System::new();
-    proc_sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    proc_sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-    let mut procs: Vec<ProcessInfo> = proc_sys
-        .processes()
-        .values()
-        .map(|p| ProcessInfo {
-            pid: p.pid().as_u32(),
-            name: p.name().to_string_lossy().to_string(),
-            cpu_pct: (p.cpu_usage() as f64 * 10.0).round() / 10.0,
-            mem_mb: (p.memory() as f64 / (1024.0 * 1024.0) * 10.0).round() / 10.0,
-        })
-        .collect();
-    procs.sort_by(|a, b| b.cpu_pct.partial_cmp(&a.cpu_pct).unwrap_or(std::cmp::Ordering::Equal));
-    procs.truncate(10);
+    // Processes (top 10 by CPU) - use ps via PowerShell for compatibility
+    let procs = read_processes().await.unwrap_or_default();
 
     // OS info
     let os_info = Some(OsInfo {
-        name: System::long_os_version().unwrap_or_else(|| "Windows".into()),
-        version: System::os_version().unwrap_or_default(),
-        build: System::kernel_version().unwrap_or_default(),
+        name: sysinfo::System::long_os_version().unwrap_or_else(|| "Windows".into()),
+        version: sysinfo::System::os_version().unwrap_or_default(),
+        build: sysinfo::System::kernel_version().unwrap_or_default(),
         arch: std::env::consts::ARCH.into(),
     });
 
@@ -171,6 +152,40 @@ pub async fn collect_metrics() -> anyhow::Result<SystemMetrics> {
         docker_containers: docker,
         extra: HashMap::new(),
     })
+}
+
+async fn read_processes() -> anyhow::Result<Vec<ProcessInfo>> {
+    let ps_script = r#"
+        Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 |
+        ForEach-Object {
+            "$($_.Id)|$($_.ProcessName)|$([math]::Round($_.CPU,1))|$([math]::Round($_.WorkingSet64/1MB,1))"
+        }
+    "#;
+
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-NoLogo", "-Command", ps_script])
+        .output()
+        .await?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let procs = stdout
+        .lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.splitn(4, '|').collect();
+            if parts.len() == 4 {
+                Some(ProcessInfo {
+                    pid: parts[0].parse().unwrap_or(0),
+                    name: parts[1].to_string(),
+                    cpu_pct: parts[2].parse().unwrap_or(0.0),
+                    mem_mb: parts[3].parse().unwrap_or(0.0),
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    Ok(procs)
 }
 
 async fn read_docker() -> anyhow::Result<Vec<DockerContainer>> {

@@ -18,7 +18,6 @@ use tracing::{info, warn, error};
 
 use config::Config;
 use client::ApiClient;
-use collector::SystemMetrics;
 
 #[tokio::main]
 async fn main() {
@@ -124,15 +123,14 @@ async fn main() {
 async fn collect_logs(
     server_config: &Arc<RwLock<config::ServerConfig>>,
 ) -> Vec<client::LogEntry> {
-    let sc = server_config.read().await;
-    let _level = &sc.agent_log_level;
-
     #[cfg(target_os = "windows")]
     {
+        let sc = server_config.read().await;
         logs_windows::collect_event_logs(&sc.log_channels, &sc.log_levels).await
     }
     #[cfg(target_os = "linux")]
     {
+        let _sc = server_config.read().await;
         logs_linux::collect_journal_logs().await
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
