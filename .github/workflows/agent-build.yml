@@ -48,7 +48,10 @@ jobs:
           restore-keys: ${{ matrix.target }}-cargo-
 
       - name: Build (release)
-        run: cargo build --release --target ${{ matrix.target }} 2>&1 | tee build-output.log
+        shell: bash
+        run: |
+          cargo build --release --target ${{ matrix.target }} 2>&1 | tee build-output.log
+          exit ${PIPESTATUS[0]}
 
       - name: Upload build log on failure
         if: failure()
