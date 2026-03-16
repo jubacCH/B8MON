@@ -73,10 +73,9 @@ pub async fn collect_journal_logs() -> Vec<LogEntry> {
             .get("__REALTIME_TIMESTAMP")
             .and_then(|v| v.as_str())
             .and_then(|s| s.parse::<i64>().ok())
-            .map(|us| {
+            .and_then(|us| {
                 chrono::DateTime::from_timestamp_micros(us)
-                    .unwrap_or_default()
-                    .to_rfc3339()
+                    .map(|dt| dt.to_rfc3339())
             })
             .unwrap_or_default();
 
