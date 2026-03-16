@@ -48,28 +48,7 @@ jobs:
           restore-keys: ${{ matrix.target }}-cargo-
 
       - name: Build (release)
-        shell: bash
-        run: |
-          cargo build --release --target ${{ matrix.target }} 2> /tmp/build-errors.txt || {
-            echo "Build failed. Last 30 lines of errors:"
-            tail -30 /tmp/build-errors.txt
-            tail -20 /tmp/build-errors.txt | while IFS= read -r line; do
-              echo "::error::$line"
-            done
-            exit 1
-          }
-
-      - name: Debug build output
-        if: always()
-        shell: bash
-        run: |
-          echo "=== Listing release directory ==="
-          ls -la target/${{ matrix.target }}/release/ 2>/dev/null | head -30 || echo "Release dir does not exist"
-          echo "=== Looking for nodeglow binaries ==="
-          find target/ -name "nodeglow*" -type f 2>/dev/null || echo "No nodeglow binaries found"
-          echo "=== Cargo version ==="
-          cargo --version
-          rustc --version
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Rename binary
         shell: bash
