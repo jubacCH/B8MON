@@ -868,6 +868,32 @@ async def get_incident(
     )
     events = events_q.scalars().all()
 
+    # Fetch related syslog entries around the incident timeframe
+    related_logs = []
+    try:
+        from services.clickhouse_client import query as ch_query
+        start = incident.created_at - timedelta(minutes=5)
+        end = (incident.resolved_at or datetime.utcnow()) + timedelta(minutes=5)
+        rows = await ch_query(
+            "SELECT timestamp, hostname, severity, app_name, message "
+            "FROM syslog_messages "
+            "WHERE timestamp >= {t0:DateTime64(3)} AND timestamp <= {t1:DateTime64(3)} "
+            "AND severity <= 4 "
+            "ORDER BY timestamp DESC LIMIT 100",
+            {"t0": start, "t1": end},
+        )
+        for r in rows:
+            ts = r.get("timestamp")
+            related_logs.append({
+                "timestamp": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
+                "hostname": r.get("hostname", ""),
+                "severity": r.get("severity", 0),
+                "app_name": r.get("app_name", ""),
+                "message": r.get("message", ""),
+            })
+    except Exception:
+        pass
+
     return {
         "id": incident.id,
         "rule": incident.rule,
@@ -887,6 +913,7 @@ async def get_incident(
             }
             for e in events
         ],
+        "related_logs": related_logs,
     }
 
 

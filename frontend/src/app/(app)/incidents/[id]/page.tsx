@@ -14,8 +14,34 @@ import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
 import { ArrowLeft, CheckCircle, Eye } from 'lucide-react';
 import Link from 'next/link';
 
+const SEVERITY_LABELS: Record<number, { label: string; color: string }> = {
+  0: { label: 'EMERG', color: 'text-red-300 bg-red-500/20' },
+  1: { label: 'ALERT', color: 'text-red-300 bg-red-500/20' },
+  2: { label: 'CRIT', color: 'text-red-400 bg-red-500/15' },
+  3: { label: 'ERROR', color: 'text-red-400 bg-red-500/10' },
+  4: { label: 'WARN', color: 'text-amber-400 bg-amber-500/10' },
+};
+
+function SeverityBadge({ severity }: { severity: number }) {
+  const info = SEVERITY_LABELS[severity] ?? { label: `SEV${severity}`, color: 'text-slate-400 bg-white/[0.05]' };
+  return (
+    <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-medium ${info.color}`}>
+      {info.label}
+    </span>
+  );
+}
+
+interface RelatedLog {
+  timestamp: string;
+  hostname: string;
+  severity: number;
+  app_name: string;
+  message: string;
+}
+
 interface IncidentDetail extends Incident {
   events: IncidentEvent[];
+  related_logs?: RelatedLog[];
 }
 
 export default function IncidentDetailPage() {
@@ -124,6 +150,52 @@ export default function IncidentDetailPage() {
               <p className="text-sm text-slate-500">No events</p>
             )}
           </GlassCard>
+
+          {/* Related Syslog Messages */}
+          {data.related_logs && data.related_logs.length > 0 && (
+            <GlassCard className="p-4 mt-6">
+              <h3 className="text-sm font-medium text-slate-300 mb-4">
+                Related Syslog Messages
+                <span className="text-xs text-slate-500 font-normal ml-2">
+                  ({data.related_logs.length} entries)
+                </span>
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b border-white/[0.06]">
+                      <th className="pb-2 pr-3 font-medium">Time</th>
+                      <th className="pb-2 pr-3 font-medium">Sev</th>
+                      <th className="pb-2 pr-3 font-medium">Host</th>
+                      <th className="pb-2 pr-3 font-medium">App</th>
+                      <th className="pb-2 font-medium">Message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.related_logs.map((log, i) => (
+                      <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                        <td className="py-1.5 pr-3 text-slate-400 font-mono whitespace-nowrap">
+                          {new Date(log.timestamp).toLocaleTimeString()}
+                        </td>
+                        <td className="py-1.5 pr-3">
+                          <SeverityBadge severity={log.severity} />
+                        </td>
+                        <td className="py-1.5 pr-3 text-slate-300 font-mono whitespace-nowrap">
+                          {log.hostname}
+                        </td>
+                        <td className="py-1.5 pr-3 text-slate-400 whitespace-nowrap">
+                          {log.app_name || '—'}
+                        </td>
+                        <td className="py-1.5 text-slate-300 font-mono break-all">
+                          {log.message}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </GlassCard>
+          )}
         </>
       ) : (
         <GlassCard className="p-8 text-center">
