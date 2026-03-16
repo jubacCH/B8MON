@@ -515,10 +515,6 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Check dependencies
-if ! command -v python3 &>/dev/null; then
-    echo "  Error: Python 3 is required but not installed."
-    exit 1
-fi
 if ! command -v curl &>/dev/null; then
     echo "  Error: curl is required but not installed."
     exit 1
@@ -534,8 +530,9 @@ ENROLL_RESPONSE=$(curl -sSL -X POST "$SERVER/api/agent/enroll" \\
     -H "Content-Type: application/json" \\
     -d "{{\\"enrollment_key\\": \\"$ENROLLMENT_KEY\\", \\"hostname\\": \\"$HOSTNAME\\", \\"platform\\": \\"Linux\\", \\"arch\\": \\"$(uname -m)\\"}}")
 
-# Extract token from JSON response
-TOKEN=$(echo "$ENROLL_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+# Extract token from JSON response (try python3 first, then grep fallback)
+TOKEN=$(echo "$ENROLL_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || \\
+    echo "$ENROLL_RESPONSE" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
 if [ -z "$TOKEN" ]; then
     echo "  Error: Enrollment failed. Response: $ENROLL_RESPONSE"
     exit 1
@@ -543,8 +540,8 @@ fi
 echo "  Enrolled successfully."
 
 echo "  [3/5] Downloading agent..."
-curl -sSL "$SERVER/agents/download/linux" -o "$INSTALL_DIR/nodeglow-agent.py"
-chmod +x "$INSTALL_DIR/nodeglow-agent.py"
+curl -sSL "$SERVER/agents/download/linux" -o "$INSTALL_DIR/nodeglow-agent"
+chmod +x "$INSTALL_DIR/nodeglow-agent"
 
 echo "  [4/5] Writing configuration..."
 cat > "$CONFIG_FILE" << CONF
@@ -565,10 +562,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/nodeglow
-ExecStart=/usr/bin/python3 /opt/nodeglow/nodeglow-agent.py
+ExecStart=/opt/nodeglow/nodeglow-agent
 Restart=always
 RestartSec=10
-Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
@@ -621,8 +617,10 @@ async def install_windows(request: Request):
 $ErrorActionPreference = "Stop"
 $Server = "{server_url}"
 $EnrollmentKey = "{enrollment_key}"
-$InstallDir = "$env:ProgramData\\Nodeglow"
+$InstallDir = "$env:ProgramFiles\\Nodeglow"
 $TaskName = "NodeglowAgent"
+$AgentVersion = "1.0.0"
+$UninstallKey = "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\NodeglowAgent"
 
 Write-Host ""
 Write-Host "  === Nodeglow Agent Installer ===" -ForegroundColor Cyan
@@ -637,26 +635,30 @@ if (-not $isAdmin) {{
 
 $Hostname = $env:COMPUTERNAME
 
-Write-Host "  [1/6] Stopping existing agent..."
+Write-Host "  [1/8] Stopping existing agent..."
 # Stop running agent process
 Get-Process | Where-Object {{ $_.Path -like "*nodeglow*" }} | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 # Also stop via scheduled task
 Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 
-Write-Host "  [2/7] Creating install directory..."
+Write-Host "  [2/8] Creating install directory..."
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-# Grant full control to local users so updates work without elevation
-icacls $InstallDir /grant "Users:(OI)(CI)F" /T /Q 2>$null
-icacls $InstallDir /grant "Benutzer:(OI)(CI)F" /T /Q 2>$null
+
+# Migrate from old ProgramData location if exists
+$OldDir = "$env:ProgramData\\Nodeglow"
+if (Test-Path "$OldDir\\config.json") {{
+    Write-Host "  Migrating from old location..."
+    Copy-Item "$OldDir\\config.json" "$InstallDir\\config.json" -Force -ErrorAction SilentlyContinue
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    Remove-Item -Path $OldDir -Recurse -Force -ErrorAction SilentlyContinue
+}}
 
 # Clean up old files
 Remove-Item -Path "$InstallDir\\nodeglow-agent.exe.old" -Force -ErrorAction SilentlyContinue
 Remove-Item -Path "$InstallDir\\nodeglow-agent.exe.new" -Force -ErrorAction SilentlyContinue
-Remove-Item -Path "$InstallDir\\nodeglow-agent-v2.exe" -Force -ErrorAction SilentlyContinue
-Remove-Item -Path "$InstallDir\\tmp*.exe" -Force -ErrorAction SilentlyContinue
 
-Write-Host "  [3/7] Enrolling agent ($Hostname)..."
+Write-Host "  [3/8] Enrolling agent ($Hostname)..."
 $body = @{{
     enrollment_key = $EnrollmentKey
     hostname = $Hostname
@@ -672,10 +674,10 @@ if (-not $response.token) {{
 $Token = $response.token
 Write-Host "  Enrolled successfully."
 
-Write-Host "  [4/7] Downloading agent..."
+Write-Host "  [4/8] Downloading agent..."
 Invoke-WebRequest -Uri "$Server/agents/download/windows" -OutFile "$InstallDir\\nodeglow-agent.exe" -UseBasicParsing
 
-Write-Host "  [5/7] Writing configuration..."
+Write-Host "  [5/8] Writing configuration..."
 @"
 {{
   "server": "$Server",
@@ -684,15 +686,14 @@ Write-Host "  [5/7] Writing configuration..."
 }}
 "@ | Set-Content -Path "$InstallDir\\config.json" -Encoding ASCII -Force
 
-Write-Host "  [6/7] Creating restart wrapper..."
-# Write a wrapper batch script that restarts the agent automatically
+Write-Host "  [6/8] Creating restart wrapper..."
 $WrapperContent = @"
 @echo off
 title Nodeglow Agent
 cd /d "$InstallDir"
 
 :loop
-rem Apply staged update if present (.new file from deferred swap)
+rem Apply staged update if present
 if exist "nodeglow-agent.exe.new" (
     echo Applying staged update...
     del /f "nodeglow-agent.exe.old" 2>nul
@@ -704,7 +705,6 @@ echo Starting Nodeglow Agent...
 "nodeglow-agent.exe"
 set EXIT_CODE=%ERRORLEVEL%
 
-rem Clean up old version
 del /f "nodeglow-agent.exe.old" 2>nul
 
 if %EXIT_CODE%==42 (
@@ -719,15 +719,50 @@ goto loop
 "@
 $WrapperContent | Set-Content -Path "$InstallDir\\nodeglow-wrapper.bat" -Encoding ASCII -Force
 
-Write-Host "  [7/7] Creating scheduled task..."
+Write-Host "  [7/8] Creating scheduled task..."
 $Action = New-ScheduledTaskAction -Execute "$InstallDir\\nodeglow-wrapper.bat" -WorkingDirectory $InstallDir
 $Trigger = New-ScheduledTaskTrigger -AtStartup
 $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Days 365)
 $Principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
+Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Principal $Principal -Description "Nodeglow Monitoring Agent" | Out-Null
+
+Write-Host "  [8/8] Registering in Windows Apps..."
+# Create uninstall script
+$UninstallScript = @"
+@echo off
+echo Uninstalling Nodeglow Agent...
+schtasks /End /TN "$TaskName" >nul 2>&1
+schtasks /Delete /TN "$TaskName" /F >nul 2>&1
+taskkill /F /IM nodeglow-agent.exe >nul 2>&1
+timeout /t 2 /nobreak >nul
+reg delete "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\NodeglowAgent" /f >nul 2>&1
+rmdir /s /q "$InstallDir" 2>nul
+echo Nodeglow Agent has been uninstalled.
+pause
+"@
+$UninstallScript | Set-Content -Path "$InstallDir\\uninstall.bat" -Encoding ASCII -Force
+
+# Register in Apps & Features (Add/Remove Programs)
+if (-not (Test-Path $UninstallKey)) {{
+    New-Item -Path $UninstallKey -Force | Out-Null
+}}
+$ExeSize = (Get-Item "$InstallDir\\nodeglow-agent.exe").Length / 1024
+Set-ItemProperty -Path $UninstallKey -Name "DisplayName" -Value "Nodeglow Agent"
+Set-ItemProperty -Path $UninstallKey -Name "DisplayVersion" -Value $AgentVersion
+Set-ItemProperty -Path $UninstallKey -Name "Publisher" -Value "Nodeglow"
+Set-ItemProperty -Path $UninstallKey -Name "InstallLocation" -Value $InstallDir
+Set-ItemProperty -Path $UninstallKey -Name "UninstallString" -Value "$InstallDir\\uninstall.bat"
+Set-ItemProperty -Path $UninstallKey -Name "DisplayIcon" -Value "$InstallDir\\nodeglow-agent.exe"
+Set-ItemProperty -Path $UninstallKey -Name "EstimatedSize" -Value ([int]$ExeSize)
+Set-ItemProperty -Path $UninstallKey -Name "NoModify" -Value 1 -Type DWord
+Set-ItemProperty -Path $UninstallKey -Name "NoRepair" -Value 1 -Type DWord
+Set-ItemProperty -Path $UninstallKey -Name "InstallDate" -Value (Get-Date -Format "yyyyMMdd")
+
 Write-Host "  Testing connection..."
 try {{
-    $testBody = @{{ hostname = $Hostname; platform = "Windows"; agent_version = "test" }} | ConvertTo-Json
+    $testBody = @{{ hostname = $Hostname; platform = "Windows"; agent_version = $AgentVersion }} | ConvertTo-Json
     $testResp = Invoke-RestMethod -Uri "$Server/api/agent/report" -Method Post -Body $testBody -ContentType "application/json" -Headers @{{ Authorization = "Bearer $Token" }} -TimeoutSec 10
     if ($testResp.ok) {{
         Write-Host "  Connection test: SUCCESS" -ForegroundColor Green
@@ -739,16 +774,16 @@ try {{
     Write-Host "  The agent will retry when the task starts." -ForegroundColor Yellow
 }}
 
-Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Principal $Principal -Description "Nodeglow Monitoring Agent" | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 
 Write-Host ""
 Write-Host "  Done! Agent '$Hostname' is running." -ForegroundColor Green
+Write-Host "  Installed to: $InstallDir" -ForegroundColor Gray
+Write-Host "  Visible in: Settings > Apps > Installed apps" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  Status:  Get-ScheduledTask -TaskName $TaskName"
-Write-Host "  Stop:    Stop-ScheduledTask -TaskName $TaskName"
-Write-Host "  Remove:  Unregister-ScheduledTask -TaskName $TaskName -Confirm:`$false; Remove-Item -Recurse $InstallDir"
+Write-Host "  Status:     Get-ScheduledTask -TaskName $TaskName"
+Write-Host "  Stop:       Stop-ScheduledTask -TaskName $TaskName"
+Write-Host "  Uninstall:  & '$InstallDir\\uninstall.bat'"
 Write-Host ""
 '''
 
@@ -760,10 +795,15 @@ Write-Host ""
 
 @router.get("/agents/download/{platform}")
 async def agent_download(request: Request, platform: str):
-    """Download generic agent exe/script (no token — config.json used instead)."""
+    """Download agent binary for the given platform."""
     if platform == "windows":
         return FileResponse("static/nodeglow-agent.exe",
                             filename="nodeglow-agent.exe", media_type="application/octet-stream")
+    # Rust binary for Linux (fallback to old Python script if not available)
+    rust_path = Path("static/nodeglow-agent-linux")
+    if rust_path.exists():
+        return FileResponse(str(rust_path),
+                            filename="nodeglow-agent-linux", media_type="application/octet-stream")
     return FileResponse("static/nodeglow-agent-linux.py",
                         filename="nodeglow-agent-linux.py", media_type="text/x-python")
 
@@ -778,7 +818,10 @@ def _get_agent_hash(platform: str) -> str:
     if platform == "windows":
         path = Path("static/nodeglow-agent.exe")
     else:
-        path = Path("static/nodeglow-agent-linux.py")
+        # Prefer Rust binary, fall back to Python script
+        path = Path("static/nodeglow-agent-linux")
+        if not path.exists():
+            path = Path("static/nodeglow-agent-linux.py")
 
     if not path.exists():
         return ""
