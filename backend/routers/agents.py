@@ -729,31 +729,46 @@ Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Silent
 Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Principal $Principal -Description "Nodeglow Monitoring Agent" | Out-Null
 
 Write-Host "  [8/8] Registering in Windows Apps..."
-# Create uninstall script
-$UninstallScript = @"
-@echo off
-echo Uninstalling Nodeglow Agent...
-schtasks /End /TN "$TaskName" >nul 2>&1
-schtasks /Delete /TN "$TaskName" /F >nul 2>&1
-taskkill /F /IM nodeglow-agent.exe >nul 2>&1
-timeout /t 2 /nobreak >nul
-reg delete "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\NodeglowAgent" /f >nul 2>&1
-rmdir /s /q "$InstallDir" 2>nul
-echo Nodeglow Agent has been uninstalled.
-pause
-"@
-$UninstallScript | Set-Content -Path "$InstallDir\\uninstall.bat" -Encoding ASCII -Force
+# Create PowerShell uninstall script with admin elevation
+$UninstallPS = @'
+$ErrorActionPreference = "SilentlyContinue"
+# Self-elevate if not admin
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    exit
+}
+Write-Host "Uninstalling Nodeglow Agent..." -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Stopping agent..."
+Stop-ScheduledTask -TaskName "NodeglowAgent" -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
+Unregister-ScheduledTask -TaskName "NodeglowAgent" -Confirm:$false -ErrorAction SilentlyContinue
+Get-Process | Where-Object { $_.Path -like "*nodeglow*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+Write-Host "  Removing registry entry..."
+Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NodeglowAgent" -Force -ErrorAction SilentlyContinue
+Write-Host "  Removing files..."
+$dir = Split-Path -Parent $PSCommandPath
+Start-Process cmd -ArgumentList "/c timeout /t 3 /nobreak >nul & rmdir /s /q `"$dir`"" -WindowStyle Hidden
+Write-Host ""
+Write-Host "  Nodeglow Agent has been uninstalled." -ForegroundColor Green
+Write-Host ""
+Start-Sleep -Seconds 2
+'@
+$UninstallPS | Set-Content -Path "$InstallDir\\uninstall.ps1" -Encoding UTF8 -Force
 
 # Register in Apps & Features (Add/Remove Programs)
 if (-not (Test-Path $UninstallKey)) {{
     New-Item -Path $UninstallKey -Force | Out-Null
 }}
 $ExeSize = (Get-Item "$InstallDir\\nodeglow-agent.exe").Length / 1024
+$UninstallCmd = "powershell -ExecutionPolicy Bypass -File `"$InstallDir\\uninstall.ps1`""
 Set-ItemProperty -Path $UninstallKey -Name "DisplayName" -Value "Nodeglow Agent"
 Set-ItemProperty -Path $UninstallKey -Name "DisplayVersion" -Value $AgentVersion
 Set-ItemProperty -Path $UninstallKey -Name "Publisher" -Value "Nodeglow"
 Set-ItemProperty -Path $UninstallKey -Name "InstallLocation" -Value $InstallDir
-Set-ItemProperty -Path $UninstallKey -Name "UninstallString" -Value "$InstallDir\\uninstall.bat"
+Set-ItemProperty -Path $UninstallKey -Name "UninstallString" -Value $UninstallCmd
 Set-ItemProperty -Path $UninstallKey -Name "DisplayIcon" -Value "$InstallDir\\nodeglow-agent.exe"
 Set-ItemProperty -Path $UninstallKey -Name "EstimatedSize" -Value ([int]$ExeSize)
 Set-ItemProperty -Path $UninstallKey -Name "NoModify" -Value 1 -Type DWord
