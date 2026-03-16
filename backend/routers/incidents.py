@@ -50,7 +50,7 @@ async def incident_detail(
             "SELECT timestamp, hostname, severity, app_name, message "
             "FROM syslog_messages "
             "WHERE timestamp >= {t0:DateTime64(3)} AND timestamp <= {t1:DateTime64(3)} "
-            "AND severity <= 4 "
+            "AND severity <= 3 "
             "ORDER BY timestamp DESC LIMIT 50",
             {"t0": start, "t1": end},
         )
