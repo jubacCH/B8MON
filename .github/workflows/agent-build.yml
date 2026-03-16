@@ -48,7 +48,15 @@ jobs:
           restore-keys: ${{ matrix.target }}-cargo-
 
       - name: Build (release)
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} 2>&1 | tee build-output.log
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.target }}
+          path: agent/build-output.log
+          retention-days: 7
 
       - name: Rename binary
         shell: bash
