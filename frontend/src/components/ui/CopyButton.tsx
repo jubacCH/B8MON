@@ -9,11 +9,26 @@ interface CopyButtonProps {
   size?: number;
 }
 
+function fallbackCopy(text: string) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+}
+
 export function CopyButton({ text, className = '', size = 14 }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
-  async function handleCopy() {
-    await navigator.clipboard.writeText(text);
+  function handleCopy() {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+    } else {
+      fallbackCopy(text);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }

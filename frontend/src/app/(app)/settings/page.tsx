@@ -389,10 +389,20 @@ export default function SettingsPage() {
   }
 
   function handleCopyKey() {
-    if (createdKey) {
-      navigator.clipboard.writeText(createdKey);
-      toast.show('Copied to clipboard', 'success');
+    if (!createdKey) return;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(createdKey).catch(() => {});
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = createdKey;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
     }
+    toast.show('Copied to clipboard', 'success');
   }
 
   function closeCreateModal() {

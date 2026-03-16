@@ -32,6 +32,25 @@ function MetricBar({ label, value }: { label: string; value: number | null }) {
   );
 }
 
+function copyText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+  } else {
+    fallbackCopy(text);
+  }
+}
+
+function fallbackCopy(text: string) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -39,7 +58,7 @@ function CopyButton({ text }: { text: string }) {
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        navigator.clipboard.writeText(text);
+        copyText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }}
