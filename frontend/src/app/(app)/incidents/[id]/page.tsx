@@ -11,7 +11,8 @@ import { get, post } from '@/lib/api';
 import { useToastStore } from '@/stores/toast';
 import type { Incident, IncidentEvent } from '@/types';
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
-import { ArrowLeft, CheckCircle, Eye } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Eye, Zap, Search } from 'lucide-react';
+import { useState } from 'react';
 import Link from 'next/link';
 
 const SEVERITY_LABELS: Record<number, { label: string; color: string }> = {
@@ -37,11 +38,45 @@ interface RelatedLog {
   severity: number;
   app_name: string;
   message: string;
+  template_hash?: string;
+}
+
+interface PatternInfo {
+  count: number;
+  template: string;
+  example: string;
+  hosts: { name: string; count: number }[];
+  apps: { name: string; count: number }[];
+  severity_breakdown: Record<string, number>;
+  first_seen: string;
+  last_seen: string;
+  is_known: boolean;
+  noise_score: number | null;
+  tags: string[];
+  avg_rate_per_hour: number | null;
+}
+
+interface LogAnalysis {
+  summary: string;
+  total_messages: number;
+  unique_patterns: number;
+  affected_hosts: number;
+  single_source: boolean;
+  worst_severity: string;
+  patterns: PatternInfo[];
+  top_hosts: { name: string; count: number }[];
+  precursor_hints: {
+    template: string;
+    precedes: string;
+    confidence: number;
+    lead_time_min: number | null;
+  }[];
 }
 
 interface IncidentDetail extends Incident {
   events: IncidentEvent[];
   related_logs?: RelatedLog[];
+  log_analysis?: LogAnalysis | null;
 }
 
 export default function IncidentDetailPage() {
@@ -151,50 +186,14 @@ export default function IncidentDetailPage() {
             )}
           </GlassCard>
 
-          {/* Related Syslog Messages */}
+          {/* Log Analysis */}
+          {data.log_analysis && (
+            <LogAnalysisSection analysis={data.log_analysis} />
+          )}
+
+          {/* Related Syslog Messages (collapsible) */}
           {data.related_logs && data.related_logs.length > 0 && (
-            <GlassCard className="p-4 mt-6">
-              <h3 className="text-sm font-medium text-slate-300 mb-4">
-                Related Syslog Messages
-                <span className="text-xs text-slate-500 font-normal ml-2">
-                  ({data.related_logs.length} entries)
-                </span>
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-left text-slate-500 border-b border-white/[0.06]">
-                      <th className="pb-2 pr-3 font-medium">Time</th>
-                      <th className="pb-2 pr-3 font-medium">Sev</th>
-                      <th className="pb-2 pr-3 font-medium">Host</th>
-                      <th className="pb-2 pr-3 font-medium">App</th>
-                      <th className="pb-2 font-medium">Message</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.related_logs.map((log, i) => (
-                      <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
-                        <td className="py-1.5 pr-3 text-slate-400 font-mono whitespace-nowrap">
-                          {new Date(log.timestamp).toLocaleTimeString()}
-                        </td>
-                        <td className="py-1.5 pr-3">
-                          <SeverityBadge severity={log.severity} />
-                        </td>
-                        <td className="py-1.5 pr-3 text-slate-300 font-mono whitespace-nowrap">
-                          {log.hostname}
-                        </td>
-                        <td className="py-1.5 pr-3 text-slate-400 whitespace-nowrap">
-                          {log.app_name || '—'}
-                        </td>
-                        <td className="py-1.5 text-slate-300 font-mono break-all">
-                          {log.message}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </GlassCard>
+            <RawLogsSection logs={data.related_logs} />
           )}
         </>
       ) : (
@@ -203,5 +202,166 @@ export default function IncidentDetailPage() {
         </GlassCard>
       )}
     </div>
+  );
+}
+
+/* ---------- Log Analysis Section ---------- */
+
+function LogAnalysisSection({ analysis }: { analysis: LogAnalysis }) {
+  return (
+    <GlassCard className="p-4 mt-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Zap size={16} className="text-amber-400" />
+        <h3 className="text-sm font-medium text-slate-300">Error Analysis</h3>
+        <div className="flex gap-2 ml-auto">
+          <span className="text-[10px] px-2 py-0.5 rounded bg-white/[0.05] text-slate-400">
+            {analysis.total_messages} messages
+          </span>
+          <span className="text-[10px] px-2 py-0.5 rounded bg-white/[0.05] text-slate-400">
+            {analysis.unique_patterns} pattern{analysis.unique_patterns !== 1 ? 's' : ''}
+          </span>
+          <span className="text-[10px] px-2 py-0.5 rounded bg-white/[0.05] text-slate-400">
+            {analysis.affected_hosts} host{analysis.affected_hosts !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
+
+      {/* Summary */}
+      <div className="bg-white/[0.03] rounded-lg p-3 mb-4 border border-white/[0.06]">
+        <p className="text-sm text-slate-200 leading-relaxed">{analysis.summary}</p>
+      </div>
+
+      {/* Precursor warnings */}
+      {analysis.precursor_hints.length > 0 && (
+        <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 mb-4">
+          <p className="text-xs font-medium text-amber-400 mb-2">Precursor Pattern Detected</p>
+          {analysis.precursor_hints.map((hint, i) => (
+            <div key={i} className="flex items-start gap-2 text-xs mb-1">
+              <span className="text-amber-400 shrink-0">{hint.confidence}%</span>
+              <span className="text-slate-300">
+                This pattern has preceded <span className="text-amber-300 font-medium">{hint.precedes}</span> events
+                {hint.lead_time_min != null && (
+                  <span className="text-slate-500"> (~{hint.lead_time_min}min lead time)</span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pattern groups */}
+      <div className="space-y-3">
+        {analysis.patterns.map((pattern, i) => (
+          <div key={i} className="border border-white/[0.06] rounded-lg p-3">
+            <div className="flex items-start gap-3 mb-2">
+              <span className="text-lg font-bold text-sky-400 shrink-0 leading-none mt-0.5">
+                {pattern.count}x
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-slate-300 font-mono break-all leading-relaxed">
+                  {pattern.template}
+                </p>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  {!pattern.is_known && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-medium">
+                      NEW PATTERN
+                    </span>
+                  )}
+                  {pattern.noise_score != null && pattern.noise_score >= 70 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.05] text-slate-500">
+                      noise: {pattern.noise_score}%
+                    </span>
+                  )}
+                  {pattern.tags.filter(Boolean).map((tag) => (
+                    <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400">
+                      {tag}
+                    </span>
+                  ))}
+                  {Object.entries(pattern.severity_breakdown).map(([sev, count]) => (
+                    <span key={sev} className="text-[10px] text-slate-500">
+                      {sev}: {count}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {/* Affected hosts */}
+            {pattern.hosts.length > 0 && (
+              <div className="flex items-center gap-2 ml-9 flex-wrap">
+                <span className="text-[10px] text-slate-500">Hosts:</span>
+                {pattern.hosts.map((h) => (
+                  <span key={h.name} className="text-[10px] font-mono text-slate-400">
+                    {h.name}{h.count > 1 ? ` (${h.count})` : ''}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </GlassCard>
+  );
+}
+
+/* ---------- Raw Logs Section (collapsible) ---------- */
+
+function RawLogsSection({ logs }: { logs: RelatedLog[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <GlassCard className="p-4 mt-6">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 w-full text-left"
+      >
+        <Search size={14} className="text-slate-400" />
+        <h3 className="text-sm font-medium text-slate-300">
+          Raw Syslog Messages
+        </h3>
+        <span className="text-xs text-slate-500 font-normal">
+          ({logs.length} entries)
+        </span>
+        <span className="text-xs text-slate-500 ml-auto">
+          {expanded ? '▾ collapse' : '▸ expand'}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="overflow-x-auto mt-4">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-slate-500 border-b border-white/[0.06]">
+                <th className="pb-2 pr-3 font-medium">Time</th>
+                <th className="pb-2 pr-3 font-medium">Sev</th>
+                <th className="pb-2 pr-3 font-medium">Host</th>
+                <th className="pb-2 pr-3 font-medium">App</th>
+                <th className="pb-2 font-medium">Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log, i) => (
+                <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                  <td className="py-1.5 pr-3 text-slate-400 font-mono whitespace-nowrap">
+                    {new Date(log.timestamp).toLocaleTimeString()}
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <SeverityBadge severity={log.severity} />
+                  </td>
+                  <td className="py-1.5 pr-3 text-slate-300 font-mono whitespace-nowrap">
+                    {log.hostname}
+                  </td>
+                  <td className="py-1.5 pr-3 text-slate-400 whitespace-nowrap">
+                    {log.app_name || '—'}
+                  </td>
+                  <td className="py-1.5 text-slate-300 font-mono break-all">
+                    {log.message}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </GlassCard>
   );
 }

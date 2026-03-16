@@ -852,6 +852,164 @@ async def list_incidents(
     ]
 
 
+SEVERITY_NAMES = {0: "Emergency", 1: "Alert", 2: "Critical", 3: "Error"}
+
+
+async def _analyze_incident_logs(
+    db: AsyncSession, logs: list[dict], window_start, window_end,
+) -> dict:
+    """Analyze related syslog messages and produce a structured summary."""
+    from collections import Counter
+
+    from models.log_template import LogTemplate, PrecursorPattern
+
+    total = len(logs)
+
+    # ── Group by template hash ───────────────────────────────────────
+    by_hash: dict[str, list[dict]] = {}
+    for log in logs:
+        h = log.get("template_hash", "") or "unknown"
+        by_hash.setdefault(h, []).append(log)
+
+    # Look up known templates from PostgreSQL
+    known_hashes = [h for h in by_hash if h != "unknown"]
+    tpl_map: dict[str, LogTemplate] = {}
+    if known_hashes:
+        tpl_rows = (await db.execute(
+            select(LogTemplate).where(LogTemplate.template_hash.in_(known_hashes))
+        )).scalars().all()
+        tpl_map = {t.template_hash: t for t in tpl_rows}
+
+    # ── Build pattern groups ─────────────────────────────────────────
+    patterns = []
+    for h, group in sorted(by_hash.items(), key=lambda x: -len(x[1])):
+        tpl = tpl_map.get(h)
+        hostnames = Counter(l["hostname"] for l in group)
+        severities = Counter(l["severity"] for l in group)
+        apps = Counter(l["app_name"] for l in group if l.get("app_name"))
+
+        first_ts = min(l["timestamp"] for l in group)
+        last_ts = max(l["timestamp"] for l in group)
+
+        pattern: dict = {
+            "count": len(group),
+            "template": tpl.template if tpl else group[0]["message"][:120],
+            "example": group[0]["message"],
+            "hosts": [{"name": name, "count": cnt} for name, cnt in hostnames.most_common(5)],
+            "apps": [{"name": name, "count": cnt} for name, cnt in apps.most_common(3)],
+            "severity_breakdown": {SEVERITY_NAMES.get(s, f"sev{s}"): c for s, c in severities.items()},
+            "first_seen": first_ts,
+            "last_seen": last_ts,
+            "is_known": tpl is not None,
+            "noise_score": tpl.noise_score if tpl else None,
+            "tags": tpl.tags.split(",") if tpl and tpl.tags else [],
+            "avg_rate_per_hour": tpl.avg_rate_per_hour if tpl else None,
+        }
+        patterns.append(pattern)
+
+    # ── Host distribution ────────────────────────────────────────────
+    host_counts = Counter(l["hostname"] for l in logs)
+    top_hosts = [{"name": name, "count": cnt} for name, cnt in host_counts.most_common(10)]
+    single_source = len(host_counts) == 1
+
+    # ── Severity distribution ────────────────────────────────────────
+    sev_counts = Counter(l["severity"] for l in logs)
+    worst_severity = min(sev_counts.keys()) if sev_counts else 3
+
+    # ── Generate summary text ────────────────────────────────────────
+    summary_parts = []
+
+    # Headline
+    n_patterns = len(patterns)
+    n_hosts = len(host_counts)
+    summary_parts.append(
+        f"{total} error messages matching {n_patterns} distinct pattern{'s' if n_patterns != 1 else ''} "
+        f"from {n_hosts} host{'s' if n_hosts != 1 else ''}."
+    )
+
+    # Single source?
+    if single_source:
+        host = list(host_counts.keys())[0]
+        summary_parts.append(f"All errors originate from {host} — likely a localized issue on this host.")
+
+    # Dominant pattern?
+    if patterns:
+        top = patterns[0]
+        pct = round(top["count"] / total * 100)
+        if pct >= 60:
+            summary_parts.append(
+                f"Dominant pattern ({pct}% of errors): \"{top['template'][:80]}\"."
+            )
+            if top["noise_score"] is not None and top["noise_score"] >= 70:
+                summary_parts.append(
+                    "This pattern has a high noise score — it may be a known recurring issue rather than a new problem."
+                )
+            if top["avg_rate_per_hour"] is not None and top["avg_rate_per_hour"] > 0:
+                current_rate = top["count"] * 12  # extrapolate from 5min to 1h
+                ratio = current_rate / top["avg_rate_per_hour"] if top["avg_rate_per_hour"] > 0 else 0
+                if ratio > 5:
+                    summary_parts.append(
+                        f"Current rate is ~{ratio:.0f}x the normal baseline ({top['avg_rate_per_hour']:.0f}/hr) — this is a significant spike."
+                    )
+
+        # New/unknown patterns?
+        new_patterns = [p for p in patterns if not p["is_known"]]
+        if new_patterns:
+            summary_parts.append(
+                f"{len(new_patterns)} pattern{'s are' if len(new_patterns) != 1 else ' is'} "
+                f"previously unseen — may indicate a new failure mode."
+            )
+
+    # Critical severity?
+    if worst_severity <= 1:
+        summary_parts.append(
+            f"Contains {SEVERITY_NAMES[worst_severity]}-level messages — immediate attention recommended."
+        )
+
+    # Precursor check
+    precursor_hints = []
+    try:
+        if known_hashes:
+            tpl_ids = [t.id for t in tpl_map.values()]
+            if tpl_ids:
+                prec_rows = (await db.execute(
+                    select(PrecursorPattern, LogTemplate)
+                    .join(LogTemplate, PrecursorPattern.template_id == LogTemplate.id)
+                    .where(
+                        PrecursorPattern.template_id.in_(tpl_ids),
+                        PrecursorPattern.confidence >= 0.3,
+                    )
+                    .order_by(PrecursorPattern.confidence.desc())
+                    .limit(3)
+                )).all()
+                for pp, lt in prec_rows:
+                    precursor_hints.append({
+                        "template": lt.template,
+                        "precedes": pp.precedes_event,
+                        "confidence": round(pp.confidence * 100),
+                        "lead_time_min": round(pp.avg_lead_time_sec / 60, 1) if pp.avg_lead_time_sec else None,
+                    })
+                if precursor_hints:
+                    summary_parts.append(
+                        f"These patterns have historically preceded {precursor_hints[0]['precedes']} events "
+                        f"({precursor_hints[0]['confidence']}% confidence)."
+                    )
+    except Exception:
+        pass
+
+    return {
+        "summary": " ".join(summary_parts),
+        "total_messages": total,
+        "unique_patterns": n_patterns,
+        "affected_hosts": n_hosts,
+        "single_source": single_source,
+        "worst_severity": SEVERITY_NAMES.get(worst_severity, f"sev{worst_severity}"),
+        "patterns": patterns,
+        "top_hosts": top_hosts,
+        "precursor_hints": precursor_hints,
+    }
+
+
 @router.get("/incidents/{incident_id}", summary="Incident detail with events timeline")
 async def get_incident(
     incident_id: int,
@@ -870,12 +1028,13 @@ async def get_incident(
 
     # Fetch related syslog entries around the incident timeframe
     related_logs = []
+    log_analysis = None
     try:
         from services.clickhouse_client import query as ch_query
         start = incident.created_at - timedelta(minutes=5)
         end = (incident.resolved_at or datetime.utcnow()) + timedelta(minutes=5)
         rows = await ch_query(
-            "SELECT timestamp, hostname, severity, app_name, message "
+            "SELECT timestamp, hostname, severity, app_name, message, template_hash "
             "FROM syslog_messages "
             "WHERE timestamp >= {t0:DateTime64(3)} AND timestamp <= {t1:DateTime64(3)} "
             "AND severity <= 3 "
@@ -890,7 +1049,12 @@ async def get_incident(
                 "severity": r.get("severity", 0),
                 "app_name": r.get("app_name", ""),
                 "message": r.get("message", ""),
+                "template_hash": r.get("template_hash", ""),
             })
+
+        # Build automatic analysis
+        if related_logs:
+            log_analysis = await _analyze_incident_logs(db, related_logs, start, end)
     except Exception:
         pass
 
@@ -914,6 +1078,7 @@ async def get_incident(
             for e in events
         ],
         "related_logs": related_logs,
+        "log_analysis": log_analysis,
     }
 
 
