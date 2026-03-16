@@ -75,7 +75,7 @@ export function Sidebar() {
   const { sidebarCollapsed, colorMode, toggleColorMode } = useThemeStore();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const [intOpen, setIntOpen] = useState(true);
+  const [intOpen, setIntOpen] = useState(() => pathname.startsWith('/integration'));
   const [search, setSearch] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -275,7 +275,7 @@ export function Sidebar() {
               })}
               {isAdmin && (
                 <Link
-                  href="/settings"
+                  href="/credentials"
                   className="flex items-center gap-2 px-3 py-1.5 pl-7 text-sm text-slate-500 hover:text-sky-400 transition-colors"
                 >
                   <Plus size={14} />
