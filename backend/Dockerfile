@@ -10,9 +10,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# iputils-ping for ICMP checks, snmp for SNMP monitoring
+# iputils-ping for ICMP checks, snmp for SNMP monitoring, gosu for privilege drop
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        iputils-ping snmp \
+        iputils-ping snmp gosu libcap2-bin \
+    && setcap cap_net_raw+ep /usr/bin/ping \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /install /usr/local
@@ -28,11 +29,13 @@ ARG GIT_COMMIT=dev
 ARG BUILD_DATE=unknown
 RUN echo "{\"commit\":\"${GIT_COMMIT}\",\"date\":\"${BUILD_DATE}\"}" > /app/.build-version
 
-USER nodeglow
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
