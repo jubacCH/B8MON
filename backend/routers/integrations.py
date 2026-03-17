@@ -19,12 +19,75 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import select as sa_select
 
+import ipaddress
+import re
+from urllib.parse import urlparse
+
 from integrations import get_registry, get_integration
 from integrations._base import BaseIntegration
 from database import PingHost
 from models.base import get_db
 from services import integration as int_svc
 from services import snapshot as snap_svc
+
+
+def _require_editor(request: Request):
+    """Return True (= blocked) if the current user is readonly."""
+    user = getattr(request.state, "current_user", None)
+    role = getattr(user, "role", "admin") or "admin"
+    if role == "readonly":
+        return True
+    return False
+
+
+def _validate_host(value: str) -> str | None:
+    """Validate a host/URL config value against SSRF.
+
+    Returns an error message if blocked, None if OK.
+    Allows RFC1918 private ranges (homelab use case) but blocks
+    loopback, link-local, and cloud metadata IPs.
+    """
+    if not value:
+        return None
+
+    # Extract hostname from URL or bare host
+    host = value.strip()
+    if "://" in host:
+        parsed = urlparse(host)
+        host = parsed.hostname or ""
+    # Strip port
+    host = re.sub(r":\d+$", "", host)
+
+    if not host:
+        return None
+
+    # Block obvious localhost aliases
+    if host.lower() in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        return "Loopback addresses are not allowed"
+
+    # Try to parse as IP
+    try:
+        addr = ipaddress.ip_address(host)
+        if addr.is_loopback:
+            return "Loopback addresses are not allowed"
+        if addr.is_link_local:
+            return "Link-local addresses are not allowed (cloud metadata risk)"
+    except ValueError:
+        # It's a hostname — block metadata hostnames
+        if host.lower() in ("metadata.google.internal", "instance-data"):
+            return "Cloud metadata endpoints are not allowed"
+
+    return None
+
+
+def _validate_config_hosts(config_dict: dict, fields) -> str | None:
+    """Validate all host/url fields in a config dict."""
+    for f in fields:
+        if f.key in ("host", "url", "base_url", "server", "address"):
+            err = _validate_host(str(config_dict.get(f.key, "")))
+            if err:
+                return f"{f.label}: {err}"
+    return None
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -239,6 +302,8 @@ async def api_create_instance(
     db: AsyncSession = Depends(get_db),
 ):
     """JSON API for creating an integration instance."""
+    if _require_editor(request):
+        return JSONResponse({"error": "Read-only access"}, status_code=403)
     integration_cls = get_integration(integration_type)
     if not integration_cls:
         return JSONResponse({"error": "Unknown integration type"}, status_code=404)
@@ -259,6 +324,9 @@ async def api_create_instance(
                 config_dict[field.key] = field.default if field.default is not None else 0
         else:
             config_dict[field.key] = str(val).strip() if val else (str(field.default) if field.default is not None else "")
+    host_err = _validate_config_hosts(config_dict, integration_cls.config_fields)
+    if host_err:
+        return JSONResponse({"error": host_err}, status_code=400)
     cfg = await int_svc.create_config(db, integration_type, name, config_dict)
     from main import invalidate_nav_cache
     invalidate_nav_cache()
@@ -276,6 +344,8 @@ async def api_edit_instance(
     db: AsyncSession = Depends(get_db),
 ):
     """JSON API for editing an integration instance."""
+    if _require_editor(request):
+        return JSONResponse({"error": "Read-only access"}, status_code=403)
     integration_cls = get_integration(integration_type)
     if not integration_cls:
         return JSONResponse({"error": "Unknown integration type"}, status_code=404)
@@ -307,6 +377,9 @@ async def api_edit_instance(
         else:
             config_dict[field.key] = str(val).strip()
 
+    host_err = _validate_config_hosts(config_dict, integration_cls.config_fields)
+    if host_err:
+        return JSONResponse({"error": host_err}, status_code=400)
     await int_svc.update_config(db, config_id, name=name, config_dict=config_dict)
     return JSONResponse({"ok": True, "id": config_id, "name": name})
 
@@ -316,11 +389,14 @@ async def api_edit_instance(
 
 @router.delete("/api/integration/{integration_type}/{config_id}")
 async def api_delete_instance(
+    request: Request,
     integration_type: str,
     config_id: int,
     db: AsyncSession = Depends(get_db),
 ):
     """JSON API for deleting an integration instance."""
+    if _require_editor(request):
+        return JSONResponse({"error": "Read-only access"}, status_code=403)
     await int_svc.delete_config(db, config_id)
     from main import invalidate_nav_cache
     invalidate_nav_cache()
@@ -336,6 +412,8 @@ async def add_instance(
     integration_type: str,
     db: AsyncSession = Depends(get_db),
 ):
+    if _require_editor(request):
+        return HTMLResponse("Read-only access", status_code=403)
     integration_cls = get_integration(integration_type)
     if not integration_cls:
         return HTMLResponse("Integration not found", status_code=404)
@@ -346,6 +424,9 @@ async def add_instance(
         name = f"{integration_cls.display_name} Instance"
 
     config_dict = _parse_form_config(integration_cls, dict(form))
+    host_err = _validate_config_hosts(config_dict, integration_cls.config_fields)
+    if host_err:
+        return HTMLResponse(f"Validation error: {host_err}", status_code=400)
     await int_svc.create_config(db, integration_type, name, config_dict)
     from main import invalidate_nav_cache
     invalidate_nav_cache()
@@ -365,6 +446,8 @@ async def edit_instance(
     config_id: int,
     db: AsyncSession = Depends(get_db),
 ):
+    if _require_editor(request):
+        return HTMLResponse("Read-only access", status_code=403)
     integration_cls = get_integration(integration_type)
     if not integration_cls:
         return HTMLResponse("Integration not found", status_code=404)
@@ -377,7 +460,9 @@ async def edit_instance(
     form = await request.form()
     name = str(form.get("name", "")).strip() or cfg.name
     config_dict = _parse_form_config(integration_cls, dict(form), existing_config)
-
+    host_err = _validate_config_hosts(config_dict, integration_cls.config_fields)
+    if host_err:
+        return HTMLResponse(f"Validation error: {host_err}", status_code=400)
     await int_svc.update_config(db, config_id, name=name, config_dict=config_dict)
     return RedirectResponse(
         url=f"/integration/{integration_type}/{config_id}?saved=1",
@@ -395,6 +480,8 @@ async def delete_instance(
     config_id: int,
     db: AsyncSession = Depends(get_db),
 ):
+    if _require_editor(request):
+        return HTMLResponse("Read-only access", status_code=403)
     await int_svc.delete_config(db, config_id)
     from main import invalidate_nav_cache
     invalidate_nav_cache()

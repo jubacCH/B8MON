@@ -94,8 +94,12 @@ async def settings_page(request: Request, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/json")
-async def settings_json(db: AsyncSession = Depends(get_db)):
+async def settings_json(request: Request, db: AsyncSession = Depends(get_db)):
     """Return current settings as JSON for the SPA frontend."""
+    user = getattr(request.state, "current_user", None)
+    role = getattr(user, "role", "admin") or "admin"
+    if role != "admin":
+        return JSONResponse({"error": "Admin access required"}, status_code=403)
     keys = [
         "site_name", "timezone", "ping_interval", "latency_threshold_ms",
         "proxmox_interval", "notify_enabled",

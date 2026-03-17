@@ -107,6 +107,16 @@ async def import_backup(db: AsyncSession, data: dict) -> dict:
             if table_name in tables_data:
                 await db.execute(text(f"TRUNCATE TABLE {table_name} CASCADE"))
 
+        # Get valid column names for each table from the DB schema
+        _valid_columns: dict[str, set[str]] = {}
+        conn = await db.connection()
+        for t in EXPORT_TABLES:
+            try:
+                col_info = await conn.run_sync(lambda sc, tn=t: inspect(sc).get_columns(tn))
+                _valid_columns[t] = {c["name"] for c in col_info}
+            except Exception:
+                _valid_columns[t] = set()
+
         # Insert in forward order (parents first)
         for table_name in EXPORT_TABLES:
             rows = tables_data.get(table_name, [])
@@ -114,14 +124,29 @@ async def import_backup(db: AsyncSession, data: dict) -> dict:
                 imported[table_name] = 0
                 continue
 
-            cols = list(rows[0].keys())
+            # Validate column names against DB schema to prevent SQL injection
+            allowed = _valid_columns.get(table_name, set())
+            if not allowed:
+                logger.warning("Skipping import of %s: could not determine schema", table_name)
+                imported[table_name] = 0
+                continue
+            cols = [c for c in rows[0].keys() if c in allowed]
+            if not cols:
+                imported[table_name] = 0
+                continue
+            rejected = set(rows[0].keys()) - allowed
+            if rejected:
+                logger.warning("Ignoring unknown columns in %s: %s", table_name, rejected)
+
             placeholders = ", ".join(f":{c}" for c in cols)
             col_names = ", ".join(cols)
 
             for row in rows:
+                # Only include validated columns
+                safe_row = {c: row.get(c) for c in cols}
                 await db.execute(
                     text(f"INSERT INTO {table_name} ({col_names}) VALUES ({placeholders})"),
-                    row,
+                    safe_row,
                 )
 
             # Reset sequence

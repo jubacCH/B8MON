@@ -13,6 +13,13 @@ api_router = APIRouter()
 VALID_ROLES = {"admin", "editor", "readonly"}
 
 
+def _require_admin(request: Request) -> bool:
+    """Return True (= blocked) if the current user is not an admin."""
+    user = getattr(request.state, "current_user", None)
+    role = getattr(user, "role", "admin") or "admin"
+    return role != "admin"
+
+
 @api_router.get("/api/users")
 async def list_users_api(request: Request, db: AsyncSession = Depends(get_db)):
     """JSON user list for the frontend (session-authenticated)."""
@@ -125,6 +132,8 @@ async def change_own_password(
 
 @router.get("")
 async def users_page(request: Request, db: AsyncSession = Depends(get_db)):
+    if _require_admin(request):
+        return JSONResponse({"error": "Admin access required"}, status_code=403)
     result = await db.execute(select(User).order_by(User.created_at))
     users = result.scalars().all()
     return JSONResponse([
@@ -140,11 +149,14 @@ async def users_page(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.post("/add")
 async def add_user(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
     role: str = Form("readonly"),
     db: AsyncSession = Depends(get_db),
 ):
+    if _require_admin(request):
+        return JSONResponse({"error": "Admin access required"}, status_code=403)
     if role not in VALID_ROLES:
         role = "readonly"
     existing = (await db.execute(select(User).where(User.username == username.strip()))).scalar_one_or_none()
@@ -158,10 +170,13 @@ async def add_user(
 
 @router.post("/{user_id}/role")
 async def update_role(
+    request: Request,
     user_id: int,
     role: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
+    if _require_admin(request):
+        return JSONResponse({"error": "Admin access required"}, status_code=403)
     if role not in VALID_ROLES:
         return RedirectResponse(url="/users?error=invalid_role", status_code=303)
     user = await db.get(User, user_id)
@@ -178,10 +193,13 @@ async def update_role(
 
 @router.post("/{user_id}/password")
 async def reset_password(
+    request: Request,
     user_id: int,
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
+    if _require_admin(request):
+        return JSONResponse({"error": "Admin access required"}, status_code=403)
     user = await db.get(User, user_id)
     if not user:
         return RedirectResponse(url="/users", status_code=303)
@@ -196,6 +214,8 @@ async def delete_user(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    if _require_admin(request):
+        return JSONResponse({"error": "Admin access required"}, status_code=403)
     current = request.state.current_user
     if current and current.id == user_id:
         return RedirectResponse(url="/users?error=self_delete", status_code=303)

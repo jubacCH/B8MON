@@ -219,7 +219,7 @@ async def inject_globals(request: Request, call_next):
         or request.url.path.startswith("/api/docs") or request.url.path.startswith("/api/redoc")
         or request.url.path.startswith("/api/openapi")
         or request.url.path.startswith("/ws/")
-        or request.url.path.startswith("/install/") or "/download/" in request.url.path
+        or request.url.path.startswith("/install/") or request.url.path.startswith("/agents/download/")
     )
     if _skip:
         response = await call_next(request)
@@ -257,6 +257,10 @@ async def inject_globals(request: Request, call_next):
             # /api/v1/ has its own auth (API key) — let it through
             if is_api and not request.url.path.startswith("/api/v1/"):
                 return _JSON({"error": "Unauthorized"}, status_code=401)
+            # Non-API HTML routes: redirect unauthenticated users to login
+            if not is_api and request.url.path not in ("/login", "/favicon.ico"):
+                from fastapi.responses import RedirectResponse as _RR
+                return _RR(url="/login", status_code=302)
             request.state.current_user = None
             response = await call_next(request)
             return response
@@ -286,6 +290,23 @@ async def inject_globals(request: Request, call_next):
 # ── Global WebSocket ─────────────────────────────────────────────────────────
 @app.websocket("/ws/live")
 async def ws_live(websocket: WebSocket):
+    # Authenticate via session cookie before accepting
+    from database import AsyncSessionLocal as _ASL
+    from models.settings import Session as _Sess, User as _User
+    from sqlalchemy import select as _sel
+    from datetime import datetime as _dt
+    token = websocket.cookies.get("nodeglow_session")
+    if not token:
+        await websocket.close(code=4401, reason="Unauthorized")
+        return
+    async with _ASL() as _db:
+        row = (await _db.execute(
+            _sel(_Sess).where(_Sess.token == token, _Sess.expires_at > _dt.utcnow())
+        )).scalar_one_or_none()
+        if not row:
+            await websocket.close(code=4401, reason="Unauthorized")
+            return
+
     from services.websocket import register, unregister
     await register(websocket)
     try:
