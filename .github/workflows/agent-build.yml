@@ -52,10 +52,13 @@ jobs:
         run: |
           set -o pipefail
           cargo build --release --target ${{ matrix.target }} 2>&1 | tee build-output.log || {
-            echo "## Build failed for ${{ matrix.target }}" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -80 build-output.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "::group::Build errors"
+            tail -80 build-output.log
+            echo "::endgroup::"
+            # Output last 20 lines as individual error annotations
+            tail -20 build-output.log | while IFS= read -r line; do
+              echo "::error::$line"
+            done
             exit 1
           }
 
