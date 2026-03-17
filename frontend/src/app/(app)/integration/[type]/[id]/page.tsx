@@ -23,6 +23,7 @@ import { HassDetail } from '@/components/integrations/HassDetail';
 import { GiteaDetail } from '@/components/integrations/GiteaDetail';
 import { UpsDetail } from '@/components/integrations/UpsDetail';
 import { RedfishDetail } from '@/components/integrations/RedfishDetail';
+import { SwisscomDetail } from '@/components/integrations/SwisscomDetail';
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -44,6 +45,7 @@ const detailComponents: Record<string, React.ComponentType<{ data: any }>> = {
   gitea: GiteaDetail,
   ups: UpsDetail,
   redfish: RedfishDetail,
+  swisscom: SwisscomDetail,
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
