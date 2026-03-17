@@ -51,7 +51,7 @@ pub async fn collect_metrics() -> anyhow::Result<SystemMetrics> {
         disks.push(DiskInfo {
             mount: d.mount_point().to_string_lossy().to_string(),
             device: d.name().to_string_lossy().to_string(),
-            fs_type: String::from_utf8_lossy(d.file_system()).to_string(),
+            fs_type: d.file_system().to_string_lossy().to_string(),
             total_gb: (total as f64 / 1073741824.0 * 10.0).round() / 10.0,
             used_gb: (used as f64 / 1073741824.0 * 10.0).round() / 10.0,
             pct,
