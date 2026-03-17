@@ -2,6 +2,7 @@
 Agent router — register agents, receive metrics, serve UI + WebSocket live feed.
 """
 import hashlib
+import hmac
 import json
 import logging
 import secrets
@@ -53,7 +54,7 @@ async def agent_enroll(request: Request):
         return JSONResponse({"error": "enrollment_key and hostname required"}, status_code=400)
 
     expected_key = await _get_enrollment_key()
-    if enroll_key != expected_key:
+    if not hmac.compare_digest(enroll_key, expected_key):
         return JSONResponse({"error": "Invalid enrollment key"}, status_code=403)
 
     # Use the client's real IP for PingHost (hostname may not be resolvable from server)
@@ -65,6 +66,8 @@ async def agent_enroll(request: Request):
         result = await db.execute(select(Agent).where(sa_func.lower(Agent.hostname) == hostname.lower()))
         existing = result.scalars().first()
         if existing:
+            # Rotate token on re-enrollment for security
+            existing.token = secrets.token_hex(24)
             existing.platform = plat or existing.platform
             existing.arch = arch or existing.arch
             existing.last_seen = datetime.utcnow()
@@ -468,9 +471,12 @@ async def agent_global_settings(request: Request):
 
 # ── Enrollment info (JSON API for SPA) ────────────────────────────────────────
 
-@router.get("/api/agent/enrollment-info")
+@router.get("/api/enrollment-info")
 async def enrollment_info(request: Request):
-    """Return enrollment key + install commands for SPA."""
+    """Return enrollment key + install commands for SPA. Requires admin session."""
+    user = getattr(request.state, "current_user", None)
+    if not user or getattr(user, "role", None) != "admin":
+        return JSONResponse({"error": "Admin access required"}, status_code=403)
     async with AsyncSessionLocal() as db:
         custom_url = await get_setting(db, "agent_server_url", "")
     if custom_url:

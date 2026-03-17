@@ -44,10 +44,7 @@ _limiter = RateLimiter()
 
 
 def _get_client_ip(request: Request) -> str:
-    """Extract client IP, respecting X-Forwarded-For behind reverse proxy."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """Extract client IP from the direct connection (ignore X-Forwarded-For to prevent spoofing)."""
     return request.client.host if request.client else "unknown"
 
 

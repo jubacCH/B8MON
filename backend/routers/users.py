@@ -2,10 +2,11 @@ import bcrypt
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from templating import templates
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import User, get_db
+from models.settings import Session as UserSession
 
 router = APIRouter(prefix="/users")
 api_router = APIRouter()
@@ -104,6 +105,7 @@ async def update_user_api(user_id: int, request: Request, db: AsyncSession = Dep
         user.role = new_role
     if "password" in body and body["password"]:
         user.password_hash = bcrypt.hashpw(body["password"].encode(), bcrypt.gensalt()).decode()
+        await db.execute(sa_delete(UserSession).where(UserSession.user_id == user_id))
     await db.commit()
     return JSONResponse({"ok": True})
 
@@ -122,6 +124,15 @@ async def change_own_password(
     db_user = await db.get(User, user.id)
     if db_user:
         db_user.password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        # Invalidate all other sessions (keep current one via new login)
+        current_token = request.cookies.get("nodeglow_session")
+        if current_token:
+            await db.execute(
+                sa_delete(UserSession).where(
+                    UserSession.user_id == user.id,
+                    UserSession.token != current_token,
+                )
+            )
         await db.commit()
     # Redirect back to referrer (validated) or dashboard
     ref = request.headers.get("referer", "/")
@@ -204,6 +215,7 @@ async def reset_password(
     if not user:
         return RedirectResponse(url="/users", status_code=303)
     user.password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    await db.execute(sa_delete(UserSession).where(UserSession.user_id == user_id))
     await db.commit()
     return RedirectResponse(url="/users?saved=1", status_code=303)
 

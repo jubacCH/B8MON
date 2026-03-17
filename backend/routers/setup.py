@@ -24,15 +24,21 @@ async def complete_setup(
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
-    await set_setting(db, "site_name", site_name.strip() or "NODEGLOW")
-    await set_setting(db, "setup_complete", "true")
-    await set_setting(db, "ping_interval", "60")
+    if not password.strip():
+        return RedirectResponse(url="/setup?error=password_required", status_code=303)
+    if await is_setup_complete(db):
+        return RedirectResponse(url="/", status_code=303)
 
     # Only create user if none exist
     count = (await db.execute(select(func.count()).select_from(User))).scalar()
-    if count == 0 and password.strip():
+    if count == 0:
         pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-        db.add(User(username=username.strip() or "admin", password_hash=pw_hash))
-        await db.commit()
+        db.add(User(username=username.strip() or "admin", password_hash=pw_hash, role="admin"))
+
+    await set_setting(db, "site_name", site_name.strip() or "NODEGLOW")
+    await set_setting(db, "ping_interval", "60")
+    # Set setup_complete last — only after user creation
+    await set_setting(db, "setup_complete", "true")
+    await db.commit()
 
     return RedirectResponse(url="/", status_code=303)

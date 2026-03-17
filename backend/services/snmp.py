@@ -377,7 +377,7 @@ async def snmp_get(host: str, port: int, community: str, oids: list[str],
             proc = await asyncio.create_subprocess_exec(
                 "snmpget", "-v2c", "-c", community, "-t", str(int(timeout)),
                 "-r", "1", "-On", "-Oq",
-                f"{host}:{port}", oid,
+                "--", f"{host}:{port}", oid,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -410,7 +410,7 @@ async def snmp_walk(host: str, port: int, community: str, oid: str,
         proc = await asyncio.create_subprocess_exec(
             "snmpwalk", "-v2c", "-c", community, "-t", str(int(timeout)),
             "-r", "1", "-On", "-Oq",
-            f"{host}:{port}", oid,
+            "--", f"{host}:{port}", oid,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -446,7 +446,7 @@ async def snmp_v3_get(host: str, port: int, username: str, auth_proto: str,
         sec_level = "authPriv"
         args += ["-x", priv_proto or "AES", "-X", priv_pass]
 
-    args += ["-l", sec_level, f"{host}:{port}"]
+    args += ["-l", sec_level, "--", f"{host}:{port}"]
 
     for oid in oids:
         try:

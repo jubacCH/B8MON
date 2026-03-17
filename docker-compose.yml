@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-nodeglow}
       POSTGRES_USER: ${POSTGRES_USER:-nodeglow}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nodeglow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nodeglow}"]
       interval: 5s
@@ -24,7 +24,7 @@ services:
     environment:
       CLICKHOUSE_DB: nodeglow
       CLICKHOUSE_USER: nodeglow
-      CLICKHOUSE_PASSWORD: ${POSTGRES_PASSWORD:-nodeglow}
+      CLICKHOUSE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1' 2>/dev/null || exit 1"]
@@ -46,8 +46,8 @@ services:
       - .:/opt/repo                                # Git repo (for self-update)
       - /var/run/docker.sock:/var/run/docker.sock  # Docker API (for self-update)
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-nodeglow}:${POSTGRES_PASSWORD:-nodeglow}@db:5432/${POSTGRES_DB:-nodeglow}
-      CLICKHOUSE_URL: http://nodeglow:${POSTGRES_PASSWORD:-nodeglow}@clickhouse:8123/nodeglow
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-nodeglow}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-nodeglow}
+      CLICKHOUSE_URL: http://nodeglow:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@clickhouse:8123/nodeglow
       DATA_DIR: /data
       SYSLOG_PORT: "1514"
     depends_on:

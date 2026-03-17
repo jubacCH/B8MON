@@ -96,8 +96,8 @@ async def health():
         async with AsyncSessionLocal() as db:
             await db.execute(sa_text("SELECT 1"))
         return {"status": "ok", "db": "connected"}
-    except Exception as e:
-        return {"status": "error", "db": str(e)}
+    except Exception:
+        return {"status": "error", "db": "connection failed"}
 
 
 # ── Nav counts cache (60s TTL, single GROUP BY query) ────────────────────────
@@ -215,7 +215,7 @@ async def inject_globals(request: Request, call_next):
     _skip = (
         request.url.path.startswith("/static/") or request.url.path == "/health"
         or request.url.path.startswith("/api/agent/")
-        or request.url.path.startswith("/api/v2/") or request.url.path.startswith("/api/auth/")
+        or request.url.path.startswith("/api/auth/")
         or request.url.path.startswith("/api/docs") or request.url.path.startswith("/api/redoc")
         or request.url.path.startswith("/api/openapi")
         or request.url.path.startswith("/ws/")
@@ -283,6 +283,15 @@ async def inject_globals(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "connect-src 'self' ws: wss:; "
+        "font-src 'self' data:; "
+        "frame-ancestors 'none'"
+    )
 
     return response
 

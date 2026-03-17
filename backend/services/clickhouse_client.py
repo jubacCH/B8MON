@@ -135,7 +135,9 @@ def _where_clauses(
             params["hname"] = host_name
         clauses.append(f"({' OR '.join(sub)})")
     if sev_list:
-        in_vals = ",".join(str(s) for s in sev_list)
+        # Validate all values are integers to prevent injection
+        safe_sevs = [int(s) for s in sev_list]
+        in_vals = ",".join(str(s) for s in safe_sevs)
         clauses.append(f"severity IN ({in_vals})")
 
     return " AND ".join(clauses), params

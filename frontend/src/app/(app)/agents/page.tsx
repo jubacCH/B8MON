@@ -83,7 +83,7 @@ function AddAgentDialog({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<'linux' | 'windows'>('linux');
 
   useEffect(() => {
-    get<EnrollmentInfo>('/api/agent/enrollment-info')
+    get<EnrollmentInfo>('/api/enrollment-info')
       .then(setInfo)
       .finally(() => setLoading(false));
   }, []);

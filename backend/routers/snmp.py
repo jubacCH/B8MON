@@ -97,8 +97,10 @@ async def snmp_page(request: Request, db: AsyncSession = Depends(get_db)):
 @router.post("/api/snmp/mibs/upload")
 async def api_upload_mib(file: UploadFile = File(...),
                          db: AsyncSession = Depends(get_db)):
-    """Upload and parse a MIB file."""
-    content = await file.read()
+    """Upload and parse a MIB file (max 2MB)."""
+    content = await file.read(2 * 1024 * 1024 + 1)  # Read up to 2MB + 1 byte
+    if len(content) > 2 * 1024 * 1024:
+        return JSONResponse({"error": "MIB file too large (max 2MB)"}, status_code=413)
     try:
         mib_text = content.decode("utf-8")
     except UnicodeDecodeError:

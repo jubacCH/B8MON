@@ -728,6 +728,10 @@ async def add_ping_host(
     latency_threshold_ms: str = Form(""),
     db: AsyncSession = Depends(get_db),
 ):
+    from routers.integrations import _validate_host
+    host_err = _validate_host(hostname.strip())
+    if host_err:
+        return RedirectResponse(url=f"/hosts?error={host_err}", status_code=303)
     check_type = ",".join(t.strip() for t in check_types if t.strip()) or "icmp"
     db.add(PingHost(
         name=name.strip(),
@@ -750,6 +754,10 @@ async def api_create_host(request: Request, db: AsyncSession = Depends(get_db)):
     port_str = str(body.get("port") or "").strip()
     if not name or not hostname:
         return JSONResponse({"error": "name and hostname required"}, status_code=400)
+    from routers.integrations import _validate_host
+    host_err = _validate_host(hostname)
+    if host_err:
+        return JSONResponse({"error": host_err}, status_code=400)
     host = PingHost(
         name=name,
         hostname=hostname,
