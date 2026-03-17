@@ -66,10 +66,10 @@ function buildTrees(nodes: TopoNode[], edges: TopoEdge[]): { trees: TreeNode[]; 
 
 /* ── Layout engine: compute x,y for each node ── */
 
-const NODE_W = 160;
-const NODE_H = 52;
-const GAP_X = 32;
-const GAP_Y = 80;
+const NODE_W = 200;
+const NODE_H = 64;
+const GAP_X = 40;
+const GAP_Y = 90;
 
 interface LayoutNode {
   id: number;
@@ -210,7 +210,7 @@ function TopologyCanvas({
 
       const colors = nodeColors(to.node);
       ctx.strokeStyle = colors.line;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.moveTo(fromX, fromY);
       ctx.bezierCurveTo(fromX, midY, toX, midY, toX, toY);
@@ -229,18 +229,18 @@ function TopologyCanvas({
     for (const ln of allNodes) {
       const c = nodeColors(ln.node);
       const isHovered = hoveredId === ln.id;
-      const r = 8;
+      const r = 10;
 
       // Shadow for hovered
       if (isHovered) {
         ctx.shadowColor = c.dot;
-        ctx.shadowBlur = 16;
+        ctx.shadowBlur = 20;
       }
 
       // Background
       ctx.fillStyle = isHovered ? c.stroke + '30' : c.fill;
       ctx.strokeStyle = isHovered ? c.dot : c.stroke + '80';
-      ctx.lineWidth = isHovered ? 2 : 1;
+      ctx.lineWidth = isHovered ? 2.5 : 1.5;
       ctx.beginPath();
       ctx.roundRect(ln.x, ln.y, NODE_W, NODE_H, r);
       ctx.fill();
@@ -250,37 +250,41 @@ function TopologyCanvas({
       // Status dot
       ctx.fillStyle = c.dot;
       ctx.beginPath();
-      ctx.arc(ln.x + 14, ln.y + NODE_H / 2, 4, 0, Math.PI * 2);
+      ctx.arc(ln.x + 18, ln.y + NODE_H / 2, 5, 0, Math.PI * 2);
       ctx.fill();
 
       // Glow ring
       ctx.strokeStyle = c.dot;
-      ctx.globalAlpha = 0.25;
-      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.3;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(ln.x + 14, ln.y + NODE_H / 2, 7, 0, Math.PI * 2);
+      ctx.arc(ln.x + 18, ln.y + NODE_H / 2, 9, 0, Math.PI * 2);
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      // Name
-      ctx.fillStyle = isHovered ? '#f8fafc' : '#e2e8f0';
-      ctx.font = `600 12px ui-sans-serif, system-ui, sans-serif`;
+      // Name — large and clear
+      ctx.fillStyle = isHovered ? '#f8fafc' : '#f1f5f9';
+      ctx.font = `600 14px ui-sans-serif, system-ui, -apple-system, sans-serif`;
       ctx.textBaseline = 'top';
-      const name = ln.node.name.length > 16 ? ln.node.name.slice(0, 15) + '…' : ln.node.name;
-      ctx.fillText(name, ln.x + 26, ln.y + 10);
+      const maxNameLen = Math.floor((NODE_W - 46) / 8);
+      const name = ln.node.name.length > maxNameLen ? ln.node.name.slice(0, maxNameLen - 1) + '…' : ln.node.name;
+      ctx.fillText(name, ln.x + 34, ln.y + 13);
 
-      // Hostname
-      ctx.fillStyle = '#64748b';
-      ctx.font = `400 10px ui-monospace, monospace`;
-      const host = ln.node.hostname.length > 20 ? ln.node.hostname.slice(0, 19) + '…' : ln.node.hostname;
-      ctx.fillText(host, ln.x + 26, ln.y + 28);
+      // Hostname — secondary info
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = `400 11px ui-monospace, SFMono-Regular, monospace`;
+      const maxHostLen = Math.floor((NODE_W - 46) / 6.5);
+      const host = ln.node.hostname.length > maxHostLen ? ln.node.hostname.slice(0, maxHostLen - 1) + '…' : ln.node.hostname;
+      ctx.fillText(host, ln.x + 34, ln.y + 35);
 
-      // Status badge right side
+      // Status text right side
+      const statusText = ln.node.maintenance ? 'MAINT' : ln.node.status === 'up' ? 'UP' : 'DOWN';
       ctx.fillStyle = c.dot;
-      ctx.globalAlpha = 0.15;
-      ctx.beginPath();
-      ctx.roundRect(ln.x + NODE_W - 8 - (ln.node.maintenance ? 14 : 6), ln.y + NODE_H / 2 - 4, ln.node.maintenance ? 14 : 6, 8, 4);
-      ctx.fill();
+      ctx.globalAlpha = 0.7;
+      ctx.font = `700 9px ui-sans-serif, system-ui, sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.fillText(statusText, ln.x + NODE_W - 10, ln.y + 14);
+      ctx.textAlign = 'left';
       ctx.globalAlpha = 1;
     }
 
@@ -364,7 +368,7 @@ function TopologyCanvas({
       <canvas
         ref={canvasRef}
         className="w-full"
-        style={{ height: 560 }}
+        style={{ height: 650 }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -447,9 +451,9 @@ export default function TopologyPage() {
       {/* Topology map */}
       <GlassCard className="overflow-hidden">
         {isLoading ? (
-          <Skeleton className="w-full h-[560px]" />
+          <Skeleton className="w-full h-[650px]" />
         ) : !data || data.nodes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-[560px] text-slate-500">
+          <div className="flex flex-col items-center justify-center h-[650px] text-slate-500">
             <Network size={48} className="mb-3 opacity-20" />
             <p className="text-sm">No topology data</p>
             <p className="text-xs mt-1 text-slate-600">Add hosts and integrations to build the map</p>
