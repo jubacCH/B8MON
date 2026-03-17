@@ -62,6 +62,7 @@ const integrationTypes = [
   { slug: 'speedtest', label: 'Speedtest' },
   { slug: 'ups', label: 'UPS / NUT' },
   { slug: 'redfish', label: 'Redfish' },
+  { slug: 'swisscom', label: 'Swisscom' },
 ];
 
 // All searchable items for global search
