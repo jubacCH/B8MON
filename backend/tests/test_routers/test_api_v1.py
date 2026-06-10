@@ -206,6 +206,44 @@ async def test_incident_not_found(client):
     assert resp.status_code == 404
 
 
+async def test_list_incidents_summary_is_latest_meaningful_event(client):
+    """The list summary is the newest event, excluding ack/resolve markers.
+
+    Characterization for the greatest-per-group lookup: incidents with many
+    events must surface exactly the most recent non-system event summary.
+    """
+    from datetime import datetime, timedelta
+
+    from database import AsyncSessionLocal
+    from models.incident import Incident, IncidentEvent
+
+    now = datetime.utcnow()
+    async with AsyncSessionLocal() as s:
+        inc = Incident(rule="host_down_syslog", title="host down", severity="critical", status="open")
+        other = Incident(rule="syslog_spike", title="spike", severity="warning", status="open")
+        s.add_all([inc, other])
+        await s.flush()
+        s.add_all([
+            IncidentEvent(incident_id=inc.id, event_type="created",
+                          summary="first event", timestamp=now - timedelta(minutes=10)),
+            IncidentEvent(incident_id=inc.id, event_type="host_down",
+                          summary="newest meaningful event", timestamp=now - timedelta(minutes=2)),
+            # System markers must never win, even when they are newest.
+            IncidentEvent(incident_id=inc.id, event_type="acknowledged",
+                          summary="acked by julian", timestamp=now - timedelta(minutes=1)),
+            IncidentEvent(incident_id=other.id, event_type="created",
+                          summary="other incident event", timestamp=now - timedelta(minutes=5)),
+        ])
+        await s.commit()
+        inc_id, other_id = inc.id, other.id
+
+    resp = await client.get("/api/v1/incidents")
+    assert resp.status_code == 200
+    by_id = {i["id"]: i for i in resp.json()}
+    assert by_id[inc_id]["summary"] == "newest meaningful event"
+    assert by_id[other_id]["summary"] == "other incident event"
+
+
 # ── Syslog ───────────────────────────────────────────────────────────────────
 
 

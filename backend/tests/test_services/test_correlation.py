@@ -242,3 +242,67 @@ async def test_precursor_rule_skips_blacklisted_template_at_fire_time(db):
         select(Incident).where(Incident.rule == "learned_precursor")
     )).scalars().all()
     assert incidents == []
+
+
+async def test_cleanup_incident_events_keeps_newest_meaningful(db):
+    """Pruning drops old events but never the newest meaningful one per incident."""
+    from datetime import timedelta
+
+    from sqlalchemy import select
+    from models.incident import Incident, IncidentEvent
+    from services.correlation import cleanup_incident_events
+
+    now = datetime.utcnow()
+    old = now - timedelta(days=60)
+    # inc1: every event is stale — its newest meaningful event must survive
+    # anyway, because it backs the summary in the incident list.
+    inc1 = Incident(rule="host_down_syslog", title="down", severity="critical", status="resolved")
+    # inc2: has a recent meaningful event — its stale rows are free to go.
+    inc2 = Incident(rule="syslog_spike", title="spike", severity="warning", status="open")
+    db.add_all([inc1, inc2])
+    await db.flush()
+    db.add_all([
+        IncidentEvent(incident_id=inc1.id, event_type="created",
+                      summary="inc1 old created", timestamp=old),
+        IncidentEvent(incident_id=inc1.id, event_type="host_down",
+                      summary="inc1 newest meaningful", timestamp=old + timedelta(minutes=5)),
+        IncidentEvent(incident_id=inc1.id, event_type="acknowledged",
+                      summary="inc1 old ack marker", timestamp=old + timedelta(minutes=10)),
+        IncidentEvent(incident_id=inc2.id, event_type="created",
+                      summary="inc2 old created", timestamp=old),
+        IncidentEvent(incident_id=inc2.id, event_type="host_up",
+                      summary="inc2 recent event", timestamp=now - timedelta(hours=1)),
+    ])
+    await db.commit()
+
+    deleted = await cleanup_incident_events(db, retention_days=30)
+    await db.commit()
+
+    remaining = (await db.execute(select(IncidentEvent.summary))).scalars().all()
+    assert deleted == 3
+    assert sorted(remaining) == ["inc1 newest meaningful", "inc2 recent event"]
+
+
+async def test_cleanup_incident_events_disabled_with_zero(db):
+    """retention_days=0 disables pruning entirely."""
+    from datetime import timedelta
+
+    from sqlalchemy import select
+    from models.incident import Incident, IncidentEvent
+    from services.correlation import cleanup_incident_events
+
+    inc = Incident(rule="syslog_spike", title="spike", severity="warning", status="open")
+    db.add(inc)
+    await db.flush()
+    db.add(IncidentEvent(incident_id=inc.id, event_type="created",
+                         summary="ancient", timestamp=datetime.utcnow() - timedelta(days=400)))
+    await db.commit()
+
+    deleted = await cleanup_incident_events(db, retention_days=0)
+    await db.commit()
+
+    count = len((await db.execute(
+        select(IncidentEvent).where(IncidentEvent.incident_id == inc.id)
+    )).scalars().all())
+    assert deleted == 0
+    assert count == 1

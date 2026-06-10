@@ -31,6 +31,7 @@ interface SettingsData {
   ping_retention_days: string;
   proxmox_retention_days: string;
   integration_retention_days: string;
+  incident_event_retention_days: string;
   anomaly_threshold: string;
   proxmox_cpu_threshold: string;
   proxmox_ram_threshold: string;
@@ -292,6 +293,7 @@ export default function SettingsPage() {
   const [pingRetention, setPingRetention] = useState('30');
   const [proxmoxRetention, setProxmoxRetention] = useState('7');
   const [integrationRetention, setIntegrationRetention] = useState('7');
+  const [incidentEventRetention, setIncidentEventRetention] = useState('30');
   const [anomalyThreshold, setAnomalyThreshold] = useState('2.0');
   const [cpuThreshold, setCpuThreshold] = useState('85');
   const [ramThreshold, setRamThreshold] = useState('85');
@@ -403,6 +405,7 @@ export default function SettingsPage() {
     setPingRetention(s.ping_retention_days || '30');
     setProxmoxRetention(s.proxmox_retention_days || '7');
     setIntegrationRetention(s.integration_retention_days || '7');
+    setIncidentEventRetention(s.incident_event_retention_days || '30');
     setAnomalyThreshold(s.anomaly_threshold || '2.0');
     setCpuThreshold(s.proxmox_cpu_threshold || '85');
     setRamThreshold(s.proxmox_ram_threshold || '85');
@@ -542,6 +545,7 @@ export default function SettingsPage() {
     params.set('ping_retention', pingRetention);
     params.set('proxmox_retention', proxmoxRetention);
     params.set('integration_retention', integrationRetention);
+    params.set('incident_event_retention', incidentEventRetention);
     params.set('anomaly_threshold', anomalyThreshold);
     params.set('cpu_threshold', cpuThreshold);
     params.set('ram_threshold', ramThreshold);
@@ -811,6 +815,65 @@ export default function SettingsPage() {
                     min={10}
                     max={3600}
                   />
+                </div>
+              </div>
+            )}
+          </GlassCard>
+          <GlassCard className="p-4">
+            <h3 className="text-base font-semibold text-slate-200 mb-3">Data Retention</h3>
+            {settingsLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-8 w-40" />
+                <Skeleton className="h-8 w-40" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="ng-label">Ping History (days)</label>
+                  <input
+                    type="number"
+                    value={pingRetention}
+                    onChange={(e) => setPingRetention(e.target.value)}
+                    className={inputSmCls}
+                    min={1}
+                    max={365}
+                  />
+                </div>
+                <div>
+                  <label className="ng-label">Integration Snapshots (days)</label>
+                  <input
+                    type="number"
+                    value={integrationRetention}
+                    onChange={(e) => setIntegrationRetention(e.target.value)}
+                    className={inputSmCls}
+                    min={1}
+                    max={90}
+                  />
+                </div>
+                <div>
+                  <label className="ng-label">Proxmox History (days)</label>
+                  <input
+                    type="number"
+                    value={proxmoxRetention}
+                    onChange={(e) => setProxmoxRetention(e.target.value)}
+                    className={inputSmCls}
+                    min={1}
+                    max={90}
+                  />
+                </div>
+                <div>
+                  <label className="ng-label">Incident Events (days)</label>
+                  <input
+                    type="number"
+                    value={incidentEventRetention}
+                    onChange={(e) => setIncidentEventRetention(e.target.value)}
+                    className={inputSmCls}
+                    min={0}
+                    max={365}
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Prunes incident timeline events nightly; the newest event per incident is always kept. 0 = keep forever.
+                  </p>
                 </div>
               </div>
             )}

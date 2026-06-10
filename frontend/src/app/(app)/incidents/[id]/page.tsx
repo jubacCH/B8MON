@@ -75,6 +75,7 @@ interface LogAnalysis {
 
 interface IncidentDetail extends Incident {
   events: IncidentEvent[];
+  events_total?: number;
   related_logs?: RelatedLog[];
   log_analysis?: LogAnalysis | null;
   postmortem?: string | null;
@@ -205,7 +206,14 @@ export default function IncidentDetailPage() {
           </GlassCard>
 
           <GlassCard className="p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-4">Event Timeline</h3>
+            <h3 className="text-sm font-medium text-slate-300 mb-4">
+              Event Timeline
+              {(data.events_total ?? 0) > (data.events?.length ?? 0) && (
+                <span className="ml-2 text-[10px] font-normal text-slate-500">
+                  showing latest {data.events.length} of {data.events_total}
+                </span>
+              )}
+            </h3>
             {data.events?.length ? (
               <div className="space-y-0">
                 {data.events.map((evt, i) => (

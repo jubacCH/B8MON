@@ -5,6 +5,8 @@ ping_checks table. No Postgres session is needed.
 """
 from __future__ import annotations
 
+import asyncio
+
 from services import clickhouse_client as ch
 
 
@@ -20,10 +22,13 @@ async def get_latest_by_host(host_ids: list[int]) -> dict[int, dict]:
 
 async def get_uptime_map() -> dict[int, dict]:
     """Return {host_id: {h24, d7, d30}} uptime percentages over multiple
-    rolling windows. Three CH queries — one per window."""
+    rolling windows. Three CH queries — one per window, run in parallel."""
+    windows = ((24, "h24"), (24 * 7, "d7"), (24 * 30, "d30"))
+    results = await asyncio.gather(
+        *(ch.get_ping_uptime(hours=hours) for hours, _ in windows)
+    )
     out: dict[int, dict] = {}
-    for hours, key in ((24, "h24"), (24 * 7, "d7"), (24 * 30, "d30")):
-        rows = await ch.get_ping_uptime(hours=hours)
+    for (_, key), rows in zip(windows, results):
         for host_id, stats in rows.items():
             out.setdefault(host_id, {})[key] = stats["uptime_pct"]
     return out

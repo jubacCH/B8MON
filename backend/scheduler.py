@@ -503,6 +503,7 @@ async def cleanup_old_results():
 
     async with AsyncSessionLocal() as db:
         int_ret = int(await get_setting(db, "integration_retention_days", "7"))
+        ev_ret = int(await get_setting(db, "incident_event_retention_days", "30"))
 
     async with AsyncSessionLocal() as db:
         await snap_svc.cleanup_all(db, int_ret)
@@ -510,9 +511,14 @@ async def cleanup_old_results():
         from models.snmp import SnmpResult
         snmp_cutoff = datetime.utcnow() - timedelta(days=7)
         await db.execute(delete(SnmpResult).where(SnmpResult.timestamp < snmp_cutoff))
+        # Incident events accumulate one row per correlation cycle per open
+        # incident — prune old ones (keeps newest meaningful event per incident).
+        from services.correlation import cleanup_incident_events
+        ev_deleted = await cleanup_incident_events(db, ev_ret)
         await db.commit()
 
-    logger.info("Cleanup done (integrations: %dd)", int_ret)
+    logger.info("Cleanup done (integrations: %dd, incident events: %dd, %d pruned)",
+                int_ret, ev_ret, ev_deleted)
 
 
 # ── Disk space health check ──────────────────────────────────────────────────
