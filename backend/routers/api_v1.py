@@ -379,14 +379,9 @@ async def get_host(
                 IntegrationConfig.enabled == True,
             )
         )
+        type_snaps = await snap_svc.get_latest_batch(db, int_type)
         for cfg in configs_q.scalars().all():
-            snap_q = await db.execute(
-                select(Snapshot)
-                .where(Snapshot.entity_type == int_type, Snapshot.entity_id == cfg.id)
-                .order_by(Snapshot.timestamp.desc())
-                .limit(1)
-            )
-            snap = snap_q.scalar_one_or_none()
+            snap = type_snaps.get(cfg.id)
             if snap and snap.data_json:
                 raw = json.loads(snap.data_json) if isinstance(snap.data_json, str) else snap.data_json
                 device_data = _extract_device_data(int_type, raw, host)
@@ -928,17 +923,13 @@ async def list_integrations(
     result = await db.execute(q)
     configs = result.scalars().all()
 
-    # Get latest snapshot for each
-    latest = {}
-    for cfg in configs:
-        snap = await snap_svc.get_latest(db, cfg.type, cfg.id)
-        if snap:
-            latest[cfg.id] = snap
+    # Get latest snapshot for each (single query instead of one per config)
+    all_snaps = await snap_svc.get_latest_batch_all(db)
 
     from scheduler import _STANDBY_MARKER
     out = []
     for cfg in configs:
-        snap = latest.get(cfg.id)
+        snap = all_snaps.get(cfg.type, {}).get(cfg.id)
         # Standby members write ok=True with the standby marker in `error`.
         # Surface that as a separate UI state — not "error", not "ok primary".
         is_standby = bool(snap and snap.ok and snap.error == _STANDBY_MARKER)
@@ -1476,64 +1467,68 @@ async def syslog_stats(
         "geo_distribution": [],
     }
 
-    try:
-        # Total count
-        result["total"] = int(await ch_scalar(
-            "SELECT count() FROM syslog_messages WHERE timestamp >= {t:DateTime64(3)}",
-            {"t": since},
-        ) or 0)
+    # Message rate — choose bucket size based on hours
+    if hours <= 6:
+        bucket_fn = "toStartOfFiveMinutes"
+    elif hours <= 24:
+        bucket_fn = "toStartOfFifteenMinutes"
+    else:
+        bucket_fn = "toStartOfHour"
 
-        # Severity distribution
-        sev_rows = await ch_query(
-            "SELECT severity, count() AS cnt FROM syslog_messages "
-            "WHERE timestamp >= {t:DateTime64(3)} GROUP BY severity ORDER BY severity",
-            {"t": since},
+    try:
+        # All six aggregations are independent — run them in parallel.
+        params = {"t": since}
+        total, sev_rows, host_rows, app_rows, rate_rows, geo_rows = await asyncio.gather(
+            ch_scalar(
+                "SELECT count() FROM syslog_messages WHERE timestamp >= {t:DateTime64(3)}",
+                params,
+            ),
+            ch_query(
+                "SELECT severity, count() AS cnt FROM syslog_messages "
+                "WHERE timestamp >= {t:DateTime64(3)} GROUP BY severity ORDER BY severity",
+                params,
+            ),
+            ch_query(
+                "SELECT coalesce(nullIf(hostname, ''), source_ip) AS host, "
+                "source_ip, count() AS cnt FROM syslog_messages "
+                "WHERE timestamp >= {t:DateTime64(3)} "
+                "GROUP BY host, source_ip ORDER BY cnt DESC LIMIT 10",
+                params,
+            ),
+            ch_query(
+                "SELECT app_name, count() AS cnt FROM syslog_messages "
+                "WHERE timestamp >= {t:DateTime64(3)} AND app_name != '' "
+                "GROUP BY app_name ORDER BY cnt DESC LIMIT 10",
+                params,
+            ),
+            ch_query(
+                f"SELECT {bucket_fn}(timestamp) AS bucket, "
+                "count() AS cnt, countIf(severity <= 3) AS errors "
+                "FROM syslog_messages WHERE timestamp >= {t:DateTime64(3)} "
+                "GROUP BY bucket ORDER BY bucket",
+                params,
+            ),
+            ch_query(
+                "SELECT geo_country, count() AS cnt FROM syslog_messages "
+                "WHERE timestamp >= {t:DateTime64(3)} AND geo_country != '' "
+                "GROUP BY geo_country ORDER BY cnt DESC LIMIT 20",
+                params,
+            ),
         )
+
+        result["total"] = int(total or 0)
         result["severity_distribution"] = [
             {"severity": r["severity"], "label": SEVERITY_LABELS.get(r["severity"], f"Sev {r['severity']}"), "count": r["cnt"]}
             for r in sev_rows if r["severity"] is not None
         ]
-
-        # Top 10 hosts
-        host_rows = await ch_query(
-            "SELECT coalesce(nullIf(hostname, ''), source_ip) AS host, "
-            "source_ip, count() AS cnt FROM syslog_messages "
-            "WHERE timestamp >= {t:DateTime64(3)} "
-            "GROUP BY host, source_ip ORDER BY cnt DESC LIMIT 10",
-            {"t": since},
-        )
         result["top_hosts"] = [
             {"hostname": r["host"], "source_ip": r["source_ip"], "count": r["cnt"]}
             for r in host_rows
         ]
-
-        # Top 10 applications
-        app_rows = await ch_query(
-            "SELECT app_name, count() AS cnt FROM syslog_messages "
-            "WHERE timestamp >= {t:DateTime64(3)} AND app_name != '' "
-            "GROUP BY app_name ORDER BY cnt DESC LIMIT 10",
-            {"t": since},
-        )
         result["top_apps"] = [
             {"app_name": r["app_name"], "count": r["cnt"]}
             for r in app_rows
         ]
-
-        # Message rate — choose bucket size based on hours
-        if hours <= 6:
-            bucket_fn, bucket_min = "toStartOfFiveMinutes", 5
-        elif hours <= 24:
-            bucket_fn, bucket_min = "toStartOfFifteenMinutes", 15
-        else:
-            bucket_fn, bucket_min = "toStartOfHour", 60
-
-        rate_rows = await ch_query(
-            f"SELECT {bucket_fn}(timestamp) AS bucket, "
-            "count() AS cnt, countIf(severity <= 3) AS errors "
-            "FROM syslog_messages WHERE timestamp >= {t:DateTime64(3)} "
-            "GROUP BY bucket ORDER BY bucket",
-            {"t": since},
-        )
         result["message_rate"] = [
             {
                 "bucket": r["bucket"].isoformat() if hasattr(r["bucket"], "isoformat") else str(r["bucket"]),
@@ -1542,14 +1537,6 @@ async def syslog_stats(
             }
             for r in rate_rows
         ]
-
-        # Geo distribution (only if data exists)
-        geo_rows = await ch_query(
-            "SELECT geo_country, count() AS cnt FROM syslog_messages "
-            "WHERE timestamp >= {t:DateTime64(3)} AND geo_country != '' "
-            "GROUP BY geo_country ORDER BY cnt DESC LIMIT 20",
-            {"t": since},
-        )
         result["geo_distribution"] = [
             {"country": r["geo_country"], "count": r["cnt"]}
             for r in geo_rows

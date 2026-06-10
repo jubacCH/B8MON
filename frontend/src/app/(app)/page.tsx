@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { StatusDot } from '@/components/ui/StatusDot';
@@ -87,6 +87,36 @@ export default function DashboardPage() {
 
   const anomalyCount = (data?.anomalies?.length ?? 0) + (data?.warnings?.length ?? 0);
 
+  // Chart options are memoized so EChart only rebuilds when the underlying
+  // data changes — inline objects would retrigger setOption on every render.
+  const rateData = data?.syslog_stats?.rate_data;
+  const syslogRateOption = useMemo(() => rateData && ({
+    tooltip: { trigger: 'axis' as const },
+    legend: { show: false },
+    grid: { left: 40, right: 12, top: 8, bottom: 24 },
+    xAxis: { type: 'category' as const, data: rateData.labels, axisLabel: { fontSize: 10 } },
+    yAxis: { type: 'value' as const, axisLabel: { fontSize: 10 } },
+    series: [
+      { name: 'Errors', type: 'bar' as const, stack: 'total', data: rateData.errors, color: ngColors.critical },
+      { name: 'Warnings', type: 'bar' as const, stack: 'total', data: rateData.warnings, color: ngColors.warning },
+      { name: 'Info', type: 'bar' as const, stack: 'total', data: rateData.info, color: ngColors.primary },
+    ],
+  }), [rateData]);
+
+  const incidentTrend = data?.incident_trend;
+  const alertTrendOption = useMemo(() => incidentTrend && ({
+    tooltip: { trigger: 'axis' as const },
+    legend: { show: false },
+    grid: { left: 40, right: 12, top: 8, bottom: 24 },
+    xAxis: { type: 'category' as const, data: incidentTrend.map((d) => d.date), axisLabel: { fontSize: 10 } },
+    yAxis: { type: 'value' as const, minInterval: 1, axisLabel: { fontSize: 10 } },
+    series: [
+      { name: 'Critical', type: 'bar' as const, stack: 'total', data: incidentTrend.map((d) => d.critical), color: ngColors.critical },
+      { name: 'Warning', type: 'bar' as const, stack: 'total', data: incidentTrend.map((d) => d.warning), color: ngColors.warning },
+      { name: 'Info', type: 'bar' as const, stack: 'total', data: incidentTrend.map((d) => d.info), color: ngColors.primary },
+    ],
+  }), [incidentTrend]);
+
   // First-run detection: nothing to show. We branch BEFORE rendering the
   // empty grid of widgets so the user gets a guided onboarding instead of
   // a void.
@@ -140,12 +170,11 @@ export default function DashboardPage() {
       />
 
       {/* ── Quick Stats — compact row, ~64px tall ──
-          key={dataUpdatedAt} forces a remount every refresh, re-triggering
-          the .ng-just-changed CSS animation defined in globals.css. That's
-          the subtle sky ring pulse that tells you "fresh data just landed"
-          without being loud about it. */}
+          justRefreshed re-applies .ng-just-changed for 1.6s on every refresh,
+          which restarts the CSS animation (globals.css) without remounting
+          the cards. That's the subtle sky ring pulse that tells you "fresh
+          data just landed" without being loud about it. */}
       <div
-        key={dataUpdatedAt}
         className={cn(
           'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4 rounded-lg',
           justRefreshed && 'ng-just-changed',
@@ -274,25 +303,11 @@ export default function DashboardPage() {
               </span>
             ) : undefined
           } />
-          {isLoading || !data?.syslog_stats?.rate_data ? (
+          {isLoading || !syslogRateOption ? (
             <Skeleton className="h-[180px] w-full" />
           ) : (
             <WidgetErrorBoundary label="Syslog Rate">
-              <EChart
-                height={180}
-                option={{
-                  tooltip: { trigger: 'axis' },
-                  legend: { show: false },
-                  grid: { left: 40, right: 12, top: 8, bottom: 24 },
-                  xAxis: { type: 'category', data: data.syslog_stats.rate_data.labels, axisLabel: { fontSize: 10 } },
-                  yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
-                  series: [
-                    { name: 'Errors', type: 'bar', stack: 'total', data: data.syslog_stats.rate_data.errors, color: ngColors.critical },
-                    { name: 'Warnings', type: 'bar', stack: 'total', data: data.syslog_stats.rate_data.warnings, color: ngColors.warning },
-                    { name: 'Info', type: 'bar', stack: 'total', data: data.syslog_stats.rate_data.info, color: ngColors.primary },
-                  ],
-                }}
-              />
+              <EChart height={180} option={syslogRateOption} />
             </WidgetErrorBoundary>
           )}
           <div className="mt-4 pt-3 border-t" style={{ borderColor: 'var(--ng-card-border)' }}>
@@ -380,21 +395,7 @@ export default function DashboardPage() {
             </p>
           ) : (
             <WidgetErrorBoundary label="Alert Trends">
-              <EChart
-                height={180}
-                option={{
-                  tooltip: { trigger: 'axis' },
-                  legend: { show: false },
-                  grid: { left: 40, right: 12, top: 8, bottom: 24 },
-                  xAxis: { type: 'category', data: data.incident_trend.map((d) => d.date), axisLabel: { fontSize: 10 } },
-                  yAxis: { type: 'value', minInterval: 1, axisLabel: { fontSize: 10 } },
-                  series: [
-                    { name: 'Critical', type: 'bar', stack: 'total', data: data.incident_trend.map((d) => d.critical), color: ngColors.critical },
-                    { name: 'Warning', type: 'bar', stack: 'total', data: data.incident_trend.map((d) => d.warning), color: ngColors.warning },
-                    { name: 'Info', type: 'bar', stack: 'total', data: data.incident_trend.map((d) => d.info), color: ngColors.primary },
-                  ],
-                }}
-              />
+              {alertTrendOption && <EChart height={180} option={alertTrendOption} />}
             </WidgetErrorBoundary>
           )}
         </GlassCard>

@@ -782,26 +782,3 @@ def _where_clauses(
     return " AND ".join(clauses), params
 
 
-async def query_aggregated(
-    since: datetime,
-    source_ip: str = "",
-    template_hash: str = "",
-    severity: int | None = None,
-) -> list[dict]:
-    """Query the aggregated syslog table for trend/dashboard data."""
-    clauses = ["bucket >= {since:DateTime}"]
-    params: dict = {"since": since}
-    if source_ip:
-        clauses.append("source_ip = {sip:String}")
-        params["sip"] = source_ip
-    if template_hash:
-        clauses.append("template_hash = {th:String}")
-        params["th"] = template_hash
-    if severity is not None:
-        clauses.append("severity = {sev:Int8}")
-        params["sev"] = severity
-    where = " AND ".join(clauses)
-    return await query(
-        f"SELECT * FROM syslog_aggregated WHERE {where} ORDER BY bucket DESC LIMIT 1000",
-        params,
-    )

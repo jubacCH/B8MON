@@ -56,4 +56,5 @@ class IncidentEvent(Base):
 
     __table_args__ = (
         Index("ix_incident_event_ts", "incident_id", timestamp.desc()),
+        Index("ix_incident_event_type_ts", "incident_id", "event_type", timestamp.desc()),
     )

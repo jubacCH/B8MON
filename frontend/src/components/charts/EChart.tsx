@@ -48,9 +48,10 @@ export function EChart({ option, className, height = 200 }: EChartProps) {
     };
   }, [colorMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Update option when it changes
+  // Update option when it changes. Merge mode (no notMerge) lets ECharts
+  // diff series data instead of rebuilding the whole chart on every refetch.
   useEffect(() => {
-    chartRef.current?.setOption(option, true);
+    chartRef.current?.setOption(option);
   }, [option]);
 
   return <div ref={ref} className={className} style={{ height }} />;
