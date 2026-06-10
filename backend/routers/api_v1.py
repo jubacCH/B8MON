@@ -1024,22 +1024,27 @@ async def list_incidents(
     result = await db.execute(q)
     incidents = result.scalars().all()
 
-    # Fetch latest non-system event summary per incident (explains the WHY)
+    # Fetch latest non-system event summary per incident (explains the WHY).
+    # Greatest-per-group via max(id) subquery — long-lived incidents accumulate
+    # one event per correlation cycle, so loading all of them just to keep the
+    # newest one made this endpoint scale with total event count.
     incident_ids = [i.id for i in incidents]
     summary_map: dict[int, str] = {}
     if incident_ids:
-        # Get the most recent event with a meaningful event_type (not "acknowledged"/"resolved")
-        events_q = await db.execute(
-            select(IncidentEvent)
+        latest_meaningful = (
+            select(func.max(IncidentEvent.id).label("max_id"))
             .where(
                 IncidentEvent.incident_id.in_(incident_ids),
                 IncidentEvent.event_type.notin_(["acknowledged", "resolved"]),
             )
-            .order_by(IncidentEvent.timestamp.desc())
+            .group_by(IncidentEvent.incident_id)
+            .scalar_subquery()
         )
-        for ev in events_q.scalars().all():
-            if ev.incident_id not in summary_map:
-                summary_map[ev.incident_id] = ev.summary
+        events_q = await db.execute(
+            select(IncidentEvent.incident_id, IncidentEvent.summary)
+            .where(IncidentEvent.id.in_(latest_meaningful))
+        )
+        summary_map = {incident_id: summary for incident_id, summary in events_q}
 
     return [
         {
@@ -1226,11 +1231,18 @@ async def get_incident(
     if not incident:
         raise HTTPException(404, "Incident not found")
 
+    # Long-lived incidents accumulate one event per correlation cycle — cap
+    # the timeline at the newest 200 instead of serializing all of them.
+    events_total = (await db.execute(
+        select(func.count()).select_from(IncidentEvent)
+        .where(IncidentEvent.incident_id == incident_id)
+    )).scalar_one()
     events_q = await db.execute(
         select(IncidentEvent).where(IncidentEvent.incident_id == incident_id)
-        .order_by(IncidentEvent.timestamp.asc())
+        .order_by(IncidentEvent.timestamp.desc())
+        .limit(200)
     )
-    events = events_q.scalars().all()
+    events = list(reversed(events_q.scalars().all()))
 
     # Fetch related syslog entries around the incident timeframe
     related_logs = []
@@ -1288,6 +1300,7 @@ async def get_incident(
             }
             for e in events
         ],
+        "events_total": events_total,
         "related_logs": related_logs,
         "log_analysis": log_analysis,
     }
