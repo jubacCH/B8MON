@@ -31,6 +31,7 @@ async def settings_json(request: Request, db: AsyncSession = Depends(get_db)):
         "notify_telegram_min_severity", "notify_discord_min_severity",
         "notify_webhook_min_severity", "notify_email_min_severity",
         "ping_retention_days", "proxmox_retention_days", "integration_retention_days",
+        "incident_event_retention_days",
         "anomaly_threshold", "proxmox_cpu_threshold", "proxmox_ram_threshold",
         "proxmox_disk_threshold", "syslog_port", "syslog_allowlist_only",
         "digest_enabled", "digest_day", "digest_hour",
@@ -46,6 +47,7 @@ async def settings_json(request: Request, db: AsyncSession = Depends(get_db)):
         "site_name": "NODEGLOW", "ping_interval": "60", "proxmox_interval": "60",
         "timezone": "UTC", "smtp_port": "587", "ping_retention_days": "30",
         "proxmox_retention_days": "7", "integration_retention_days": "7",
+        "incident_event_retention_days": "30",
         "anomaly_threshold": "2.0", "proxmox_cpu_threshold": "85",
         "proxmox_ram_threshold": "85", "proxmox_disk_threshold": "90",
         "syslog_port": "1514",
@@ -99,6 +101,7 @@ async def save_settings(
     ram_threshold:      str = Form("85"),
     disk_threshold:     str = Form("90"),
     integration_retention: str = Form("7"),
+    incident_event_retention: str = Form("30"),
     syslog_port:        str = Form("1514"),
     syslog_allowlist_only: str = Form("0"),
     predictor_min_confidence: str = Form(""),
@@ -156,6 +159,13 @@ async def save_settings(
     except ValueError:
         int_ret = 7
     await set_setting(db, "integration_retention_days", str(int_ret))
+
+    # 0 disables incident event pruning entirely.
+    try:
+        ev_ret = max(0, min(365, int(incident_event_retention)))
+    except ValueError:
+        ev_ret = 30
+    await set_setting(db, "incident_event_retention_days", str(ev_ret))
 
     for key, val, lo, hi, default in [
         ("proxmox_cpu_threshold",  cpu_threshold,  1, 100, 85),

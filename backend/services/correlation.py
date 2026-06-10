@@ -19,7 +19,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 
 from models.base import AsyncSessionLocal
 from models.ping import PingHost
@@ -69,6 +69,32 @@ def _prune_stale_hits():
     for k in stale:
         del _rule_hit_counts[k]
     _current_cycle_hits.clear()
+
+
+async def cleanup_incident_events(db, retention_days: int) -> int:
+    """Delete incident events older than retention_days.
+
+    Open incidents accumulate one event per correlation cycle, so this table
+    grows without bound. The newest meaningful (non-ack/resolve) event per
+    incident is always kept — it backs the summary shown in the incident list.
+    A retention of 0 disables pruning. Returns the number of deleted rows.
+    """
+    if retention_days <= 0:
+        return 0
+    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    keep_latest = (
+        select(func.max(IncidentEvent.id))
+        .where(IncidentEvent.event_type.notin_(["acknowledged", "resolved"]))
+        .group_by(IncidentEvent.incident_id)
+        .scalar_subquery()
+    )
+    result = await db.execute(
+        delete(IncidentEvent).where(
+            IncidentEvent.timestamp < cutoff,
+            IncidentEvent.id.notin_(keep_latest),
+        )
+    )
+    return result.rowcount or 0
 
 
 async def _find_or_create_incident(
