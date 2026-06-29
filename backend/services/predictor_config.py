@@ -42,6 +42,9 @@ DEFAULT_BLACKLIST_PATTERNS: list[str] = [
     r"hostapd.*FT: RRB wpa_auth is null",
     r"wpa_supplicant.*bgscan.*Failed to enable signal strength",
     r"mcad.*teleport.*Failed to get teleport clients",
+    r"qos_sta_control",
+    r"trace\.put_trace",
+    r"ace_reporter\.reporter_fail",
 ]
 
 

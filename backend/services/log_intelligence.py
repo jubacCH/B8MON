@@ -999,10 +999,20 @@ async def compute_template_diversity(db: AsyncSession):
 
 # ── Cross-Host Correlation (fleet-wide issue detection) ──────────────────────
 
+# Templates at or above this noise score are treated as benign chatter and
+# never raise a fleet-wide incident, even when seen on many hosts at once.
+FLEET_NOISE_MAX = 70
+
+
 async def detect_fleet_patterns(db: AsyncSession) -> list[dict]:
-    """Detect same template hash appearing on 3+ hosts simultaneously."""
+    """Detect same template hash appearing on 3+ hosts simultaneously.
+
+    Blacklisted templates and high-noise chatter (``noise_score >=
+    FLEET_NOISE_MAX``) are skipped — vendor firmware noise that fires
+    synchronously across a fleet (e.g. UniFi APs) is not an incident.
+    """
     from services.clickhouse_client import query as ch_query
-    from models.log_template import FleetPattern
+    from models.log_template import FleetPattern, LogTemplate
 
     rows = await ch_query(
         """SELECT template_hash,
@@ -1021,6 +1031,19 @@ async def detect_fleet_patterns(db: AsyncSession) -> list[dict]:
     if not rows:
         return []
 
+    # Batch-load template text + noise score for the candidate hashes so the
+    # blacklist/noise gate costs one query, not one per template.
+    candidate_hashes = [r["template_hash"] for r in rows if r.get("template_hash")]
+    tpl_meta: dict[str, tuple[str, int]] = {}
+    if candidate_hashes:
+        meta_rows = (await db.execute(
+            select(LogTemplate.template_hash, LogTemplate.template, LogTemplate.noise_score)
+            .where(LogTemplate.template_hash.in_(candidate_hashes))
+        )).all()
+        tpl_meta = {h: (text or "", score if score is not None else 50) for h, text, score in meta_rows}
+
+    blacklist = await get_blacklist_regexes(db)
+
     now = datetime.utcnow()
     fleet_issues = []
 
@@ -1028,6 +1051,13 @@ async def detect_fleet_patterns(db: AsyncSession) -> list[dict]:
         th = r["template_hash"]
         host_count = r["host_count"]
         hosts = r["hosts"] if isinstance(r["hosts"], list) else []
+
+        # Skip benign vendor chatter: blacklisted templates or high-noise
+        # patterns never raise a fleet-wide incident. Unknown templates (no
+        # LogTemplate row yet) are genuinely new and pass through.
+        tpl_text, noise_score = tpl_meta.get(th, ("", 50))
+        if is_template_blacklisted(tpl_text, blacklist) or noise_score >= FLEET_NOISE_MAX:
+            continue
 
         # Check if this pattern is normally fleet-wide (baseline check)
         existing = (await db.execute(
