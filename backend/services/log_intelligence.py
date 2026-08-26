@@ -830,9 +830,22 @@ async def learn_precursors(db: AsyncSession):
 
 # ── Noise Score Refresh (periodic) ───────────────────────────────────────────
 
-async def refresh_noise_scores(db: AsyncSession):
-    """Recalculate noise scores for all templates."""
-    templates = (await db.execute(select(LogTemplate))).scalars().all()
+# Rates below this delta are treated as unchanged, so float jitter alone never
+# triggers a write.
+NOISE_RATE_EPSILON = 0.01
+# Rows per executemany batch when writing changed scores back.
+NOISE_UPDATE_CHUNK = 1000
+
+
+async def refresh_noise_scores(db: AsyncSession) -> int:
+    """Recalculate noise scores for all templates. Returns the rows written.
+
+    Reads only the columns the score depends on rather than whole ORM objects,
+    and writes back just the rows whose values actually changed. On a fleet with
+    hundreds of thousands of templates, materialising every row as an ORM
+    instance and flushing it back made this the single most expensive query
+    path in the database.
+    """
     now = datetime.utcnow()
 
     # Batch-load all precursor template IDs to avoid N+1 queries
@@ -844,24 +857,52 @@ async def refresh_noise_scores(db: AsyncSession):
         )).all()
     )
 
-    for tpl in templates:
-        hours_active = max(0.1, (now - tpl.first_seen).total_seconds() / 3600)
-        tags = tpl.tags.split(",") if tpl.tags else []
-        is_precursor = tpl.id in precursor_ids
+    rows = (await db.execute(
+        select(
+            LogTemplate.id,
+            LogTemplate.count,
+            LogTemplate.first_seen,
+            LogTemplate.tags,
+            LogTemplate.noise_score,
+            LogTemplate.avg_rate_per_hour,
+        )
+    )).all()
+
+    changed: list[dict] = []
+    for tpl_id, count, first_seen, tags_raw, old_score, old_rate in rows:
+        if first_seen is None:
+            continue
+        count = count or 0
+        hours_active = max(0.1, (now - first_seen).total_seconds() / 3600)
 
         score = compute_noise_score(
-            count=tpl.count,
+            count=count,
             hours_active=hours_active,
-            first_seen=tpl.first_seen,
-            tags=tags,
-            is_precursor=is_precursor,
+            first_seen=first_seen,
+            tags=tags_raw.split(",") if tags_raw else [],
+            is_precursor=tpl_id in precursor_ids,
+        )
+        rate = count / hours_active
+
+        if score == old_score and abs(rate - (old_rate or 0.0)) < NOISE_RATE_EPSILON:
+            continue
+
+        changed.append({"id": tpl_id, "noise_score": score, "avg_rate_per_hour": rate})
+
+    for start in range(0, len(changed), NOISE_UPDATE_CHUNK):
+        await db.execute(
+            update(LogTemplate),
+            changed[start:start + NOISE_UPDATE_CHUNK],
+            # Nothing is loaded into the session, so there is no identity map to
+            # keep in sync — skipping it is the point of the bulk path.
+            execution_options={"synchronize_session": None},
         )
 
-        tpl.noise_score = score
-        tpl.avg_rate_per_hour = tpl.count / hours_active
-
     await db.commit()
-    log.info("Noise scores refreshed for %d templates", len(templates))
+    log.info(
+        "Noise scores refreshed: %d of %d templates changed", len(changed), len(rows)
+    )
+    return len(changed)
 
 
 # ── Severity Trend Detection (periodic) ──────────────────────────────────────
@@ -1223,17 +1264,39 @@ async def detect_content_anomalies(db: AsyncSession) -> list[dict]:
 # ── Main periodic job (called by scheduler) ──────────────────────────────────
 
 async def run_intelligence():
-    """Main intelligence job – flush templates, compute baselines, learn."""
+    """Fast path – flush buffered templates and refresh host baselines.
+
+    Runs on the short scheduler tick. Both passes touch only the templates seen
+    since the last run, so their cost scales with traffic, not with the size of
+    the template table.
+    """
     from models.base import AsyncSessionLocal
 
     async with AsyncSessionLocal() as db:
         try:
             await flush_templates(db)
             await compute_baselines(db)
+        except Exception as e:
+            log.error("Intelligence engine error: %s", e, exc_info=True)
+            await db.rollback()
+
+
+async def run_analytics():
+    """Slow path – fleet-wide passes that scan the entire template table.
+
+    Each of these walks every known template, so on a large fleet they cost
+    orders of magnitude more than the fast path and must not share its tick.
+    Noise scores, trends and diversity are statistical aggregates; a coarser
+    interval does not change what they tell an operator.
+    """
+    from models.base import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        try:
             await learn_precursors(db)
             await refresh_noise_scores(db)
             await compute_severity_trends(db)
             await compute_template_diversity(db)
         except Exception as e:
-            log.error("Intelligence engine error: %s", e, exc_info=True)
+            log.error("Analytics engine error: %s", e, exc_info=True)
             await db.rollback()

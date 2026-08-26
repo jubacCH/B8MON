@@ -284,3 +284,88 @@ async def test_cleanup_removes_blacklisted_patterns(db):
     assert len(remaining) == 1
     assert remaining[0].template_id == tpl_good.id
     assert 0.55 < remaining[0].confidence < 0.58
+
+
+# ── Noise Score Refresh (bulk path) ──────────────────────────────────────────
+
+async def _seed_noise_template(db, template, count, hours_ago, noise_score=50, rate=0.0):
+    """Insert a LogTemplate and return it."""
+    from models.log_template import LogTemplate
+
+    tpl = LogTemplate(
+        template_hash=f"h{abs(hash(template)) % 10**8:08d}",
+        template=template,
+        count=count,
+        first_seen=datetime.utcnow() - timedelta(hours=hours_ago),
+        last_seen=datetime.utcnow(),
+        noise_score=noise_score,
+        avg_rate_per_hour=rate,
+        tags="",
+    )
+    db.add(tpl)
+    await db.commit()
+    await db.refresh(tpl)
+    return tpl
+
+
+async def test_refresh_noise_scores_updates_changed_templates(db):
+    """Templates whose computed score differs are written back."""
+    from services.log_intelligence import refresh_noise_scores
+
+    tpl = await _seed_noise_template(db, "Noisy <*> message", count=100_000, hours_ago=10)
+
+    changed = await refresh_noise_scores(db)
+
+    assert changed == 1
+    await db.refresh(tpl)
+    assert tpl.noise_score > 50          # high rate => noisy
+    assert tpl.avg_rate_per_hour > 0
+
+
+async def test_refresh_noise_scores_skips_unchanged_templates(db):
+    """A second pass with no new data must not write anything.
+
+    This is the hot-loop guard: the job runs on a schedule over the whole
+    template table, so re-writing unchanged rows is what made it expensive.
+    """
+    from services.log_intelligence import refresh_noise_scores
+
+    await _seed_noise_template(db, "Stable <*> line", count=42, hours_ago=5)
+
+    first = await refresh_noise_scores(db)
+    second = await refresh_noise_scores(db)
+
+    assert first == 1
+    assert second == 0
+
+
+async def test_refresh_noise_scores_handles_empty_table(db):
+    """No templates at all is not an error."""
+    from services.log_intelligence import refresh_noise_scores
+
+    assert await refresh_noise_scores(db) == 0
+
+
+async def test_refresh_noise_scores_respects_precursor_patterns(db):
+    """A template linked to a confident precursor pattern is never noise."""
+    from models.log_template import PrecursorPattern
+    from services.log_intelligence import refresh_noise_scores
+
+    tpl = await _seed_noise_template(db, "Precursor <*> warning", count=100_000, hours_ago=10)
+    db.add(PrecursorPattern(
+        template_id=tpl.id,
+        precedes_event="host_down",
+        confidence=0.9,
+        avg_lead_time_sec=300,
+        occurrence_count=10,
+        total_checked=10,
+    ))
+    await db.commit()
+
+    await refresh_noise_scores(db)
+
+    await db.refresh(tpl)
+    noisy = await _seed_noise_template(db, "Plain <*> warning", count=100_000, hours_ago=10)
+    await refresh_noise_scores(db)
+    await db.refresh(noisy)
+    assert tpl.noise_score < noisy.noise_score
