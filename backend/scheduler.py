@@ -731,9 +731,16 @@ async def run_correlation():
 
 @instrument_job("log_intelligence")
 async def run_log_intelligence():
-    """Run the log intelligence engine (template flush, baselines, precursors)."""
+    """Run the fast log intelligence pass (template flush, host baselines)."""
     from services.log_intelligence import run_intelligence
     await run_intelligence()
+
+
+@instrument_job("log_analytics")
+async def run_log_analytics():
+    """Run the fleet-wide log analysis (precursors, noise scores, trends)."""
+    from services.log_intelligence import run_analytics
+    await run_analytics()
 
 
 @instrument_job("snmp_polls")
@@ -1184,6 +1191,10 @@ async def start_scheduler():
                       id="cleanup", replace_existing=True)
     scheduler.add_job(run_log_intelligence, "interval", seconds=30,
                       id="log_intelligence", replace_existing=True)
+    # Fleet-wide passes scan every template; keep them off the 30s tick.
+    scheduler.add_job(run_log_analytics, "interval", minutes=15,
+                      id="log_analytics", replace_existing=True,
+                      max_instances=1, coalesce=True)
     scheduler.add_job(run_snmp_polls, "interval", seconds=30,
                       id="snmp_polls", replace_existing=True)
 
