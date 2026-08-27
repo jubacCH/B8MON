@@ -56,6 +56,19 @@ class Problem:
     summary: str
 
 
+# Auto-discovered MonitoringSource jobs are registered as "src:<name>" but
+# instrumented under the bare name, so the id cannot be used to look up metrics.
+JOB_ID_PREFIXES = ("src:",)
+
+
+def metric_name_for(job_id: str) -> str:
+    """Translate a scheduler job id into the label used by its metrics."""
+    for prefix in JOB_ID_PREFIXES:
+        if job_id.startswith(prefix):
+            return job_id[len(prefix):]
+    return job_id
+
+
 def _humanise(seconds: float) -> str:
     seconds = int(seconds)
     if seconds < 60:
@@ -267,9 +280,23 @@ async def collect_problems(db, scheduler, now: float, process_start: float) -> l
     try:
         from prometheus_client import REGISTRY
 
-        for name, interval in _job_intervals(scheduler).items():
+        for job_id, interval in _job_intervals(scheduler).items():
+            name = metric_name_for(job_id)
             if name in JOB_CHECK_EXCLUDE:
                 continue
+
+            # Only judge jobs that report at all. A job with no runs_total under
+            # either status was never instrumented, so silence proves nothing —
+            # unlike a job that reports failures, which is a real finding.
+            instrumented = any(
+                REGISTRY.get_sample_value(
+                    "nodeglow_scheduler_job_runs_total", {"job": name, "status": status}
+                )
+                for status in ("success", "failure")
+            )
+            if not instrumented:
+                continue
+
             last_success = REGISTRY.get_sample_value(
                 "nodeglow_scheduler_job_last_success_timestamp", {"job": name}
             )
