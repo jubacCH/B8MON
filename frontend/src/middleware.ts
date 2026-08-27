@@ -35,7 +35,14 @@ export function middleware(request: NextRequest) {
 export const config = {
   // Run on everything except Next internals, the API/proxy routes (the backend
   // authenticates those itself) and static asset files.
+  //
+  // The exclusions must name the *proxy* paths only. Listing a bare segment
+  // like `settings` or `syslog` also matches the page of the same name, which
+  // silently exempted those pages from the guard above: /system/status,
+  // /settings, /rules and /syslog served their shell to anyone. The rewrites
+  // for those bare paths never fired anyway — Next.js resolves filesystem
+  // routes before afterFiles rewrites, so the page always won.
   matcher: [
-    '/((?!_next/static|_next/image|api|hosts/api|syslog|ws|health|system/status|settings|rules|setup|install|agents/download|static|favicon.ico|logo-icon.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf)$).*)',
+    '/((?!_next/static|_next/image|api|hosts/api|syslog/api|syslog/stream|ws|health|setup|install|agents/download|static|favicon.ico|logo-icon.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf)$).*)',
   ],
 };
