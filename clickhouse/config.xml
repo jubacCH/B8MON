@@ -17,7 +17,7 @@
     <processors_profile_log>
         <database>system</database>
         <table>processors_profile_log</table>
-        <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+        <ttl>event_date + INTERVAL 1 DAY DELETE</ttl>
     </processors_profile_log>
     <trace_log>
         <database>system</database>
@@ -32,6 +32,25 @@
     <asynchronous_metric_log>
         <database>system</database>
         <table>asynchronous_metric_log</table>
-        <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+        <ttl>event_date + INTERVAL 1 DAY DELETE</ttl>
     </asynchronous_metric_log>
+
+    <!-- These three had no TTL at all and grew unbounded. query_views_log was
+         the single largest table on disk (483 MiB / 3.9M rows) — larger than
+         all Nodeglow payload data combined. -->
+    <query_views_log>
+        <database>system</database>
+        <table>query_views_log</table>
+        <ttl>event_date + INTERVAL 1 DAY DELETE</ttl>
+    </query_views_log>
+    <part_log>
+        <database>system</database>
+        <table>part_log</table>
+        <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+    </part_log>
+    <text_log>
+        <database>system</database>
+        <table>text_log</table>
+        <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+    </text_log>
 </clickhouse>

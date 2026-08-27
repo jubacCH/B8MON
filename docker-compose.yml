@@ -1,6 +1,20 @@
 services:
   db:
     image: postgres:16-alpine
+    # Postgres ships defaults sized for a 1990s workstation: shared_buffers of
+    # 128MB and work_mem of 4MB regardless of the machine. Overridable per
+    # deployment; the defaults below suit a 4-8 GB host.
+    command: >
+      postgres
+      -c shared_buffers=${POSTGRES_SHARED_BUFFERS:-512MB}
+      -c effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-1536MB}
+      -c work_mem=${POSTGRES_WORK_MEM:-8MB}
+      -c maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-128MB}
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.max=5000
+      -c pg_stat_statements.track=top
     volumes:
       - pgdata:/var/lib/postgresql/data
     environment:
