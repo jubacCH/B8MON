@@ -89,6 +89,32 @@ def _run_dump(argv, dest, timeout=1800) -> DumpResult:
     return DumpResult(proc.returncode, size, (err or b"").decode(errors="replace").strip())
 
 
+def _resolve_compose_project() -> str:
+    """Determine the compose project the running stack belongs to.
+
+    Compose derives the project name from the directory, but the sidecar sees
+    the repo at /opt/repo while production started the stack from /opt/vigil.
+    Guessing wrong makes compose treat the live containers as foreign. The
+    authoritative answer is the label on a container that is actually running.
+    """
+    explicit = os.environ.get("COMPOSE_PROJECT_NAME", "").strip()
+    if explicit:
+        return explicit
+    try:
+        result = _run_cmd(
+            ["docker", "inspect", "nodeglow", "--format",
+             "{{index .Config.Labels \"com.docker.compose.project\"}}"],
+            timeout=15,
+        )
+        name = result.stdout.strip()
+        if name:
+            return name
+    except Exception as exc:  # noqa: BLE001
+        _log(f"could not resolve compose project from the running container: {exc}")
+    # Fall back to compose's own default: the directory the file lives in.
+    return os.path.basename(REPO_PATH.rstrip("/")) or "nodeglow"
+
+
 def _resolve_db_container() -> str:
     """Prefer an explicit DB_CONTAINER, else ask compose, else the prod default."""
     explicit = os.environ.get("DB_CONTAINER", "").strip()
@@ -118,6 +144,7 @@ def build_ctx(run_id: str) -> Ctx:
         log=_log,
         repo_path=REPO_PATH,
         compose_file=COMPOSE_FILE,
+        compose_project=_resolve_compose_project(),
         backup_dir=BACKUP_DIR,
         backup_retention=BACKUP_RETENTION,
         db_container=_resolve_db_container(),

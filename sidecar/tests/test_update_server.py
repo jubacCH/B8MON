@@ -109,6 +109,8 @@ def test_build_ctx_reads_settings_from_environment(monkeypatch, tmp_path):
     ctx = server.build_ctx("run-1")
 
     assert ctx.db_container == "vigil-db-1"
+    # Falls back to the repo directory name when nothing else is available.
+    assert ctx.compose_project
     assert ctx.db_user == "nodeglow"
     assert ctx.backup_retention == 7
     assert ctx.run_id == "run-1"
