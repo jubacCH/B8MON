@@ -473,3 +473,59 @@ async def test_precursor_query_is_fleet_wide_for_host_id_zero(db):
     assert seen["params"]["hid"] == 0
     # The predicate must short-circuit to "all hosts" rather than filter on 0.
     assert "{hid:Int32} = 0 OR host_id = {hid:Int32}" in seen["sql"]
+
+
+# ── Template diversity: batch instead of N+1 ─────────────────────────────────
+
+async def test_template_diversity_loads_baselines_in_one_query(db):
+    """Baselines are fetched in a single query, not once per host.
+
+    The per-host lookup made this the second-heaviest index consumer in
+    production; the cost grew with fleet size although every row sits in the
+    same hour/day slot.
+    """
+    from models.log_template import HostBaseline
+    from services.log_intelligence import compute_template_diversity
+
+    now = datetime.utcnow()
+    hosts = ["10.0.0.1", "10.0.0.2", "10.0.0.3"]
+    for host in hosts:
+        db.add(HostBaseline(
+            host_key=host, hour_of_day=now.hour, day_of_week=now.weekday(),
+            avg_rate=1.0, std_rate=1.0, sample_count=5,
+            avg_template_count=10.0, std_template_count=2.0,
+        ))
+    await db.commit()
+
+    ch_rows = [{"source_ip": h, "diversity": 20, "error_diversity": 1} for h in hosts]
+
+    select_calls = 0
+    original_execute = db.execute
+
+    async def counting_execute(statement, *args, **kwargs):
+        nonlocal select_calls
+        if statement.__class__.__name__ == "Select":
+            select_calls += 1
+        return await original_execute(statement, *args, **kwargs)
+
+    with patch("services.clickhouse_client.query", new=AsyncMock(return_value=ch_rows)), \
+         patch.object(db, "execute", new=counting_execute):
+        await compute_template_diversity(db)
+
+    assert select_calls == 1, f"expected one batched SELECT, made {select_calls}"
+
+    # And the values were actually updated.
+    updated = (await db.execute(
+        select(HostBaseline).where(HostBaseline.host_key == "10.0.0.1")
+    )).scalar_one()
+    assert updated.avg_template_count > 10.0
+
+
+async def test_template_diversity_ignores_hosts_without_baseline(db):
+    """A host seen in syslog but without a baseline row is simply skipped."""
+    from services.log_intelligence import compute_template_diversity
+
+    ch_rows = [{"source_ip": "10.9.9.9", "diversity": 5, "error_diversity": 0}]
+
+    with patch("services.clickhouse_client.query", new=AsyncMock(return_value=ch_rows)):
+        await compute_template_diversity(db)  # must not raise
