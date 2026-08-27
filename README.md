@@ -111,10 +111,20 @@ All integrations use a generic plugin system (`BaseIntegration` ABC). Adding a n
 ```bash
 git clone https://github.com/jubacCH/Nodeglow.git nodeglow
 cd nodeglow
+
+# Required: compose refuses to start without these two secrets.
+cp .env.example .env
+sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 24)/" .env
+sed -i "s/^UPDATE_SIDECAR_TOKEN=.*/UPDATE_SIDECAR_TOKEN=$(openssl rand -hex 32)/" .env
+
 docker compose up -d
 ```
 
 Open **http://localhost:8000** — the setup wizard runs on first start.
+
+> Skipping the `.env` step fails immediately with
+> `required variable POSTGRES_PASSWORD is missing a value`. That is deliberate:
+> the stack refuses to run on default credentials.
 
 > Data is stored in PostgreSQL + ClickHouse (managed by Docker Compose). The `./data/` volume holds the encryption key.
 
@@ -174,6 +184,13 @@ All settings are available at **Settings** (admin only):
 | Syslog port | 1514 | UDP/TCP syslog listener port |
 | Syslog host allowlist | Off | Only accept syslog from IPs in the Hosts list |
 | Weekly digest | Off | Scheduled email summary (day + hour configurable) |
+
+---
+
+## Operating it
+
+Updating, backups and restore, and how to diagnose a problem:
+**[docs/OPERATIONS.md](docs/OPERATIONS.md)**
 
 ---
 
