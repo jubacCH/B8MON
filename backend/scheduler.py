@@ -508,6 +508,7 @@ async def cleanup_old_results():
     async with AsyncSessionLocal() as db:
         int_ret = int(await get_setting(db, "integration_retention_days", "7"))
         ev_ret = int(await get_setting(db, "incident_event_retention_days", "30"))
+        tpl_ret = int(await get_setting(db, "template_retention_days", "90"))
 
     async with AsyncSessionLocal() as db:
         await snap_svc.cleanup_all(db, int_ret)
@@ -519,10 +520,17 @@ async def cleanup_old_results():
         # incident — prune old ones (keeps newest meaningful event per incident).
         from services.correlation import cleanup_incident_events
         ev_deleted = await cleanup_incident_events(db, ev_ret)
+        # Log templates are never overwritten, only added to — without a
+        # retention pass the table grows for the lifetime of the installation.
+        from services.log_intelligence import cleanup_log_templates
+        tpl_deleted = await cleanup_log_templates(db, tpl_ret)
         await db.commit()
 
-    logger.info("Cleanup done (integrations: %dd, incident events: %dd, %d pruned)",
-                int_ret, ev_ret, ev_deleted)
+    logger.info(
+        "Cleanup done (integrations: %dd, incident events: %dd/%d pruned, "
+        "templates: %dd/%d pruned)",
+        int_ret, ev_ret, ev_deleted, tpl_ret, tpl_deleted,
+    )
 
 
 # ── Disk space health check ──────────────────────────────────────────────────

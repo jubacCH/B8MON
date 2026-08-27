@@ -369,3 +369,58 @@ async def test_refresh_noise_scores_respects_precursor_patterns(db):
     await refresh_noise_scores(db)
     await db.refresh(noisy)
     assert tpl.noise_score < noisy.noise_score
+
+
+# ── Template retention ───────────────────────────────────────────────────────
+
+async def test_retention_prunes_templates_not_seen_in_window(db):
+    """Templates the system no longer observes must not accumulate forever."""
+    from services.log_intelligence import cleanup_log_templates
+
+    stale = await _seed_noise_template(db, "Ancient <*> line", count=1, hours_ago=24 * 200)
+    stale.last_seen = datetime.utcnow() - timedelta(days=120)
+    fresh = await _seed_noise_template(db, "Current <*> line", count=5, hours_ago=2)
+    await db.commit()
+
+    deleted = await cleanup_log_templates(db, retention_days=90)
+
+    assert deleted == 1
+    remaining = (await db.execute(select(LogTemplate.id))).scalars().all()
+    assert fresh.id in remaining
+    assert stale.id not in remaining
+
+
+async def test_retention_keeps_templates_backing_a_precursor(db):
+    """Predictor history must survive retention — and the FK requires it."""
+    from services.log_intelligence import cleanup_log_templates
+
+    tpl = await _seed_noise_template(db, "Precursor <*> line", count=1, hours_ago=24 * 200)
+    tpl.last_seen = datetime.utcnow() - timedelta(days=120)
+    db.add(PrecursorPattern(
+        template_id=tpl.id,
+        precedes_event="host_down",
+        confidence=0.8,
+        avg_lead_time_sec=120,
+        occurrence_count=5,
+        total_checked=5,
+    ))
+    await db.commit()
+
+    deleted = await cleanup_log_templates(db, retention_days=90)
+
+    assert deleted == 0
+    remaining = (await db.execute(select(LogTemplate.id))).scalars().all()
+    assert tpl.id in remaining
+
+
+async def test_retention_disabled_deletes_nothing(db):
+    """A retention of 0 means 'keep everything', not 'delete everything'."""
+    from services.log_intelligence import cleanup_log_templates
+
+    tpl = await _seed_noise_template(db, "Old <*> line", count=1, hours_ago=24 * 200)
+    tpl.last_seen = datetime.utcnow() - timedelta(days=500)
+    await db.commit()
+
+    assert await cleanup_log_templates(db, retention_days=0) == 0
+    remaining = (await db.execute(select(LogTemplate.id))).scalars().all()
+    assert tpl.id in remaining
