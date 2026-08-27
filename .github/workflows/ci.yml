@@ -81,7 +81,7 @@ jobs:
         working-directory: backend
         run: pip install -r requirements.txt
 
-      - name: alembic upgrade head against an empty database
+      - name: fresh install builds the schema and stamps head
         working-directory: backend
         env:
           DATABASE_URL: postgresql+asyncpg://nodeglow:nodeglow@localhost:5432/nodeglow
@@ -89,7 +89,23 @@ jobs:
           # config.py creates DATA_DIR on import; the default /data is not
           # writable for the runner user.
           DATA_DIR: ${{ runner.temp }}/nodeglow-data
-        run: alembic -c alembic.ini upgrade head
+        run: |
+          set -e
+          python migrate.py
+          # The agents table exists only in the models, never in a migration —
+          # a plain `alembic upgrade head` on an empty database fails on it.
+          psql "postgresql://nodeglow:nodeglow@localhost:5432/nodeglow" \
+            -tAc "SELECT to_regclass('public.agents')" | grep -q agents
+          psql "postgresql://nodeglow:nodeglow@localhost:5432/nodeglow" \
+            -tAc "SELECT version_num FROM alembic_version" | grep -qE '^[0-9]+$'
+
+      - name: running it again is idempotent (existing-install path)
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://nodeglow:nodeglow@localhost:5432/nodeglow
+          SECRET_KEY: ci-secret-key
+          DATA_DIR: ${{ runner.temp }}/nodeglow-data
+        run: python migrate.py
 
       - name: entrypoint runs migrations and honours SKIP_MIGRATIONS
         working-directory: backend
@@ -99,18 +115,18 @@ jobs:
           export DATA_DIR="${{ runner.temp }}/nodeglow-data"
           mkdir -p /tmp/stub
           printf '#!/bin/sh\nshift\nexec "$@"\n' > /tmp/stub/gosu
-          printf '#!/bin/sh\necho ALEMBIC_RAN\n' > /tmp/stub/alembic
-          chmod +x /tmp/stub/gosu /tmp/stub/alembic
+          printf '#!/bin/sh\necho MIGRATE_RAN\n' > /tmp/stub/python
+          chmod +x /tmp/stub/gosu /tmp/stub/python
 
           PATH=/tmp/stub:$PATH sh entrypoint.sh echo APP_STARTED > with.log
-          grep -q ALEMBIC_RAN with.log
+          grep -q MIGRATE_RAN with.log
           grep -q APP_STARTED with.log
 
           PATH=/tmp/stub:$PATH SKIP_MIGRATIONS=1 sh entrypoint.sh echo APP_STARTED > without.log
-          ! grep -q ALEMBIC_RAN without.log
+          ! grep -q MIGRATE_RAN without.log
           grep -q APP_STARTED without.log
 
-          printf '#!/bin/sh\nexit 1\n' > /tmp/stub/alembic
+          printf '#!/bin/sh\nexit 1\n' > /tmp/stub/python
           if PATH=/tmp/stub:$PATH sh entrypoint.sh echo APP_STARTED; then
             echo "entrypoint started the app despite a failed migration" >&2
             exit 1

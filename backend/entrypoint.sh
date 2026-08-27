@@ -14,9 +14,12 @@ chown -R nodeglow:nodeglow /data 2>/dev/null || true
 if [ "$SKIP_MIGRATIONS" = "1" ]; then
     echo "[entrypoint] SKIP_MIGRATIONS=1 — skipping alembic upgrade"
 else
-    echo "[entrypoint] applying database migrations"
-    if ! gosu nodeglow alembic -c alembic.ini upgrade head; then
-        echo "[entrypoint] alembic upgrade failed — refusing to start on a drifted schema" >&2
+    echo "[entrypoint] bringing database schema up to date"
+    # migrate.py handles both cases: a fresh database (create schema from the
+    # models, then stamp) and an existing one (apply outstanding migrations).
+    # Plain `alembic upgrade head` cannot build a schema from nothing here.
+    if ! gosu nodeglow python migrate.py; then
+        echo "[entrypoint] schema update failed — refusing to start on a drifted schema" >&2
         exit 1
     fi
 fi
