@@ -1,7 +1,7 @@
 """Generic IntegrationConfig and Snapshot models for all integrations."""
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text, text
 
 from models.base import Base
 
@@ -47,4 +47,10 @@ class Snapshot(Base):
         Index("ix_snap_type_entity_ts", "entity_type", "entity_id", timestamp.desc()),
         Index("ix_snap_entity_id", "entity_id"),
         Index("ix_snap_type_ts", "entity_type", "timestamp"),
+        # Precursor learning filters on ok/timestamp only. Partial, so it holds
+        # just the handful of failed snapshots instead of the whole table.
+        Index("ix_snap_failed_ts", "timestamp", postgresql_where=text("ok = false")),
+        # Serves max(id) GROUP BY (entity_type, entity_id) — the "newest
+        # snapshot per entity" lookup — from the index instead of the heap.
+        Index("ix_snap_latest_per_entity", "entity_type", "entity_id", id.desc()),
     )
