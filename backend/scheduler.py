@@ -271,6 +271,11 @@ _port_pass_streak: dict[int, int] = {}
 async def run_ping_checks():
     """Ping all enabled hosts concurrently and store results."""
     import asyncio as _asyncio
+
+    # Bind unconditionally: both the agent branch and the ICMP path below call
+    # this, and a conditional import would leave the name unbound on any fleet
+    # without agent-sourced hosts.
+    from services.clickhouse_client import insert_ping_checks
     from utils.ping import check_host
 
     async with AsyncSessionLocal() as db:
@@ -323,7 +328,6 @@ async def run_ping_checks():
                 from services.websocket import broadcast_ping_update
                 _asyncio.create_task(broadcast_ping_update(host.id, host.name, success, 0 if success else None))
 
-        from services.clickhouse_client import insert_ping_checks
         try:
             await insert_ping_checks(agent_ping_rows)
         except Exception as ch_exc:
