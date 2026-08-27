@@ -62,6 +62,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-nodeglow}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-nodeglow}
       CLICKHOUSE_URL: http://nodeglow:${CLICKHOUSE_PASSWORD:-${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}}@clickhouse:8123/nodeglow
       DATA_DIR: /data
+      # Emergency escape hatch: "1" skips the alembic upgrade in entrypoint.sh.
+      SKIP_MIGRATIONS: ${SKIP_MIGRATIONS:-}
       SYSLOG_PORT: "1514"
       UPDATE_SIDECAR_URL: http://updater:9100
       UPDATE_SIDECAR_TOKEN: ${UPDATE_SIDECAR_TOKEN:?Set UPDATE_SIDECAR_TOKEN in .env (shared with updater)}
@@ -88,8 +90,17 @@ services:
     volumes:
       - .:/opt/repo
       - /var/run/docker.sock:/var/run/docker.sock
+      - backups:/backups
     environment:
       UPDATE_SIDECAR_TOKEN: ${UPDATE_SIDECAR_TOKEN:?Set UPDATE_SIDECAR_TOKEN in .env (shared with backend)}
+      # Postgres container to dump before migrating. Leave unset to let the
+      # sidecar resolve it via `docker compose ps -q db`; the legacy production
+      # stack in /opt/vigil uses `vigil-db-1`.
+      DB_CONTAINER: ${DB_CONTAINER:-}
+      POSTGRES_USER: ${POSTGRES_USER:-nodeglow}
+      POSTGRES_DB: ${POSTGRES_DB:-nodeglow}
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION: ${BACKUP_RETENTION:-5}
     expose:
       - "9100"
     restart: unless-stopped
@@ -108,3 +119,4 @@ services:
 volumes:
   pgdata:
   chdata:
+  backups:

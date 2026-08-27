@@ -32,6 +32,106 @@ jobs:
       - name: Run tests
         run: pytest -q
 
+  sidecar:
+    name: Sidecar (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sidecar
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run tests
+        run: python -m pytest tests -q
+
+  migrations:
+    name: Migrations (alembic + entrypoint)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: nodeglow
+          POSTGRES_USER: nodeglow
+          POSTGRES_PASSWORD: nodeglow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nodeglow"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: fresh install builds the schema and stamps head
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://nodeglow:nodeglow@localhost:5432/nodeglow
+          SECRET_KEY: ci-secret-key
+          # config.py creates DATA_DIR on import; the default /data is not
+          # writable for the runner user.
+          DATA_DIR: ${{ runner.temp }}/nodeglow-data
+        run: |
+          set -e
+          python migrate.py
+          # The agents table exists only in the models, never in a migration —
+          # a plain `alembic upgrade head` on an empty database fails on it.
+          psql "postgresql://nodeglow:nodeglow@localhost:5432/nodeglow" \
+            -tAc "SELECT to_regclass('public.agents')" | grep -q agents
+          psql "postgresql://nodeglow:nodeglow@localhost:5432/nodeglow" \
+            -tAc "SELECT version_num FROM alembic_version" | grep -qE '^[0-9]+$'
+
+      - name: running it again is idempotent (existing-install path)
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://nodeglow:nodeglow@localhost:5432/nodeglow
+          SECRET_KEY: ci-secret-key
+          DATA_DIR: ${{ runner.temp }}/nodeglow-data
+        run: python migrate.py
+
+      - name: entrypoint runs migrations and honours SKIP_MIGRATIONS
+        working-directory: backend
+        run: |
+          set -e
+          sudo mkdir -p /data && sudo chown -R "$USER" /data
+          export DATA_DIR="${{ runner.temp }}/nodeglow-data"
+          mkdir -p /tmp/stub
+          printf '#!/bin/sh\nshift\nexec "$@"\n' > /tmp/stub/gosu
+          printf '#!/bin/sh\necho MIGRATE_RAN\n' > /tmp/stub/python
+          chmod +x /tmp/stub/gosu /tmp/stub/python
+
+          PATH=/tmp/stub:$PATH sh entrypoint.sh echo APP_STARTED > with.log
+          grep -q MIGRATE_RAN with.log
+          grep -q APP_STARTED with.log
+
+          PATH=/tmp/stub:$PATH SKIP_MIGRATIONS=1 sh entrypoint.sh echo APP_STARTED > without.log
+          ! grep -q MIGRATE_RAN without.log
+          grep -q APP_STARTED without.log
+
+          printf '#!/bin/sh\nexit 1\n' > /tmp/stub/python
+          if PATH=/tmp/stub:$PATH sh entrypoint.sh echo APP_STARTED; then
+            echo "entrypoint started the app despite a failed migration" >&2
+            exit 1
+          fi
+
   frontend:
     name: Frontend (typecheck + build)
     runs-on: ubuntu-latest
