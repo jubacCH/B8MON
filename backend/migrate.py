@@ -65,26 +65,49 @@ def upgrade_head() -> None:
     command.upgrade(Config(ALEMBIC_CONFIG), "head")
 
 
-async def _run() -> None:
-    if await has_alembic_version():
-        log.info("existing database — applying outstanding migrations")
-        upgrade_head()
-        log.info("schema is at head")
-        return
+async def _probe_and_prepare() -> bool:
+    """Do all async work in one loop; return True if the database already exists.
 
-    log.info("fresh database — creating schema from models")
-    await create_schema_from_models()
-    stamp_head()
-    log.info("schema created and stamped at head")
+    The engine binds to the loop it is first used in, so probing and schema
+    creation share a single ``asyncio.run`` and dispose before returning.
+    """
+    from models.base import engine
+
+    try:
+        existing = await has_alembic_version()
+        if not existing:
+            log.info("fresh database — creating schema from models")
+            await create_schema_from_models()
+        return existing
+    finally:
+        await engine.dispose()
 
 
 def main() -> int:
+    """Bring the schema up to date.
+
+    Alembic's ``env.py`` drives its own event loop, so its commands run only
+    after the async phase above has finished and closed its loop — nesting the
+    two makes alembic's coroutine never awaited.
+    """
     try:
-        asyncio.run(_run())
+        existing = _probe()
+
+        if existing:
+            log.info("existing database — applying outstanding migrations")
+            upgrade_head()
+            log.info("schema is at head")
+        else:
+            stamp_head()
+            log.info("schema created and stamped at head")
     except Exception as exc:  # noqa: BLE001
         log.error("failed to bring schema up to date: %s", exc)
         return 1
     return 0
+
+
+def _probe() -> bool:
+    return asyncio.run(_probe_and_prepare())
 
 
 if __name__ == "__main__":
