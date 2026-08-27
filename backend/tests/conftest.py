@@ -61,6 +61,16 @@ async def db():
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Settings, users and sessions live in a second declarative Base in
+        # database.py. Without it, anything reading a setting fails with
+        # "no such table: settings" — and which tests hit that depended on
+        # import order, so it surfaced only in certain run combinations.
+        try:
+            from database import Base as DbBase
+
+            await conn.run_sync(DbBase.metadata.create_all)
+        except ImportError:
+            pass
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
