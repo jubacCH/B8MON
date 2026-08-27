@@ -233,3 +233,75 @@ async def test_run_self_check_opens_and_later_resolves_incident(db):
     assert len(after) == 1, "must not create a second incident"
     assert after[0].status == "resolved"
     assert after[0].resolved_at is not None
+
+
+# ── Regressions from the first production day ────────────────────────────────
+
+async def test_stale_agent_registrations_do_not_count_as_active(db):
+    """Agents that stopped reporting months ago are decommissioned, not broken.
+
+    Production had 14 registered agents last seen in April. Counting rows alone
+    made the check alarm on missing agent metrics forever — a false positive
+    that trains operators to ignore the incident list.
+    """
+    from datetime import datetime, timedelta
+
+    from models.agent import Agent
+    from services.self_check import _active_sources
+
+    db.add(Agent(name="old", hostname="old.example", token="t1",
+                 last_seen=datetime.utcnow() - timedelta(days=120)))
+    await db.commit()
+
+    active = await _active_sources(db)
+
+    assert active["agent_metrics"] is False
+
+
+async def test_recently_seen_agent_counts_as_active(db):
+    """An agent reporting normally must still be watched."""
+    from datetime import datetime, timedelta
+
+    from models.agent import Agent
+    from services.self_check import _active_sources
+
+    db.add(Agent(name="live", hostname="live.example", token="t2",
+                 last_seen=datetime.utcnow() - timedelta(hours=1)))
+    await db.commit()
+
+    active = await _active_sources(db)
+
+    assert active["agent_metrics"] is True
+
+
+async def test_correlation_leaves_self_check_incidents_alone(db):
+    """Only run_self_check may resolve its own incidents.
+
+    Self-check incidents carry no hosts, so the correlation engine's
+    "are the hosts back online?" logic resolved them immediately. The result was
+    an incident recreated every 5 minutes and resolved 60 seconds later, which
+    is what operators actually saw: a permanent stream of down/up notifications.
+    """
+    from sqlalchemy import select
+
+    from models.incident import Incident
+    from services.correlation import _auto_resolve
+    from services.self_check import SELF_CHECK_RULE
+
+    incident = Incident(
+        rule=SELF_CHECK_RULE,
+        title="Ping checks: no data recorded",
+        severity="critical",
+        status="open",
+        host_ids_hash="e3b0c44298fc1c14",  # sha256 of the empty host list
+    )
+    db.add(incident)
+    await db.commit()
+
+    await _auto_resolve(db)
+    await db.commit()
+
+    still_open = (await db.execute(
+        select(Incident).where(Incident.rule == SELF_CHECK_RULE)
+    )).scalar_one()
+    assert still_open.status == "open", "correlation must not resolve self-check incidents"

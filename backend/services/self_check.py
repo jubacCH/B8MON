@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 log = logging.getLogger("nodeglow.self_check")
 
@@ -30,6 +31,10 @@ log = logging.getLogger("nodeglow.self_check")
 JOB_GRACE_FACTOR = 3.0
 
 SELF_CHECK_RULE = "self_check"
+
+# An agent that has not reported within this window counts as decommissioned
+# rather than broken, so its absence is not alarmed on.
+AGENT_ACTIVE_DAYS = 7
 
 
 @dataclass(frozen=True)
@@ -210,7 +215,13 @@ async def _active_sources(db) -> dict[str, bool]:
     )
     active["ping_checks"] = bool(ping_hosts)
 
-    agents = await db.scalar(select(func.count()).select_from(Agent))
+    # A registration that stopped reporting months ago is not a feature in use.
+    # Counting rows alone made an installation whose agents were decommissioned
+    # alarm forever — the exact false positive this guard exists to prevent.
+    agent_cutoff = datetime.utcnow() - timedelta(days=AGENT_ACTIVE_DAYS)
+    agents = await db.scalar(
+        select(func.count()).select_from(Agent).where(Agent.last_seen >= agent_cutoff)
+    )
     active["agent_metrics"] = bool(agents)
 
     # Syslog has no config row — infer from whether anything ever arrived.
