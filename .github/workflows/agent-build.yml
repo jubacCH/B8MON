@@ -15,8 +15,13 @@ jobs:
     strategy:
       matrix:
         include:
+          # musl, not gnu: a glibc-linked binary only runs on distributions
+          # with at least the builder's glibc. ubuntu-latest ships 2.39, which
+          # excluded Debian 12 (2.36) and Ubuntu 22.04 (2.35) — the agent failed
+          # to start on them with "GLIBC_2.39 not found". musl links statically
+          # and runs anywhere.
           - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-musl
             artifact: nodeglow-agent-linux
             binary: nodeglow-agent
           - os: windows-latest
@@ -31,6 +36,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install musl toolchain
+        if: contains(matrix.target, 'musl')
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -49,6 +59,25 @@ jobs:
 
       - name: Build (release)
         run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Verify the Linux binary is static
+        if: contains(matrix.target, 'musl')
+        shell: bash
+        run: |
+          set -e
+          BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          file "$BIN"
+          # A dynamically linked binary would carry a glibc requirement again,
+          # which is exactly the regression this guards against.
+          if ldd "$BIN" 2>&1 | grep -qv "not a dynamic executable"; then
+            echo "agent binary is dynamically linked — it will not run on older distributions" >&2
+            ldd "$BIN" || true
+            exit 1
+          fi
+          ! strings "$BIN" | grep -q "GLIBC_" || {
+            echo "agent binary still references GLIBC symbols" >&2
+            exit 1
+          }
 
       - name: Rename binary
         shell: bash
