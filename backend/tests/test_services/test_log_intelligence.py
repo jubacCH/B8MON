@@ -424,3 +424,52 @@ async def test_retention_disabled_deletes_nothing(db):
     assert await cleanup_log_templates(db, retention_days=0) == 0
     remaining = (await db.execute(select(LogTemplate.id))).scalars().all()
     assert tpl.id in remaining
+
+
+# ── Fleet-wide precursor events ──────────────────────────────────────────────
+
+async def test_precursor_query_filters_by_host_when_given_one(db):
+    """A host_down event looks only at that host's syslog."""
+    from services.log_intelligence import _learn_precursors_for_event
+
+    seen = {}
+
+    async def fake_ch_query(sql, params=None):
+        seen["sql"] = sql
+        seen["params"] = params
+        return []
+
+    with patch("services.log_intelligence.ch_query", new=fake_ch_query):
+        await _learn_precursors_for_event(
+            db, "host_down", [(7, datetime(2026, 5, 20, 12, 0, 0))],
+            datetime(2026, 5, 20, 12, 5, 0),
+        )
+
+    assert seen["params"]["hid"] == 7
+    assert "host_id = {hid:Int32}" in seen["sql"]
+
+
+async def test_precursor_query_is_fleet_wide_for_host_id_zero(db):
+    """Integration failures and incidents are not tied to one host.
+
+    They are passed as host_id 0, which must mean "any host". Using it as a
+    filter matched nothing, so these two event types silently never learned.
+    """
+    from services.log_intelligence import _learn_precursors_for_event
+
+    seen = {}
+
+    async def fake_ch_query(sql, params=None):
+        seen["sql"] = sql
+        seen["params"] = params
+        return []
+
+    with patch("services.log_intelligence.ch_query", new=fake_ch_query):
+        await _learn_precursors_for_event(
+            db, "incident", [(0, datetime(2026, 5, 20, 12, 0, 0))],
+            datetime(2026, 5, 20, 12, 5, 0),
+        )
+
+    assert seen["params"]["hid"] == 0
+    # The predicate must short-circuit to "all hosts" rather than filter on 0.
+    assert "{hid:Int32} = 0 OR host_id = {hid:Int32}" in seen["sql"]
