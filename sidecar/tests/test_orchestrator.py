@@ -191,6 +191,31 @@ def test_preflight_rejects_dirty_tree(tmp_path):
         step_preflight(ctx)
 
 
+def test_preflight_names_the_dirty_files(tmp_path):
+    """"Dirty" alone leaves an operator guessing.
+
+    The usual cause is something harmless — a hand-made .env backup — and the
+    message has to say so, or updates just stop working for no visible reason.
+    """
+    ctx = make_ctx(tmp_path, run_cmd=_git_responder({
+        ("git", "status", "--porcelain"): CmdResult(
+            0, "?? .env.bak.20260429\n M backend/main.py", ""
+        ),
+    }))
+    with pytest.raises(StepError, match=r"\.env\.bak\.20260429"):
+        step_preflight(ctx)
+
+
+def test_preflight_truncates_a_long_dirty_list(tmp_path):
+    """A large diff must not produce an unreadable error."""
+    listing = "\n".join(f"?? file{i}.txt" for i in range(9))
+    ctx = make_ctx(tmp_path, run_cmd=_git_responder({
+        ("git", "status", "--porcelain"): CmdResult(0, listing, ""),
+    }))
+    with pytest.raises(StepError, match=r"\+4 more"):
+        step_preflight(ctx)
+
+
 def test_preflight_rejects_foreign_head(tmp_path):
     ctx = make_ctx(tmp_path, run_cmd=_git_responder({
         ("git", "symbolic-ref", "-q", "HEAD"): CmdResult(1, "", ""),
