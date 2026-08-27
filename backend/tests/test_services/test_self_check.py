@@ -305,3 +305,56 @@ async def test_correlation_leaves_self_check_incidents_alone(db):
         select(Incident).where(Incident.rule == SELF_CHECK_RULE)
     )).scalar_one()
     assert still_open.status == "open", "correlation must not resolve self-check incidents"
+
+
+def test_metric_name_strips_the_source_job_prefix():
+    """Auto-discovered jobs are registered as src:<name> but metered bare.
+
+    Looking up metrics by the scheduler id found nothing and reported a
+    perfectly healthy job as broken — src:scheduled_scans had 12 successful runs
+    at the time it was alarmed on.
+    """
+    from services.self_check import metric_name_for
+
+    assert metric_name_for("src:scheduled_scans") == "scheduled_scans"
+    assert metric_name_for("ping_checks") == "ping_checks"
+
+
+async def test_uninstrumented_job_is_not_judged(db):
+    """Silence from a job that never reports proves nothing.
+
+    A job with no runs_total under either status was never instrumented, so its
+    missing last-success timestamp is not evidence of failure. A job that
+    reports failures is a different matter and must still be caught.
+    """
+    from services.self_check import collect_problems
+
+    scheduler = FakeScheduler([FakeJob("src:mystery", 60)])
+
+    with patch("services.self_check._active_sources", new=AsyncMock(return_value={})), \
+         patch("prometheus_client.REGISTRY.get_sample_value", return_value=None):
+        problems = await collect_problems(
+            db, scheduler, now=NOW, process_start=NOW - 10_000
+        )
+
+    assert problems == []
+
+
+async def test_instrumented_job_that_only_ever_failed_is_reported(db):
+    """disk_space_check: 2729 failures, zero successes — must still be caught."""
+    from services.self_check import collect_problems
+
+    scheduler = FakeScheduler([FakeJob("disk_space_check", 1800)])
+
+    def sample(metric, labels):
+        if metric == "nodeglow_scheduler_job_runs_total":
+            return 2729.0 if labels.get("status") == "failure" else None
+        return None  # never succeeded
+
+    with patch("services.self_check._active_sources", new=AsyncMock(return_value={})), \
+         patch("prometheus_client.REGISTRY.get_sample_value", side_effect=sample):
+        problems = await collect_problems(
+            db, scheduler, now=NOW, process_start=NOW - 100_000
+        )
+
+    assert [p.key for p in problems] == ["job:disk_space_check"]
