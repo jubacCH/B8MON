@@ -9,7 +9,9 @@ import { StatusDot } from '@/components/ui/StatusDot';
 import { useQuery } from '@tanstack/react-query';
 import { get, post } from '@/lib/api';
 import { useToastStore } from '@/stores/toast';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { UpdateProgress } from '@/components/system/UpdateProgress';
+import type { UpdateRunState } from '@/lib/updateSteps';
 import {
   Database, Clock, Server, RefreshCw, Download, Cpu, HardDrive,
   MemoryStick, Activity, Shield, AlertTriangle, Plug, Timer,
@@ -162,9 +164,19 @@ function StatRow({ label, value }: { label: string; value: string | number }) {
 
 export default function SystemStatusPage() {
   useEffect(() => { document.title = 'System Status | Nodeglow'; }, []);
+
+  // A run started in another tab (or before a reload) keeps rendering here.
+  useEffect(() => {
+    let cancelled = false;
+    get<UpdateRunState>('/api/update/status')
+      .then((s) => { if (!cancelled && s?.status === 'running') setRunActive(true); })
+      .catch(() => { /* sidecar unavailable — nothing to resume */ });
+    return () => { cancelled = true; };
+  }, []);
   const toast = useToastStore((s) => s.show);
   const [checking, setChecking] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [runActive, setRunActive] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{
     update_available: boolean;
     local: { commit?: string; version?: string };
@@ -194,12 +206,13 @@ export default function SystemStatusPage() {
   }
 
   async function applyUpdate() {
-    if (!confirm('Update now? The application will restart.')) return;
+    if (!confirm('Update now? NODEGLOW will back up the database, migrate and restart.')) return;
     setUpdating(true);
     try {
-      const result = await post<{ ok: boolean; message?: string; error?: string }>('/api/update/apply');
+      const result = await post<{ ok: boolean; run_id?: string; message?: string; error?: string }>('/api/update/apply');
       if (result.ok) {
-        toast(result.message || 'Update started — restarting...', 'success');
+        setRunActive(true);
+        toast(result.message || 'Update started', 'success');
       } else {
         toast(result.error || 'Update failed', 'error');
       }
@@ -216,6 +229,15 @@ export default function SystemStatusPage() {
       setUpdating(false);
     }
   }
+
+  const handleRunFinished = useCallback((s: UpdateRunState) => {
+    setRunActive(false);
+    if (s.status === 'done') {
+      toast('Update complete', 'success');
+    } else if (s.status === 'failed') {
+      toast(s.error || 'Update failed', 'error');
+    }
+  }, [toast]);
 
   const app = status?.application;
   const sys = status?.system;
@@ -600,9 +622,9 @@ export default function SystemStatusPage() {
           </div>
           <div className="flex gap-2">
             {updateInfo?.update_available && (
-              <Button size="sm" variant="primary" onClick={applyUpdate} disabled={updating}>
-                <Download size={14} className={updating ? 'animate-bounce' : ''} />
-                {updating ? 'Updating...' : 'Update Now'}
+              <Button size="sm" variant="primary" onClick={applyUpdate} disabled={updating || runActive}>
+                <Download size={14} className={updating || runActive ? 'animate-bounce' : ''} />
+                {updating || runActive ? 'Updating...' : 'Update Now'}
               </Button>
             )}
             <Button size="sm" variant="ghost" onClick={checkUpdate} disabled={checking}>
@@ -640,6 +662,7 @@ export default function SystemStatusPage() {
         ) : (
           <p className="text-sm text-slate-500">Click &quot;Check Now&quot; to check for updates</p>
         )}
+        <UpdateProgress active={runActive} onFinished={handleRunFinished} />
       </GlassCard>
 
       {/* Dashboard API Performance */}
