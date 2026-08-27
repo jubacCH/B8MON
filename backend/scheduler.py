@@ -747,6 +747,19 @@ async def run_log_analytics():
     await run_analytics()
 
 
+@instrument_job("self_check")
+async def run_self_check_job():
+    """Check that Nodeglow itself is still collecting data and running its jobs."""
+    import os
+    import time as _time
+
+    from services.self_check import run_self_check
+
+    process_start = float(os.environ.get("NODEGLOW_START_TIME", _time.time()))
+    async with AsyncSessionLocal() as db:
+        await run_self_check(db, scheduler, _time.time(), process_start)
+
+
 @instrument_job("snmp_polls")
 async def run_snmp_polls():
     """Run due SNMP polls."""
@@ -1198,6 +1211,11 @@ async def start_scheduler():
     # Fleet-wide passes scan every template; keep them off the 30s tick.
     scheduler.add_job(run_log_analytics, "interval", minutes=15,
                       id="log_analytics", replace_existing=True,
+                      max_instances=1, coalesce=True)
+    # Watches the collectors themselves: a monitoring product that stops
+    # collecting must say so rather than render an empty, healthy-looking UI.
+    scheduler.add_job(run_self_check_job, "interval", minutes=5,
+                      id="self_check", replace_existing=True,
                       max_instances=1, coalesce=True)
     scheduler.add_job(run_snmp_polls, "interval", seconds=30,
                       id="snmp_polls", replace_existing=True)
