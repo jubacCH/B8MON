@@ -210,7 +210,14 @@ def step_preflight(ctx: Ctx) -> str:
     if status.returncode != 0:
         raise StepError("Unable to read git status")
     if status.stdout.strip():
-        raise StepError("Working tree is dirty, refusing to update")
+        # Name the files: "dirty" alone leaves an operator guessing, and the
+        # usual cause is something harmless like a hand-made .env backup.
+        entries = [ln.strip() for ln in status.stdout.splitlines() if ln.strip()]
+        shown = ", ".join(entries[:5])
+        more = f" (+{len(entries) - 5} more)" if len(entries) > 5 else ""
+        raise StepError(
+            f"Working tree is dirty, refusing to update: {shown}{more}"
+        )
 
     head = _git(ctx, "symbolic-ref", "-q", "HEAD", timeout=10)
     if head.returncode != 0 or head.stdout.strip() != EXPECTED_REF:

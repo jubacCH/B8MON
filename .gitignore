@@ -27,3 +27,9 @@ backend/static/dist/
 
 # Update orchestrator run state (written into the repo mount by the sidecar)
 .update-state.json
+
+# Backups of .env — admins make these; they must not block the updater's
+# clean-tree preflight check.
+.env.bak*
+.env.*.bak
+.env.backup*
