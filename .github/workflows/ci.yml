@@ -99,6 +99,32 @@ jobs:
           psql "postgresql://nodeglow:nodeglow@localhost:5432/nodeglow" \
             -tAc "SELECT version_num FROM alembic_version" | grep -qE '^[0-9]+$'
 
+      - name: migrations alone can build the schema from nothing
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://nodeglow:nodeglow@localhost:5432/migchain
+          SECRET_KEY: ci-secret-key
+          DATA_DIR: ${{ runner.temp }}/nodeglow-data
+        run: |
+          set -e
+          # A second, untouched database: this proves the migration chain is
+          # self-sufficient, which is what makes the schema reproducible rather
+          # than a by-product of create_all().
+          PGPASSWORD=nodeglow createdb -h localhost -U nodeglow migchain
+          alembic -c alembic.ini upgrade head
+
+      - name: models and migrations agree (no silent schema drift)
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://nodeglow:nodeglow@localhost:5432/migchain
+          SECRET_KEY: ci-secret-key
+          DATA_DIR: ${{ runner.temp }}/nodeglow-data
+        run: |
+          # Fails when a model changed without a matching migration — the exact
+          # way schema drift is introduced: fresh installs get the change via
+          # create_all(), existing installs never do.
+          alembic -c alembic.ini check
+
       - name: running it again is idempotent (existing-install path)
         working-directory: backend
         env:
