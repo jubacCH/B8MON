@@ -32,6 +32,86 @@ jobs:
       - name: Run tests
         run: pytest -q
 
+  sidecar:
+    name: Sidecar (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sidecar
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run tests
+        run: python -m pytest tests -q
+
+  migrations:
+    name: Migrations (alembic + entrypoint)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: nodeglow
+          POSTGRES_USER: nodeglow
+          POSTGRES_PASSWORD: nodeglow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nodeglow"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: alembic upgrade head against an empty database
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://nodeglow:nodeglow@localhost:5432/nodeglow
+          SECRET_KEY: ci-secret-key
+        run: alembic -c alembic.ini upgrade head
+
+      - name: entrypoint runs migrations and honours SKIP_MIGRATIONS
+        working-directory: backend
+        run: |
+          set -e
+          sudo mkdir -p /data && sudo chown -R "$USER" /data
+          mkdir -p /tmp/stub
+          printf '#!/bin/sh\nshift\nexec "$@"\n' > /tmp/stub/gosu
+          printf '#!/bin/sh\necho ALEMBIC_RAN\n' > /tmp/stub/alembic
+          chmod +x /tmp/stub/gosu /tmp/stub/alembic
+
+          PATH=/tmp/stub:$PATH sh entrypoint.sh echo APP_STARTED > with.log
+          grep -q ALEMBIC_RAN with.log
+          grep -q APP_STARTED with.log
+
+          PATH=/tmp/stub:$PATH SKIP_MIGRATIONS=1 sh entrypoint.sh echo APP_STARTED > without.log
+          ! grep -q ALEMBIC_RAN without.log
+          grep -q APP_STARTED without.log
+
+          printf '#!/bin/sh\nexit 1\n' > /tmp/stub/alembic
+          if PATH=/tmp/stub:$PATH sh entrypoint.sh echo APP_STARTED; then
+            echo "entrypoint started the app despite a failed migration" >&2
+            exit 1
+          fi
+
   frontend:
     name: Frontend (typecheck + build)
     runs-on: ubuntu-latest

@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # The sidecar is not exposed to external traffic (internal network only).
 
 WORKDIR /app
-COPY update-server.py .
+COPY update-server.py orchestrator.py ./
 
 EXPOSE 9100
 CMD ["python", "update-server.py"]

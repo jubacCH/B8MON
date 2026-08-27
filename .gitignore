@@ -24,3 +24,6 @@ backend/static/dist/
 .DS_Store
 
 .superpowers/
+
+# Update orchestrator run state (written into the repo mount by the sidecar)
+.update-state.json
