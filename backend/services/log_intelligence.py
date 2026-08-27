@@ -642,9 +642,14 @@ async def _learn_precursors_for_event(
 
     for host_id, event_ts in events:
         window_start = event_ts - timedelta(minutes=5)
+        # host_id 0 means "not tied to a single host": integration failures and
+        # incidents are fleet-wide, so their precursors have to be looked for
+        # across all syslog rather than under a host that cannot exist. Passing
+        # it as a filter matched nothing, so those two event types never learned
+        # anything at all.
         msg_rows = await ch_query(
             """SELECT message, timestamp FROM syslog_messages
-               WHERE host_id = {hid:Int32}
+               WHERE ({hid:Int32} = 0 OR host_id = {hid:Int32})
                AND timestamp >= {ts_start:DateTime64(3)}
                AND timestamp <= {ts_end:DateTime64(3)}
                AND severity <= 4
@@ -802,8 +807,8 @@ async def learn_precursors(db: AsyncSession):
             .order_by(Snapshot.timestamp)
         )).all()
         if fail_snaps:
-            # entity_id is integration config ID, but we need host_id for syslog matching
-            # Use entity_id as host_id=0 context (global syslog before integration failure)
+            # entity_id is the integration config id, not a host. These
+            # failures are fleet-wide, so 0 asks for syslog across all hosts.
             integration_events = [(0, ts) for _, ts in fail_snaps]
             await _learn_precursors_for_event(db, "integration_fail", integration_events, now)
     except Exception as exc:
