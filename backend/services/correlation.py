@@ -819,6 +819,14 @@ async def _auto_resolve(db) -> list[int]:
                 postmortem_ids.append(incident.id)
             continue
 
+        # Self-check incidents describe Nodeglow itself and carry no hosts, so
+        # the "are the hosts back?" logic below trivially resolves them. Only
+        # run_self_check knows whether the condition still holds; it clears them
+        # itself. Without this they were recreated every 5 minutes and resolved
+        # 60 seconds later, flapping indefinitely.
+        if incident.rule == "self_check":
+            continue
+
         if not incident.host_ids_hash:
             continue
 
