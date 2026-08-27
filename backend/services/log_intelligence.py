@@ -1018,26 +1018,35 @@ async def compute_template_diversity(db: AsyncSession):
     hour = now.hour
     dow = now.weekday()
 
-    for r in rows:
-        baseline = (await db.execute(
-            select(HostBaseline).where(
-                HostBaseline.host_key == r["source_ip"],
-                HostBaseline.hour_of_day == hour,
-                HostBaseline.day_of_week == dow,
-            )
-        )).scalar_one_or_none()
+    # One query for every baseline in this hour/day slot rather than one per
+    # host. The per-host lookup made this the second-heaviest index consumer in
+    # the database, and the cost grew with fleet size for no reason: the rows
+    # are all in the same slot.
+    host_keys = [r["source_ip"] for r in rows]
+    baselines = (await db.execute(
+        select(HostBaseline).where(
+            HostBaseline.host_key.in_(host_keys),
+            HostBaseline.hour_of_day == hour,
+            HostBaseline.day_of_week == dow,
+        )
+    )).scalars().all()
+    by_host = {b.host_key: b for b in baselines}
 
-        if baseline:
-            # Exponential moving average for template diversity
-            alpha = 0.3
-            baseline.avg_template_count = (
-                alpha * r["diversity"] + (1 - alpha) * baseline.avg_template_count
-            )
-            # Update std using Welford's online algorithm (simplified)
-            diff = r["diversity"] - baseline.avg_template_count
-            baseline.std_template_count = max(
-                1.0, (1 - alpha) * baseline.std_template_count + alpha * abs(diff)
-            )
+    alpha = 0.3
+    for r in rows:
+        baseline = by_host.get(r["source_ip"])
+        if not baseline:
+            continue
+
+        # Exponential moving average for template diversity
+        baseline.avg_template_count = (
+            alpha * r["diversity"] + (1 - alpha) * baseline.avg_template_count
+        )
+        # Update std using Welford's online algorithm (simplified)
+        diff = r["diversity"] - baseline.avg_template_count
+        baseline.std_template_count = max(
+            1.0, (1 - alpha) * baseline.std_template_count + alpha * abs(diff)
+        )
 
     await db.commit()
     log.info("Template diversity computed for %d hosts", len(rows))
