@@ -42,18 +42,44 @@ config.set_main_option("sqlalchemy.url", DATABASE_URL)
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode — emit SQL to stdout."""
     url = config.get_main_option("sqlalchemy.url")
+
+
+def _include_object(obj, name, type_, reflected, compare_to):
+    """Filter comparison noise that is not schema drift.
+
+    A column declared ``unique=True`` in the models produces a unique INDEX,
+    while the older migrations created a unique CONSTRAINT for the same column.
+    PostgreSQL implements a unique constraint *with* an index, so the two are
+    equivalent — but autogenerate reports the constraint as "to be removed".
+    Acting on that would drop the uniqueness guarantee on API keys and agent
+    install tokens, so it is filtered instead.
+
+    This is deliberately narrow: only reflected constraints with no model
+    counterpart are hidden. Genuinely missing columns, indexes and foreign keys
+    still surface, which is what `alembic check` exists for.
+    """
+    if type_ == "unique_constraint" and reflected and compare_to is None:
+        return False
+    return True
+
+
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=_include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def do_run_migrations(connection):
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        include_object=_include_object,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
