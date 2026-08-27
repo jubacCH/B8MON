@@ -47,6 +47,7 @@ def make_ctx(tmp_path, **overrides):
         log=lambda msg: None,
         repo_path=str(tmp_path / "repo"),
         compose_file=str(tmp_path / "repo" / "docker-compose.yml"),
+        compose_project="vigil",
         backup_dir=str(tmp_path / "backups"),
         backup_retention=5,
         db_container="vigil-db-1",
@@ -377,7 +378,7 @@ def test_build_only_builds_app_services(tmp_path):
     ctx = make_ctx(tmp_path, run_cmd=run_cmd)
     detail = step_build(ctx)
 
-    assert seen["argv"] == ["docker", "compose", "-f", ctx.compose_file,
+    assert seen["argv"] == ["docker", "compose", "-p", "vigil", "-f", ctx.compose_file,
                             "build", "nodeglow", "frontend"]
     assert seen["timeout"] >= 1800
     assert "nodeglow" in detail
@@ -400,8 +401,9 @@ def test_migrate_runs_alembic_in_throwaway_container(tmp_path):
     ctx = make_ctx(tmp_path, run_cmd=run_cmd)
     detail = step_migrate(ctx)
 
-    assert seen["argv"] == ["docker", "compose", "-f", ctx.compose_file, "run", "--rm",
-                            "nodeglow", "alembic", "-c", "alembic.ini", "upgrade", "head"]
+    assert seen["argv"] == ["docker", "compose", "-p", "vigil", "-f", ctx.compose_file,
+                            "run", "--rm", "--no-deps", "nodeglow",
+                            "alembic", "-c", "alembic.ini", "upgrade", "head"]
     assert "031 -> 032" in detail
 
 
@@ -427,7 +429,44 @@ def test_restart_leaves_updater_alone(tmp_path):
     ctx = make_ctx(tmp_path, run_cmd=run_cmd)
     detail = step_restart(ctx)
 
-    assert seen["argv"] == ["docker", "compose", "-f", ctx.compose_file,
+    assert seen["argv"] == ["docker", "compose", "-p", "vigil", "-f", ctx.compose_file,
                             "up", "-d", "--no-deps", "nodeglow", "frontend"]
     assert "updater" not in seen["argv"]
     assert "restarted" in detail
+
+
+def test_compose_commands_name_the_project_explicitly(tmp_path):
+    """Every compose call must carry -p.
+
+    Compose derives the project from the directory. The sidecar sees the repo at
+    /opt/repo while production started the stack from /opt/vigil, so without -p
+    compose treats the running containers as foreign: it built images under a
+    'repo-' prefix and then failed trying to create a container whose name was
+    already taken. The whole update path was broken by this.
+    """
+    calls = []
+
+    def run_cmd(argv, timeout=60, cwd=None):
+        calls.append(argv)
+        return CmdResult(0, "", "")
+
+    ctx = make_ctx(tmp_path, run_cmd=run_cmd, compose_project="vigil")
+    step_build(ctx)
+    step_migrate(ctx)
+    step_restart(ctx)
+
+    assert calls, "no compose commands issued"
+    for argv in calls:
+        assert argv[:4] == ["docker", "compose", "-p", "vigil"], argv
+
+
+def test_migrate_does_not_restart_dependencies(tmp_path):
+    """The database and ClickHouse are already up; compose run must not touch them."""
+    seen = {}
+
+    def run_cmd(argv, timeout=60, cwd=None):
+        seen["argv"] = argv
+        return CmdResult(0, "", "")
+
+    step_migrate(make_ctx(tmp_path, run_cmd=run_cmd))
+    assert "--no-deps" in seen["argv"]

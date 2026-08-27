@@ -111,6 +111,7 @@ class Ctx:
     log: Callable[[str], None]
     repo_path: str
     compose_file: str
+    compose_project: str
     backup_dir: str
     backup_retention: int
     db_container: str
@@ -185,8 +186,17 @@ def _git(ctx: Ctx, *args, timeout: int = 30) -> CmdResult:
 
 
 def _compose(ctx: Ctx, *args, timeout: int) -> CmdResult:
+    """Run a compose command against the *running* stack.
+
+    The project name has to be passed explicitly. Compose derives it from the
+    directory otherwise, and the sidecar sees the repo mounted at /opt/repo
+    while the live stack was started from /opt/vigil. Without -p, compose
+    considers the running containers to belong to a different project and tries
+    to create its own — which fails on the fixed container_name, and would have
+    built images under the wrong prefix.
+    """
     return ctx.run_cmd(
-        ["docker", "compose", "-f", ctx.compose_file, *args],
+        ["docker", "compose", "-p", ctx.compose_project, "-f", ctx.compose_file, *args],
         timeout=timeout,
         cwd=ctx.repo_path,
     )
@@ -342,7 +352,7 @@ def step_migrate(ctx: Ctx) -> str:
     listeners are not disturbed.
     """
     result = _compose(
-        ctx, "run", "--rm", "nodeglow",
+        ctx, "run", "--rm", "--no-deps", "nodeglow",
         "alembic", "-c", "alembic.ini", "upgrade", "head",
         timeout=MIGRATE_TIMEOUT,
     )
