@@ -322,6 +322,16 @@ async def run_ping_checks():
     if not active_hosts:
         return
 
+    # Hosts assigned to a probe are checked from that probe's network, not from
+    # here. The core deliberately does not check them as well, and does not fill
+    # in when a probe goes quiet: a result invented here would describe a
+    # machine nobody measured. Their absence surfaces through the self-check
+    # instead, which judges each probe's freshness separately.
+    from services.probes import core_checked
+    active_hosts = core_checked(active_hosts)
+    if not active_hosts:
+        return
+
     # Separate agent-sourced hosts — they use agent heartbeat, not ICMP
     agent_hosts = [h for h in active_hosts if h.source == "agent"]
     ping_hosts = [h for h in active_hosts if h.source != "agent"]

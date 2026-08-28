@@ -1733,15 +1733,21 @@ async def get_topology(
     hosts = result.scalars().all()
     now = datetime.utcnow()
 
+    # Status comes from the recorded checks, via the one helper that knows who
+    # is responsible for each host. The previous expression read `status` and
+    # `is_down` off PingHost, which has neither, so it evaluated to False for
+    # every row and this endpoint reported the entire topology as down.
+    from services.probes import statuses_for
+    statuses = await statuses_for(db, hosts, now.timestamp())
+
     nodes = []
     edges = []
     for h in hosts:
-        online = h.status == "up" if hasattr(h, "status") else not getattr(h, "is_down", True)
         nodes.append({
             "id": h.id,
             "name": h.name,
             "hostname": h.hostname,
-            "status": "up" if online else "down",
+            "status": statuses.get(h.id, "unknown"),
             "check_type": h.check_type,
             "source": h.source,
             "maintenance": h.maintenance or False,

@@ -29,4 +29,8 @@ class PingHost(Base):
     source_detail        = Column(String, nullable=True)
     mac_address          = Column(String, nullable=True)
     parent_id            = Column(Integer, ForeignKey("ping_hosts.id"), nullable=True)
+    # Which probe checks this host. NULL means the core does, which is every
+    # existing row — the feature stays inert until a host is assigned.
+    probe_id             = Column(Integer, ForeignKey("agents.id", ondelete="SET NULL"),
+                                  nullable=True, index=True)
     created_at           = Column(DateTime, default=datetime.utcnow)

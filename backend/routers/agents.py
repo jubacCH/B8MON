@@ -343,6 +343,16 @@ async def agent_report(request: Request):
         "uptime_s": body.get("uptime_s"),
     })
 
+    # Check results the probe performed for us since its last heartbeat.
+    if agent.is_probe and body.get("check_results"):
+        try:
+            await _record_probe_results(agent.id, body["check_results"])
+        except Exception as exc:  # noqa: BLE001
+            # ERROR, not warning: the degraded-run detector collects ERROR only,
+            # and results silently failing to land is precisely how hosts end up
+            # rendering a stale green.
+            logger.error("Probe %d result insert failed: %s", agent.id, exc)
+
     # Return config + optional command to agent
     resp = {"ok": True, "config": {
         "log_levels": agent.log_levels or "1,2,3",
@@ -352,7 +362,100 @@ async def agent_report(request: Request):
     }}
     if command:
         resp["command"] = command
+
+    # Probe assignments ride the heartbeat: no second endpoint, no second
+    # authentication path, and an assignment change takes effect within one
+    # interval. Absent for every agent that is not a probe, which is all of them
+    # until someone enables it.
+    if agent.is_probe:
+        resp["checks"] = await _probe_assignments(agent.id)
     return resp
+
+
+async def _record_probe_results(probe_id: int, results: list) -> None:
+    """Store check results a probe performed on our behalf.
+
+    Rows carry the probe id so freshness can be judged per probe. A global
+    freshness check cannot see one probe dying while the others keep writing.
+    """
+    import json as _json
+    from datetime import datetime as _dt
+
+    from database import PingHost
+    from services.clickhouse_client import insert_ping_checks
+
+    if not results:
+        return
+
+    rows = []
+    for r in results:
+        try:
+            host_id = int(r["host_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        ts = r.get("ts")
+        if isinstance(ts, str):
+            try:
+                ts = _dt.fromisoformat(ts.replace("Z", "+00:00")).replace(tzinfo=None)
+            except ValueError:
+                ts = None
+        rows.append({
+            "timestamp": ts or _dt.utcnow(),
+            "host_id": host_id,
+            "host_name": str(r.get("host_name") or ""),
+            "success": bool(r.get("success")),
+            "latency_ms": r.get("latency_ms"),
+            "probe_id": probe_id,
+        })
+
+    if rows:
+        # Deliberately not wrapped in a bare except: a probe whose results never
+        # land must surface as a failure, not as a quiet gap that reads as
+        # healthy hosts.
+        await insert_ping_checks(rows)
+
+    # Mirror the per-check breakdown onto the host, the way the core path does.
+    # Without this a probe-checked host would show no detail at all in the UI,
+    # and the difference would look like a product bug rather than a missing
+    # write. port_error is deliberately left alone: the protocol has no field
+    # for it, and latching a flag from data the probe never sent would be a
+    # claim nobody made.
+    details = {
+        int(r["host_id"]): r.get("detail")
+        for r in results
+        if isinstance(r, dict) and r.get("host_id") is not None and r.get("detail")
+    }
+    if details:
+        async with AsyncSessionLocal() as db:
+            hosts = (await db.execute(
+                select(PingHost).where(PingHost.id.in_(list(details)))
+            )).scalars().all()
+            for h in hosts:
+                h.check_detail = _json.dumps(details[h.id])
+            await db.commit()
+
+
+async def _probe_assignments(probe_id: int) -> list[dict]:
+    """The hosts this probe is responsible for checking."""
+    from database import PingHost
+
+    async with AsyncSessionLocal() as db:
+        hosts = (await db.execute(
+            select(PingHost).where(
+                PingHost.probe_id == probe_id,
+                PingHost.enabled == True,  # noqa: E712
+                PingHost.maintenance == False,  # noqa: E712
+            )
+        )).scalars().all()
+
+    return [{
+        "host_id": h.id,
+        "hostname": h.hostname,
+        "ip": h.ip_address,
+        "check_type": h.check_type or "icmp",
+        "port": h.port,
+        "timeout_seconds": 5.0,
+    } for h in hosts]
 
 
 # ── API: Agent log submission ────────────────────────────────────────────────

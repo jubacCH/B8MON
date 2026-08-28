@@ -26,6 +26,10 @@ class Agent(Base):
     log_file_paths = Column(Text, nullable=True)
     agent_log_level = Column(String(16), nullable=True, default="errors")
     pending_command = Column(String(32), nullable=True)
+    # A probe is an agent that also runs checks for hosts in its network,
+    # rather than only reporting on the machine it sits on.
+    is_probe   = Column(Boolean, default=False, nullable=False)
+    probe_interval_seconds = Column(Integer, nullable=True)
     watched_services = Column(Text, nullable=True)
     last_seen  = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
