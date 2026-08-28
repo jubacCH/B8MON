@@ -19,6 +19,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Ookla speedtest CLI. The pip package speedtest-cli is unmaintained since 2021
 # and reports a fixed ping of 1800000 ms against some connections; it stays
 # installed as a fallback for images built without network access to Ookla.
+#
+# Installed as `ookla-speedtest`, not `speedtest`: the pip package also ships a
+# `speedtest` entry point, and `COPY --from=builder /install /usr/local` below
+# would overwrite the binary with it. Tool detection would then find the old
+# tool and invoke it with Ookla's arguments, breaking the integration outright.
 ARG TARGETARCH=amd64
 ARG OOKLA_VERSION=1.2.0
 RUN set -eux; \
@@ -30,9 +35,10 @@ RUN set -eux; \
     esac; \
     if [ -n "$ookla_arch" ]; then \
         curl -fsSL "https://install.speedtest.net/app/cli/ookla-speedtest-${OOKLA_VERSION}-linux-${ookla_arch}.tgz" \
-            | tar -xz -C /usr/local/bin speedtest \
-        && chmod +x /usr/local/bin/speedtest \
-        && /usr/local/bin/speedtest --version >/dev/null; \
+            | tar -xz -C /tmp speedtest \
+        && mv /tmp/speedtest /usr/local/bin/ookla-speedtest \
+        && chmod +x /usr/local/bin/ookla-speedtest \
+        && /usr/local/bin/ookla-speedtest --version >/dev/null; \
     else \
         echo "No Ookla build for $TARGETARCH — falling back to speedtest-cli"; \
     fi
