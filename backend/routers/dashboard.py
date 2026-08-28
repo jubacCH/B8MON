@@ -5,6 +5,45 @@ from datetime import datetime, timedelta
 # Stores last dashboard API timing for /system/status display
 _last_perf: dict = {}
 
+# ── Anomaly baseline sampling ────────────────────────────────────────────────
+#
+# The baseline used to be built from every proxmox snapshot in the window: 2830
+# rows and 140 MB of JSON on production, loaded and parsed on every dashboard
+# request, which was ~1.5 s of a ~2.1 s response.
+#
+# Mean and standard deviation converge long before 2830 points. What does need
+# to be exact is the tail: the sustained-anomaly check reads the last few values
+# and they have to be real consecutive samples, not thinned-out ones.
+
+BASELINE_SAMPLE_BUDGET = 120
+BASELINE_KEEP_NEWEST = 6
+
+
+def select_baseline_indices(total: int, budget: int, keep_newest: int) -> list[int]:
+    """Pick which snapshots to load, newest-exact and evenly spaced before that.
+
+    Returns sorted, unique indices into a chronologically ordered sequence.
+    """
+    if total <= 0:
+        return []
+    if total <= budget:
+        return list(range(total))
+
+    keep_newest = min(keep_newest, total)
+    tail_start = total - keep_newest
+    picked = set(range(tail_start, total))
+
+    remaining = budget - keep_newest
+    if remaining > 0 and tail_start > 0:
+        # Evenly spaced across everything before the tail, so the baseline
+        # describes the whole window rather than just its most recent slice.
+        step = tail_start / remaining
+        picked.update(min(int(i * step), tail_start - 1) for i in range(remaining))
+
+    return sorted(picked)
+
+
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from templating import localtime
@@ -268,25 +307,42 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
 
         guests_now = latest_data.get("vms", []) + latest_data.get("containers", [])
 
-        # Historical snapshots for anomaly baseline
-        hist_snaps = (await db.execute(
-            select(Snapshot)
-            .where(
-                Snapshot.entity_type == "proxmox",
-                Snapshot.entity_id == cluster.id,
-                Snapshot.ok == True,
-                Snapshot.timestamp >= window_24h,
-                Snapshot.timestamp < latest_snap.timestamp,
+        # Historical snapshots for anomaly baseline.
+        #
+        # Two queries on purpose: the ids alone are cheap, while data_json runs
+        # to ~100 kB per row. Loading the whole window meant 2830 rows and
+        # 140 MB of JSON parsed per request. Only the sampled subset is fetched
+        # with its payload.
+        hist_ids = [
+            row[0] for row in (await db.execute(
+                select(Snapshot.id)
+                .where(
+                    Snapshot.entity_type == "proxmox",
+                    Snapshot.entity_id == cluster.id,
+                    Snapshot.ok == True,
+                    Snapshot.timestamp >= window_24h,
+                    Snapshot.timestamp < latest_snap.timestamp,
+                )
+                .order_by(Snapshot.timestamp)
+            )).all()
+        ]
+
+        wanted = [
+            hist_ids[i] for i in select_baseline_indices(
+                len(hist_ids), BASELINE_SAMPLE_BUDGET, BASELINE_KEEP_NEWEST
             )
-        )).scalars().all()
+        ]
 
-        # Sort historical snapshots by time (oldest first) so recent slicing works
-        hist_snaps_sorted = sorted(hist_snaps, key=lambda s: s.timestamp)
+        hist_rows = (await db.execute(
+            select(Snapshot.data_json)
+            .where(Snapshot.id.in_(wanted))
+            .order_by(Snapshot.timestamp)
+        )).all() if wanted else []
 
-        # Build per-guest time series from ALL historical snapshots
+        # Build per-guest time series from the sampled snapshots
         hist: dict[int, dict] = defaultdict(lambda: {"cpu": [], "mem": []})
-        for snap in hist_snaps_sorted:
-            snap_data = json.loads(snap.data_json)
+        for row in hist_rows:
+            snap_data = json.loads(row[0])
             for g in snap_data.get("vms", []) + snap_data.get("containers", []):
                 gid = g.get("id")
                 if gid is not None:
