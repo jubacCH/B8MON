@@ -120,6 +120,14 @@ pub async fn check_and_update(api: &ApiClient, cfg: &Config) -> anyhow::Result<b
     Ok(true)
 }
 
+// The agent ships for Linux (musl) and Windows only. Any other platform — macOS
+// in particular, where the agent is developed and its tests are run — has no
+// self-update path. Refuse explicitly instead of failing to compile there.
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+async fn apply_update(_exe_path: &std::path::Path, _data: &[u8]) -> anyhow::Result<()> {
+    anyhow::bail!("Self-update is not supported on {}", std::env::consts::OS)
+}
+
 #[cfg(target_os = "linux")]
 async fn apply_update(exe_path: &std::path::Path, data: &[u8]) -> anyhow::Result<()> {
     use std::os::unix::fs::PermissionsExt;

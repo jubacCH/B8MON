@@ -2,6 +2,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+use crate::checks::{CheckAssignment, CheckResult};
 use crate::collector::SystemMetrics;
 use crate::config::{Config, ServerConfig};
 
@@ -29,6 +30,22 @@ fn build_client(cfg: &Config) -> Client {
     builder.build().expect("Failed to create HTTP client")
 }
 
+/// Heartbeat request body: the metrics object exactly as before, with
+/// `check_results` added next to it. The field is omitted entirely when there
+/// is nothing to deliver, so a non-probe agent sends the same bytes it always
+/// did.
+#[derive(Serialize)]
+struct ReportPayload<'a> {
+    #[serde(flatten)]
+    metrics: &'a SystemMetrics,
+    #[serde(skip_serializing_if = "is_empty")]
+    check_results: &'a [CheckResult],
+}
+
+fn is_empty(results: &&[CheckResult]) -> bool {
+    results.is_empty()
+}
+
 #[derive(Debug, Serialize)]
 pub struct LogEntry {
     pub timestamp: String,
@@ -44,6 +61,10 @@ pub struct ReportResponse {
     pub ok: bool,
     pub config: Option<ServerConfig>,
     pub command: Option<String>,
+    /// Hosts this agent is responsible for checking until the next heartbeat.
+    /// Absent or empty for every agent that is not a probe.
+    #[serde(default)]
+    pub checks: Option<Vec<CheckAssignment>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -120,17 +141,22 @@ impl ApiClient {
         Ok(data.token)
     }
 
-    /// Send metrics + logs to the server.
+    /// Send metrics + logs to the server, plus any probe check results that are
+    /// waiting for delivery.
     pub async fn report(
         &self,
         metrics: &SystemMetrics,
         logs: &[LogEntry],
+        check_results: &[CheckResult],
     ) -> anyhow::Result<ReportResponse> {
         let resp = self
             .client
             .post(format!("{}/api/agent/report", self.base_url))
             .bearer_auth(&self.token)
-            .json(metrics)
+            .json(&ReportPayload {
+                metrics,
+                check_results,
+            })
             .send()
             .await?;
 
@@ -242,5 +268,119 @@ impl ApiClient {
         }
 
         Ok(buf)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::collector::SystemMetrics;
+    use std::collections::{BTreeMap, HashMap};
+
+    fn sample_metrics() -> SystemMetrics {
+        SystemMetrics {
+            hostname: "probe01".into(),
+            platform: "linux".into(),
+            arch: "x86_64".into(),
+            agent_version: "0.1.0".into(),
+            cpu_pct: 1.0,
+            mem_total_mb: 1024,
+            mem_used_mb: 256,
+            mem_pct: 25.0,
+            swap_total_mb: 0,
+            swap_used_mb: 0,
+            swap_pct: 0.0,
+            disk_pct: 10.0,
+            disks: Vec::new(),
+            load_1: 0.0,
+            load_5: 0.0,
+            load_15: 0.0,
+            uptime_s: 60,
+            rx_bytes: 0,
+            tx_bytes: 0,
+            network_interfaces: Vec::new(),
+            cpu_temp: None,
+            processes: Vec::new(),
+            os_info: None,
+            cpu_info: None,
+            docker_containers: Vec::new(),
+            extra: HashMap::new(),
+        }
+    }
+
+    fn sample_result() -> CheckResult {
+        let mut detail = BTreeMap::new();
+        detail.insert("icmp".to_string(), true);
+        CheckResult {
+            host_id: 42,
+            success: true,
+            latency_ms: Some(12.4),
+            detail,
+            ts: "2026-08-28T09:01:13Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn a_non_probe_payload_is_unchanged() {
+        let metrics = sample_metrics();
+        let payload = ReportPayload {
+            metrics: &metrics,
+            check_results: &[],
+        };
+        let with_probe_field = serde_json::to_value(&payload).unwrap();
+        let plain = serde_json::to_value(&metrics).unwrap();
+        assert_eq!(
+            with_probe_field, plain,
+            "an agent with no check results must send exactly what it always sent"
+        );
+    }
+
+    #[test]
+    fn check_results_ride_along_at_the_top_level() {
+        let metrics = sample_metrics();
+        let results = vec![sample_result()];
+        let payload = ReportPayload {
+            metrics: &metrics,
+            check_results: &results,
+        };
+        let json = serde_json::to_value(&payload).unwrap();
+
+        // The metrics stay where the backend already reads them.
+        assert_eq!(json["hostname"], "probe01");
+        assert_eq!(
+            json["check_results"],
+            serde_json::json!([{
+                "host_id": 42,
+                "success": true,
+                "latency_ms": 12.4,
+                "detail": {"icmp": true},
+                "ts": "2026-08-28T09:01:13Z"
+            }])
+        );
+    }
+
+    #[test]
+    fn a_response_without_checks_yields_no_assignments() {
+        let resp: ReportResponse = serde_json::from_str(
+            r#"{"ok": true, "config": {"log_levels": "1", "log_channels": "System",
+                "log_file_paths": "", "agent_log_level": "errors"}}"#,
+        )
+        .unwrap();
+        assert!(resp.checks.is_none());
+        assert!(resp.checks.unwrap_or_default().is_empty());
+    }
+
+    #[test]
+    fn a_response_with_checks_carries_the_assignments() {
+        let resp: ReportResponse = serde_json::from_str(
+            r#"{"ok": true, "config": null, "command": null, "checks": [
+                {"host_id": 42, "hostname": "nas.kunde.ch", "ip": "10.0.0.5",
+                 "check_type": "icmp", "port": null, "timeout_seconds": 5.0}]}"#,
+        )
+        .unwrap();
+        let checks = resp.checks.unwrap();
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].host_id, 42);
+        assert_eq!(checks[0].check_type, "icmp");
     }
 }

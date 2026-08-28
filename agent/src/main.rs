@@ -1,5 +1,6 @@
 mod config;
 mod collector;
+mod checks;
 mod client;
 mod updater;
 
@@ -14,7 +15,7 @@ mod logs_windows;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn, error};
+use tracing::{debug, info, warn, error};
 
 use config::Config;
 use client::ApiClient;
@@ -73,6 +74,15 @@ async fn main() {
         Arc::new(RwLock::new(config::ServerConfig::default()));
     let update_counter = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
+    // Probe mode state. All of it stays empty for an agent the backend never
+    // assigns a host to: no client is built, no check task is spawned, and the
+    // loop below behaves exactly as it did before.
+    let mut assignments: Vec<checks::CheckAssignment> = Vec::new();
+    let mut pending_results = checks::PendingResults::new();
+    let mut probe_client: Option<checks::ProbeClient> = None;
+
+    let interval = std::time::Duration::from_secs(cfg.interval);
+
     info!("Entering main loop (interval={}s)", cfg.interval);
 
     loop {
@@ -89,9 +99,17 @@ async fn main() {
         // Collect logs
         let logs = collect_logs(&server_config).await;
 
-        // Report to server
-        match api.report(&metrics, &logs).await {
+        // Report to server, handing over any check results collected since the
+        // last successful heartbeat.
+        let delivered = pending_results.len();
+        match api.report(&metrics, &logs, pending_results.as_slice()).await {
             Ok(resp) => {
+                // Only clear once the server has actually taken them.
+                if delivered > 0 {
+                    debug!("Delivered {delivered} check result(s)");
+                }
+                pending_results.clear();
+
                 if let Some(sc) = resp.config {
                     let mut guard = server_config.write().await;
                     *guard = sc;
@@ -106,9 +124,25 @@ async fn main() {
                         warn!("Unknown command: {cmd}");
                     }
                 }
+
+                // Probe assignments for the coming interval. An absent or empty
+                // list means this agent is not a probe.
+                let next = resp.checks.unwrap_or_default();
+                checks::log_assignment_change(assignments.len(), next.len());
+                assignments = next;
             }
             Err(e) => {
+                // The results stay buffered (bounded) and go out with the next
+                // successful heartbeat. The assignment list is kept as it is:
+                // the probe carries on checking what it was last told to check.
                 warn!("Report failed: {e}");
+                if !pending_results.is_empty() {
+                    warn!(
+                        "{} check result(s) still undelivered ({} discarded since start)",
+                        pending_results.len(),
+                        pending_results.dropped_total()
+                    );
+                }
             }
         }
 
@@ -126,7 +160,47 @@ async fn main() {
             }
         }
 
-        tokio::time::sleep(std::time::Duration::from_secs(cfg.interval)).await;
+        if assignments.is_empty() {
+            // Not a probe (or nothing assigned): plain sleep, as before.
+            tokio::time::sleep(interval).await;
+            continue;
+        }
+
+        // Probe mode: run the assigned checks *while* waiting out the interval,
+        // so the checks never delay the next heartbeat and a host that is down
+        // never delays another host.
+        let client = match probe_client.as_ref() {
+            Some(c) => c,
+            None => match checks::ProbeClient::new(&cfg) {
+                Ok(c) => probe_client.insert(c),
+                Err(e) => {
+                    // Without a client the checks cannot be performed. Report
+                    // nothing rather than fabricating results: the backend
+                    // tracks freshness per probe and will show these hosts as
+                    // unknown, which is the truth.
+                    error!("Probe mode unavailable: {e}");
+                    tokio::time::sleep(interval).await;
+                    continue;
+                }
+            },
+        };
+
+        let started = std::time::Instant::now();
+        let (results, _) = tokio::join!(
+            checks::run_checks(client, &assignments),
+            tokio::time::sleep(interval)
+        );
+        let elapsed = started.elapsed();
+        if elapsed > interval {
+            warn!(
+                "Check round took {}s for {} host(s), longer than the {}s report interval — \
+                 this probe is assigned more hosts than it can check in one interval",
+                elapsed.as_secs(),
+                assignments.len(),
+                interval.as_secs()
+            );
+        }
+        pending_results.push_round(results);
     }
 }
 
