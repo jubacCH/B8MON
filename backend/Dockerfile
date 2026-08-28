@@ -16,9 +16,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && setcap cap_net_raw+ep /usr/bin/ping \
     && rm -rf /var/lib/apt/lists/*
 
-# Ookla speedtest CLI. The pip package speedtest-cli is unmaintained since 2021
-# and reports a fixed ping of 1800000 ms against some connections; it stays
-# installed as a fallback for images built without network access to Ookla.
+# Ookla speedtest CLI — OFF by default, and deliberately so.
+#
+# The binary is proprietary. Ookla's licence restricts redistribution and wants
+# a separate agreement for commercial use, so an image that is sold or handed to
+# a customer must not carry it. Building with BUNDLE_OOKLA=1 is an opt-in the
+# operator makes for their own installation, where personal use applies.
+#
+# Without it the integration falls back to the pip package speedtest-cli, which
+# is unmaintained since 2021 and reports a fixed ping of 1800000 ms against some
+# connections. That is why the operator may want the opt-in; it is not a reason
+# to make it the default.
 #
 # Installed as `ookla-speedtest`, not `speedtest`: the pip package also ships a
 # `speedtest` entry point, and `COPY --from=builder /install /usr/local` below
@@ -26,7 +34,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # tool and invoke it with Ookla's arguments, breaking the integration outright.
 ARG TARGETARCH=amd64
 ARG OOKLA_VERSION=1.2.0
+ARG BUNDLE_OOKLA=0
 RUN set -eux; \
+    if [ "$BUNDLE_OOKLA" != "1" ]; then \
+        echo "BUNDLE_OOKLA is not 1 — shipping without the proprietary Ookla CLI"; \
+        exit 0; \
+    fi; \
     case "$TARGETARCH" in \
         amd64) ookla_arch=x86_64 ;; \
         arm64) ookla_arch=aarch64 ;; \
