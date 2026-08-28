@@ -11,6 +11,29 @@ from integrations._base import BaseIntegration, CollectorResult, ConfigField
 # ── Runner ────────────────────────────────────────────────────────────────────
 
 
+# speedtest-cli has been unmaintained since 2021 and reports a fixed
+# ping = 1800000.0 (half an hour) against some connections instead of a
+# measurement. Anything past this ceiling is a sentinel, not a slow link:
+# even satellite and congested mobile stay well under it.
+MAX_PLAUSIBLE_PING_MS = 10_000
+
+
+def plausible_ping(value) -> float | None:
+    """Return the ping if it can be a real measurement, else None.
+
+    None means "not measured" and is rendered as such. Showing an invented
+    number is worse than showing nothing — the point of the reading is that it
+    can be trusted.
+    """
+    try:
+        ping = float(value)
+    except (TypeError, ValueError):
+        return None
+    if ping <= 0 or ping > MAX_PLAUSIBLE_PING_MS:
+        return None
+    return ping
+
+
 async def run_speedtest(server_id: str | None = None) -> dict:
     cmd = ["speedtest-cli", "--json", "--secure"]
     if server_id:
@@ -43,7 +66,7 @@ async def run_speedtest(server_id: str | None = None) -> dict:
     return {
         "download_mbps": round(_num(raw.get("download", 0), 6) / 1_000_000, 2),
         "upload_mbps": round(_num(raw.get("upload", 0), 6) / 1_000_000, 2),
-        "ping_ms": _num(raw.get("ping", 0), 1),
+        "ping_ms": plausible_ping(raw.get("ping")),
         "server_name": ", ".join(p for p in (server_name, server_country) if p),
         "server_location": server.get("sponsor", ""),
         "isp": raw.get("client", {}).get("isp", "") if isinstance(raw.get("client"), dict) else "",

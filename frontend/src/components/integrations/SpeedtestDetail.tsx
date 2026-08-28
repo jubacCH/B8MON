@@ -5,18 +5,22 @@ import { GlassCard } from '@/components/ui/GlassCard';
 interface SpeedtestData {
   download_mbps: number;
   upload_mbps: number;
-  ping_ms: number;
+  ping_ms: number | null;
   server_name: string;
   server_location: string;
   isp: string;
   timestamp: string;
 }
 
-function SpeedCard({ label, value, unit, color }: { label: string; value: number; unit: string; color: string }) {
+function SpeedCard({ label, value, unit, color }: { label: string; value: number | null; unit: string; color: string }) {
   return (
     <GlassCard className="p-6 text-center">
       <p className="text-xs text-slate-500 mb-2">{label}</p>
-      <p className={`text-4xl font-bold ${color}`}>{value.toFixed(1)}</p>
+      {/* null means the tool did not produce a usable reading. Showing "—"
+          is honest; showing a number that was never measured is not. */}
+      <p className={`text-4xl font-bold ${value === null ? 'text-slate-500' : color}`}>
+        {value === null ? '—' : value.toFixed(1)}
+      </p>
       <p className="text-sm text-slate-400 mt-1">{unit}</p>
     </GlassCard>
   );
