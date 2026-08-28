@@ -57,6 +57,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def resolve_server_url(request: Request) -> str:
+    """The address an agent out on the network should call back on.
+
+    Every browser request reaches this app through the frontend's proxy, which
+    rewrites ``Host`` to its upstream target and puts the real one in
+    ``X-Forwarded-Host``. Reading ``request.url.netloc`` therefore yielded the
+    internal service name, and the installers handed customers a
+    ``http://nodeglow:8000`` that resolves nowhere outside the container
+    network — the agent could not enrol at all.
+
+    Order: the operator's explicit setting, then what the proxy reports, then
+    the request's own host as a last resort.
+    """
+    async with AsyncSessionLocal() as db:
+        configured = (await get_setting(db, "agent_server_url", "") or "").strip()
+    if configured:
+        return configured.rstrip("/")
+
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host") or request.url.netloc
+    # A proxy chain sends a comma-separated list; the client-facing one is first.
+    host = host.split(",")[0].strip()
+    return f"{scheme}://{host}"
+
+
 async def _get_enrollment_key() -> str:
     """Legacy shared enrollment key. Only used when
     NODEGLOW_ALLOW_SHARED_ENROLLMENT=1 is set on the backend container.
@@ -442,10 +467,7 @@ async def create_install_token(request: Request):
         await db.commit()
         await db.refresh(token_row)
 
-    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-    async with AsyncSessionLocal() as db:
-        custom_url = await get_setting(db, "agent_server_url", "")
-    server_url = custom_url or f"{scheme}://{request.url.netloc}"
+    server_url = await resolve_server_url(request)
 
     return {
         "ok": True,
@@ -510,13 +532,7 @@ async def enrollment_info(request: Request):
     to mint one."""
     if err := _require_admin(request):
         return err
-    async with AsyncSessionLocal() as db:
-        custom_url = await get_setting(db, "agent_server_url", "")
-    if custom_url:
-        server_url = custom_url
-    else:
-        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-        server_url = f"{scheme}://{request.url.netloc}"
+    server_url = await resolve_server_url(request)
     return {
         "server_url": server_url,
         "install_linux_template": f"curl -sSL '{server_url}/install/linux?token=<INSTALL_TOKEN>' | sudo bash",
@@ -557,13 +573,7 @@ async def install_linux(request: Request):
     ok, install_token = await _authorize_install_request(request)
     if not ok:
         return JSONResponse({"error": "Valid install token required"}, status_code=401)
-    async with AsyncSessionLocal() as db:
-        custom_url = await get_setting(db, "agent_server_url", "")
-    if custom_url:
-        server_url = custom_url
-    else:
-        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-        server_url = f"{scheme}://{request.url.netloc}"
+    server_url = await resolve_server_url(request)
     # Script needs a value for the shell variable. For admin-session access
     # without a token query-param we emit a placeholder that will visibly
     # fail at enrollment time instead of silently using something valid.
@@ -699,13 +709,7 @@ async def install_windows(request: Request):
     ok, install_token = await _authorize_install_request(request)
     if not ok:
         return JSONResponse({"error": "Valid install token required"}, status_code=401)
-    async with AsyncSessionLocal() as db:
-        custom_url = await get_setting(db, "agent_server_url", "")
-    if custom_url:
-        server_url = custom_url
-    else:
-        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-        server_url = f"{scheme}://{request.url.netloc}"
+    server_url = await resolve_server_url(request)
     enrollment_key = install_token or "NO_INSTALL_TOKEN_PROVIDED"
     # Embed the update-signing public key so the agent verifies signed updates.
     update_public_key = agent_signing.public_key_hex()

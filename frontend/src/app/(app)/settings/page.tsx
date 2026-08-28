@@ -24,6 +24,7 @@ type Tab = 'system' | 'monitoring' | 'notifications' | 'appearance' | 'api' | 'a
 
 interface SettingsData {
   site_name: string;
+  agent_server_url: string;
   timezone: string;
   ping_interval: string;
   latency_threshold_ms: string;
@@ -286,6 +287,7 @@ export default function SettingsPage() {
 
   /* ---- System + Monitoring state ---- */
   const [siteName, setSiteName] = useState('');
+  const [agentServerUrl, setAgentServerUrl] = useState('');
   const [timezone, setTimezone] = useState('');
   const [pingInterval, setPingInterval] = useState('');
   const [latencyThreshold, setLatencyThreshold] = useState('');
@@ -380,6 +382,7 @@ export default function SettingsPage() {
 
   const populateFromSettings = useCallback((s: SettingsData) => {
     setSiteName(s.site_name);
+    setAgentServerUrl(s.agent_server_url || '');
     setTimezone(s.timezone);
     setPingInterval(s.ping_interval);
     setLatencyThreshold(s.latency_threshold_ms);
@@ -538,6 +541,7 @@ export default function SettingsPage() {
   function buildAllSettingsParams(): URLSearchParams {
     const params = new URLSearchParams();
     params.set('site_name', siteName);
+    params.set('agent_server_url', agentServerUrl);
     params.set('timezone', timezone);
     params.set('ping_interval', pingInterval);
     params.set('latency_threshold', latencyThreshold);
@@ -743,6 +747,21 @@ export default function SettingsPage() {
                     className={inputCls}
                     placeholder="Nodeglow"
                   />
+                </div>
+                <div>
+                  <label className="ng-label">Agent Server Address</label>
+                  <input
+                    type="text"
+                    value={agentServerUrl}
+                    onChange={(e) => setAgentServerUrl(e.target.value)}
+                    className={inputCls}
+                    placeholder="https://nodeglow.example.com"
+                  />
+                  <p className="mt-1 text-xs text-slate-400 max-w-sm">
+                    The address agents call back on. Leave empty to use the address
+                    you reached this page on. Set it when agents must reach the
+                    server on a different name than you do.
+                  </p>
                 </div>
                 <div>
                   <label className="ng-label">Timezone</label>
