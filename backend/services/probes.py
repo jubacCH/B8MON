@@ -158,3 +158,51 @@ def core_checked(hosts: list) -> list:
     a wrong one.
     """
     return [h for h in hosts if getattr(h, "probe_id", None) is None]
+
+
+async def statuses_for(db, hosts: list, now: float) -> dict[int, str]:
+    """Current status per host id, honouring who is responsible for each.
+
+    One place that answers "is this host up", so a caller cannot accidentally
+    invent its own rule. The topology endpoint did exactly that and got it
+    wrong: it read attributes PingHost does not have, so every node reported
+    down regardless of the data.
+    """
+    from models.agent import Agent
+    from sqlalchemy import select as _select
+
+    from services.clickhouse_client import get_latest_ping_per_host
+
+    if not hosts:
+        return {}
+
+    latest = await get_latest_ping_per_host([h.id for h in hosts])
+
+    probe_ids = {h.probe_id for h in hosts if getattr(h, "probe_id", None)}
+    probes: dict[int, ProbeState] = {}
+    if probe_ids:
+        rows = (await db.execute(
+            _select(Agent).where(Agent.id.in_(probe_ids))
+        )).scalars().all()
+        probes = {
+            a.id: ProbeState(
+                probe_id=a.id,
+                name=a.name or a.hostname or f"agent-{a.id}",
+                interval_seconds=a.probe_interval_seconds,
+                last_report=a.last_seen.timestamp() if a.last_seen else None,
+            )
+            for a in rows
+        }
+
+    out: dict[int, str] = {}
+    for h in hosts:
+        row = latest.get(h.id) or {}
+        success = row.get("success")
+        if success is not None:
+            success = bool(success)
+        ts = row.get("timestamp")
+        age = (now - ts.timestamp()) if hasattr(ts, "timestamp") else None
+        out[h.id] = host_status(
+            success, age, probes.get(getattr(h, "probe_id", None)), now
+        )
+    return out

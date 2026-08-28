@@ -180,3 +180,25 @@ def test_hosts_without_the_attribute_are_still_core_checked():
         id = 9
 
     assert len(core_checked([Legacy()])) == 1
+
+
+# ── The one place that answers "is this host up" ─────────────────────────────
+
+def test_the_topology_expression_that_was_wrong_is_gone():
+    """It read attributes PingHost does not have.
+
+        online = h.status == "up" if hasattr(h, "status") \
+                 else not getattr(h, "is_down", True)
+
+    Neither exists on the model, so hasattr was always False and the fallback
+    always evaluated to False. GET /api/v1/topology reported every node down,
+    on every installation, regardless of the data. Verified against live rows
+    before fixing.
+    """
+    import inspect
+
+    from routers import api_v1
+
+    src = inspect.getsource(api_v1)
+    assert 'getattr(h, "is_down"' not in src
+    assert "statuses_for" in src
