@@ -49,7 +49,13 @@ services:
     restart: unless-stopped
 
   nodeglow:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        # Opt in to bundling the proprietary Ookla speedtest CLI. Leave unset
+        # for anything you distribute: Ookla's licence restricts redistribution
+        # and commercial use. Set BUNDLE_OOKLA=1 in .env for your own install.
+        BUNDLE_OOKLA: ${BUNDLE_OOKLA:-0}
     container_name: nodeglow
     ports:
       - "514:1514/udp"    # Syslog UDP (host 514 → container 1514)
