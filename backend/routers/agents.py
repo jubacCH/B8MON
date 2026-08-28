@@ -378,8 +378,10 @@ async def _record_probe_results(probe_id: int, results: list) -> None:
     Rows carry the probe id so freshness can be judged per probe. A global
     freshness check cannot see one probe dying while the others keep writing.
     """
+    import json as _json
     from datetime import datetime as _dt
 
+    from database import PingHost
     from services.clickhouse_client import insert_ping_checks
 
     if not results:
@@ -411,6 +413,26 @@ async def _record_probe_results(probe_id: int, results: list) -> None:
         # land must surface as a failure, not as a quiet gap that reads as
         # healthy hosts.
         await insert_ping_checks(rows)
+
+    # Mirror the per-check breakdown onto the host, the way the core path does.
+    # Without this a probe-checked host would show no detail at all in the UI,
+    # and the difference would look like a product bug rather than a missing
+    # write. port_error is deliberately left alone: the protocol has no field
+    # for it, and latching a flag from data the probe never sent would be a
+    # claim nobody made.
+    details = {
+        int(r["host_id"]): r.get("detail")
+        for r in results
+        if isinstance(r, dict) and r.get("host_id") is not None and r.get("detail")
+    }
+    if details:
+        async with AsyncSessionLocal() as db:
+            hosts = (await db.execute(
+                select(PingHost).where(PingHost.id.in_(list(details)))
+            )).scalars().all()
+            for h in hosts:
+                h.check_detail = _json.dumps(details[h.id])
+            await db.commit()
 
 
 async def _probe_assignments(probe_id: int) -> list[dict]:

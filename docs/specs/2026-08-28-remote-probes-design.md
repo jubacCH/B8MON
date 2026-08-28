@@ -55,12 +55,18 @@ carries it:
 ```
 POST /api/agent/report
   request  += check_results: [{host_id, success, latency_ms, detail, ts}]
-  response += checks: [{host_id, hostname, ip, check_type, port, timeout}]
+  response += checks: [{host_id, hostname, ip, check_type, port, timeout_seconds}]
 ```
 
 The probe executes its assigned checks between heartbeats and hands the results
 up on the next one. The response tells it what it is responsible for, so
 assignment changes take effect within one interval with no push channel.
+
+That delivery order has a consequence worth stating: a result is always up to
+one interval older than the heartbeat that carried it. The staleness allowance
+for an individual result is therefore one interval wider than the one applied to
+the probe itself, or a healthy probe's hosts would read as unobserved at the
+tightest cadence.
 
 ## The failure mode this must not have
 

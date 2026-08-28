@@ -66,6 +66,17 @@ def staleness_window(interval_seconds: int | None) -> float:
     return max(MIN_STALENESS_WINDOW_SECONDS, interval * PROBE_GRACE_FACTOR)
 
 
+def result_window(interval_seconds: int | None) -> float:
+    """How old an individual check result may be.
+
+    Wider than the probe's own window by one interval: checks run between
+    heartbeats and are delivered on the following one, so a result is always
+    about an interval behind the heartbeat that carried it.
+    """
+    interval = interval_seconds or DEFAULT_PROBE_INTERVAL_SECONDS
+    return staleness_window(interval_seconds) + interval
+
+
 def is_stale(probe: ProbeState, now: float) -> bool:
     """Has this probe been quiet long enough that its hosts are unobserved?
 
@@ -104,7 +115,13 @@ def host_status(
     # The probe is reporting, but this particular host's result is old — it was
     # assigned recently, or the probe is skipping it. Either way it is not being
     # observed, and saying "up" would be a claim nobody made.
-    if result_age_seconds is not None and result_age_seconds > staleness_window(
+    #
+    # The allowance is one interval wider than the probe's own, because a probe
+    # runs its checks between heartbeats and hands the results up on the next
+    # one. A result is therefore always up to an interval older than the
+    # heartbeat that delivered it, and judging it by the probe's window would
+    # mark a perfectly healthy probe's hosts unknown at the tightest cadence.
+    if result_age_seconds is not None and result_age_seconds > result_window(
         probe.interval_seconds
     ):
         return STATUS_UNKNOWN

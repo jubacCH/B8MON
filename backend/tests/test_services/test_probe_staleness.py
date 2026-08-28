@@ -202,3 +202,28 @@ def test_the_topology_expression_that_was_wrong_is_gone():
     src = inspect.getsource(api_v1)
     assert 'getattr(h, "is_down"' not in src
     assert "statuses_for" in src
+
+
+# ── The one-interval delivery lag ────────────────────────────────────────────
+
+def test_a_healthy_probes_results_are_not_judged_stale_by_its_own_window():
+    """Checks run between heartbeats and arrive on the next one.
+
+    A result is therefore always up to an interval older than the heartbeat
+    that delivered it. Judging it by the probe's own window would mark a
+    perfectly healthy probe's hosts unknown at the tightest cadence.
+    """
+    from services.probes import result_window
+
+    live = probe(last_report=NOW - 5, interval=60)
+    worst_case_age = 2 * 60  # ran just after one heartbeat, delivered by the next
+    assert worst_case_age < result_window(60)
+    assert host_status(True, worst_case_age, live, NOW) == STATUS_UP
+
+
+def test_the_result_window_is_still_bounded():
+    """Wider, not unbounded — a probe that stops covering a host must show."""
+    from services.probes import result_window
+
+    live = probe(last_report=NOW - 5, interval=60)
+    assert host_status(True, result_window(60) + 1, live, NOW) == STATUS_UNKNOWN
