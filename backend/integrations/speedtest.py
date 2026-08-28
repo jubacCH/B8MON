@@ -1,29 +1,41 @@
-"""Speedtest integration – measures internet speed via speedtest-cli."""
-from __future__ import annotations
+"""Internet speed measurement.
 
+Two tools are supported. The Ookla CLI is preferred: the older `speedtest-cli`
+has been unmaintained since 2021 and reports a fixed ping = 1800000.0 (half an
+hour) against some connections instead of a measurement.
+
+The legacy path is kept rather than removed so an installation that has not yet
+got the Ookla binary keeps measuring instead of silently losing the integration
+on upgrade.
+
+Their output differs in a way that is easy to get wrong: Ookla reports
+bandwidth in *bytes* per second, the legacy tool in *bits*.
+"""
 import asyncio
 import json
+import logging
+import shutil
 import subprocess
 
 from integrations._base import BaseIntegration, CollectorResult, ConfigField
 
+logger = logging.getLogger(__name__)
 
-# ── Runner ────────────────────────────────────────────────────────────────────
-
-
-# speedtest-cli has been unmaintained since 2021 and reports a fixed
-# ping = 1800000.0 (half an hour) against some connections instead of a
-# measurement. Anything past this ceiling is a sentinel, not a slow link:
-# even satellite and congested mobile stay well under it.
+# speedtest-cli returns a fixed 1800000.0 instead of measuring on some
+# connections. Anything past this ceiling is a sentinel, not a slow link — even
+# satellite and congested mobile stay well under it.
 MAX_PLAUSIBLE_PING_MS = 10_000
+
+OOKLA_BIN = "speedtest"
+LEGACY_BIN = "speedtest-cli"
 
 
 def plausible_ping(value) -> float | None:
     """Return the ping if it can be a real measurement, else None.
 
     None means "not measured" and is rendered as such. Showing an invented
-    number is worse than showing nothing — the point of the reading is that it
-    can be trusted.
+    number is worse than showing nothing — the point of a reading is that it can
+    be trusted.
     """
     try:
         ping = float(value)
@@ -31,61 +43,89 @@ def plausible_ping(value) -> float | None:
         return None
     if ping <= 0 or ping > MAX_PLAUSIBLE_PING_MS:
         return None
-    return ping
+    return round(ping, 1)
 
 
-async def run_speedtest(server_id: str | None = None) -> dict:
-    cmd = ["speedtest-cli", "--json", "--secure"]
-    if server_id:
-        cmd += ["--server", str(server_id)]
+def _num(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
-    loop = asyncio.get_event_loop()
 
-    def _run():
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        if result.returncode != 0:
-            raise RuntimeError(f"speedtest-cli failed: {result.stderr.strip()}")
-        return json.loads(result.stdout)
+def _as_dict(value) -> dict:
+    return value if isinstance(value, dict) else {}
 
-    raw = await loop.run_in_executor(None, _run)
 
-    # Use .get() with defaults: speedtest-cli output shape can vary between
-    # versions, and a missing field should not raise KeyError on the whole result.
-    def _num(value, ndigits: int) -> float:
-        try:
-            return round(float(value), ndigits)
-        except (TypeError, ValueError):
-            return 0.0
+def parse_ookla_result(raw: dict) -> dict:
+    """Parse `speedtest --format=json` output.
 
-    server = raw.get("server", {})
-    if not isinstance(server, dict):
-        server = {}
-    server_name = server.get("name", "")
-    server_country = server.get("country", "")
-
+    bandwidth is bytes per second; Mbit/s is bytes * 8 / 1e6.
+    """
+    raw = _as_dict(raw)
+    server = _as_dict(raw.get("server"))
+    location = ", ".join(
+        p for p in (server.get("location", ""), server.get("country", "")) if p
+    )
     return {
-        "download_mbps": round(_num(raw.get("download", 0), 6) / 1_000_000, 2),
-        "upload_mbps": round(_num(raw.get("upload", 0), 6) / 1_000_000, 2),
-        "ping_ms": plausible_ping(raw.get("ping")),
-        "server_name": ", ".join(p for p in (server_name, server_country) if p),
-        "server_location": server.get("sponsor", ""),
-        "isp": raw.get("client", {}).get("isp", "") if isinstance(raw.get("client"), dict) else "",
-        "timestamp": raw.get("timestamp", ""),
+        "download_mbps": round(_num(_as_dict(raw.get("download")).get("bandwidth")) * 8 / 1_000_000, 2),
+        "upload_mbps": round(_num(_as_dict(raw.get("upload")).get("bandwidth")) * 8 / 1_000_000, 2),
+        "ping_ms": plausible_ping(_as_dict(raw.get("ping")).get("latency")),
+        "server_name": location,
+        "server_location": server.get("name", ""),
+        "isp": raw.get("isp", "") or "",
+        "timestamp": raw.get("timestamp", "") or "",
     }
 
 
+def parse_legacy_result(raw: dict) -> dict:
+    """Parse `speedtest-cli --json` output, where bandwidth is bits per second."""
+    raw = _as_dict(raw)
+    server = _as_dict(raw.get("server"))
+    name = ", ".join(
+        p for p in (server.get("name", ""), server.get("country", "")) if p
+    )
+    return {
+        "download_mbps": round(_num(raw.get("download")) / 1_000_000, 2),
+        "upload_mbps": round(_num(raw.get("upload")) / 1_000_000, 2),
+        "ping_ms": plausible_ping(raw.get("ping")),
+        "server_name": name,
+        "server_location": server.get("sponsor", ""),
+        "isp": _as_dict(raw.get("client")).get("isp", ""),
+        "timestamp": raw.get("timestamp", "") or "",
+    }
+
+
+def _available(binary: str) -> bool:
+    return shutil.which(binary) is not None
+
+
+async def run_speedtest(server_id: str | None = None) -> dict:
+    """Measure, preferring the maintained Ookla CLI."""
+    use_ookla = _available(OOKLA_BIN)
+
+    if use_ookla:
+        # The licence prompts are interactive and would hang a scheduled run.
+        cmd = [OOKLA_BIN, "--format=json", "--accept-license", "--accept-gdpr"]
+        if server_id:
+            cmd += ["--server-id", str(server_id)]
+    else:
+        cmd = [LEGACY_BIN, "--json", "--secure"]
+        if server_id:
+            cmd += ["--server", str(server_id)]
+
+    def _run():
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        if result.returncode != 0:
+            raise RuntimeError(f"{cmd[0]} failed: {result.stderr.strip()[:300]}")
+        return json.loads(result.stdout)
+
+    raw = await asyncio.get_event_loop().run_in_executor(None, _run)
+    return parse_ookla_result(raw) if use_ookla else parse_legacy_result(raw)
+
+
 async def check_speedtest_available() -> bool:
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "speedtest-cli", "--version",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        await proc.communicate()
-        return proc.returncode == 0
-    except FileNotFoundError:
-        return False
-
-
-# ── Integration Plugin ────────────────────────────────────────────────────────
+    return _available(OOKLA_BIN) or _available(LEGACY_BIN)
 
 
 class SpeedtestIntegration(BaseIntegration):
@@ -94,7 +134,7 @@ class SpeedtestIntegration(BaseIntegration):
     icon = "speedtest"
     color = "blue"
     single_instance = True
-    description = "Measure internet speed using speedtest-cli."
+    description = "Measure internet speed using the Ookla speedtest CLI."
 
     # A speedtest deliberately saturates the connection for 30-60 s. Polled on
     # the default cadence, runs overlapped continuously: readings swung between
