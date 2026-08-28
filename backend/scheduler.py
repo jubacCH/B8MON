@@ -19,6 +19,12 @@ from services import snapshot as snap_svc
 from services.metrics import instrument_job
 
 logger = logging.getLogger(__name__)
+
+# Sources that report the address a host actually holds. For these, discovery
+# is the truth and forward DNS must not supply an address: an internal guest
+# name resolved from outside returns the site's WAN address or a CDN edge, and
+# the check would then measure a different machine entirely.
+AUTHORITATIVE_ADDRESS_SOURCES = frozenset({"proxmox", "unifi"})
 scheduler = AsyncIOScheduler()
 
 # ── Scheduler leadership (multi-worker / HA safety) ──────────────────────────
@@ -1118,8 +1124,18 @@ async def resolve_host_dns():
                     changed = True
 
             else:
-                # Hostname-based hosts (e.g. Proxmox): resolve forward DNS to set ip_address
-                if not h.ip_address:
+                # Hostname-based hosts: resolve forward DNS to set ip_address.
+                #
+                # Only where nothing better exists. For a host owned by an
+                # infrastructure integration the platform already knows the
+                # address the guest actually holds, and public DNS does not:
+                # an internal name that resolves outside the LAN returns the
+                # site's WAN address or a CDN edge, and the check then measures
+                # something other than the host. Letting DNS win that race put
+                # the WAN address on two healthy containers and a Cloudflare
+                # address on a third, which then reported up regardless of
+                # whether it was running.
+                if not h.ip_address and h.source not in AUTHORITATIVE_ADDRESS_SOURCES:
                     try:
                         ip = await asyncio.wait_for(
                             loop.run_in_executor(None, socket.gethostbyname, hostname),

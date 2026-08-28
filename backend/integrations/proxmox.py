@@ -423,9 +423,22 @@ async def import_proxmox_hosts(cluster_name: str, data: dict, db) -> dict:
                 host.name = hostname
                 host.hostname = hostname
                 changed = True
-            # Backfill the address on hosts discovered before it was recorded,
-            # which is what left healthy containers showing as down.
-            if host.source == "proxmox" and not host.ip_address and g.get("ip"):
+            # The guest config is the authoritative address for a guest we
+            # discovered, so it overwrites whatever is stored — it does not
+            # merely fill a blank.
+            #
+            # Only backfilling was not enough. A separate DNS pass also sets
+            # ip_address, and whichever ran first won. Where a guest name
+            # resolves publicly, that pass stored the site's WAN address, and
+            # the check then measured the wrong machine: two healthy containers
+            # read as down on NAT hairpin, and one whose name sits behind a CDN
+            # read as *up* because the CDN edge answered the ping. A false green
+            # on a monitoring product is the worse half of that.
+            if host.source == "proxmox" and g.get("ip") and host.ip_address != g["ip"]:
+                logger.info(
+                    "Proxmox address: %s %s → %s (guest config)",
+                    host.name, host.ip_address or "unset", g["ip"],
+                )
                 host.ip_address = g["ip"]
                 changed = True
 
