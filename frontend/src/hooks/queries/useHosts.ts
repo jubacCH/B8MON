@@ -10,6 +10,33 @@ export function useHosts() {
   });
 }
 
+export interface HostListItem {
+  id: number;
+  name: string;
+  hostname: string;
+  status: 'online' | 'offline' | 'maintenance' | 'disabled' | 'unknown';
+  check_type: string;
+  port: number | null;
+  source: string;
+  source_detail: string | null;
+  latency_ms: number | null;
+  last_check: string | null;
+  uptime: { h24: number | null; d7: number | null; d30: number | null };
+  maintenance: boolean;
+  enabled: boolean;
+  /** Agent responsible for checking this host, or null when the core checks it. */
+  probe_id: number | null;
+}
+
+/** Host list from the v1 API — used where probe assignment is needed. */
+export function useHostsV1() {
+  return useQuery({
+    queryKey: ['hosts-v1'],
+    queryFn: () => get<HostListItem[]>('/api/v1/hosts'),
+    refetchInterval: 30_000,
+  });
+}
+
 export function useHost(id: number) {
   return useQuery({
     queryKey: ['host', id],

@@ -24,6 +24,8 @@ export interface PingHost {
   mac_address: string | null;
   parent_id: number | null;
   created_at: string;
+  /** Agent responsible for checking this host, or null when the core checks it directly. */
+  probe_id?: number | null;
 }
 
 export interface HostStatus {
@@ -43,10 +45,14 @@ export interface HostStatus {
   uptime_d7: number | null;
   uptime_d30: number | null;
   last_seen: string | null;
+  /** Agent responsible for checking this host, or null/undefined when the core checks it. */
+  probe_id?: number | null;
 }
 
 export interface HostDetail extends PingHost {
-  latest: { online: boolean; latency_ms: number | null; timestamp: string } | null;
+  // online is nullable: a probe that has gone silent leaves this host's
+  // status unknown rather than up or down.
+  latest: { online: boolean | null; latency_ms: number | null; timestamp: string } | null;
   port_error: boolean;
   check_detail: Record<string, boolean> | null;
   uptime: { h24: number; d7: number; d30: number };
@@ -83,6 +89,10 @@ export interface Agent {
   mem_pct: number | null;
   disk_pct: number | null;
   host_id: number | null;
+  /** Whether this agent also runs checks for hosts in its own network as a remote probe. */
+  is_probe?: boolean;
+  /** How often the probe re-checks its assigned hosts, in seconds; null uses the default. */
+  probe_interval_seconds?: number | null;
 }
 
 export interface AgentSnapshot {

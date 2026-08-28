@@ -30,7 +30,7 @@ import {
   Server, ServerOff, Gauge, ShieldAlert, Zap, Clock,
   ArrowUpDown, HardDrive, Activity, AlertTriangle,
   Container, BatteryCharging, Lock, Trophy, Timer,
-  TrendingUp, Wifi,
+  TrendingUp, Wifi, EyeOff,
 } from 'lucide-react';
 import Link from 'next/link';
 import { ngColors } from '@/styles/tokens.gen';
@@ -86,6 +86,14 @@ export default function DashboardPage() {
     : 0;
 
   const anomalyCount = (data?.anomalies?.length ?? 0) + (data?.warnings?.length ?? 0);
+
+  // Hosts nobody is currently observing (probe gone silent, or never checked
+  // yet) — distinct from both online and offline. The backend doesn't send
+  // this count directly, so it's derived from the same host_stats list the
+  // Online/Offline tiles use.
+  const unknownCount = data?.host_stats
+    ? data.host_stats.filter((h) => h.online === null && !h.host.maintenance).length
+    : 0;
 
   // Chart options are memoized so EChart only rebuilds when the underlying
   // data changes — inline objects would retrigger setOption on every render.
@@ -176,12 +184,13 @@ export default function DashboardPage() {
           data just landed" without being loud about it. */}
       <div
         className={cn(
-          'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4 rounded-lg',
+          'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-4 rounded-lg',
           justRefreshed && 'ng-just-changed',
         )}
       >
         <StatCard icon={Server} label="Online" value={data?.online_count} color="text-emerald-400" tint="bg-emerald-500/10" loading={isLoading} href="/hosts?status=online" deltaGoodWhen="up" />
         <StatCard icon={ServerOff} label="Offline" value={data?.offline_count} color="text-red-400" tint="bg-red-500/10" alert={!!data?.offline_count} loading={isLoading} href="/hosts?status=offline" deltaGoodWhen="down" />
+        <StatCard icon={EyeOff} label="Not Observed" value={unknownCount} color="text-slate-400" tint="bg-slate-400/10" loading={isLoading} href="/hosts?status=unknown" deltaGoodWhen="down" />
         <StatCard icon={Gauge} label="Avg Latency" value={avgLatency} suffix="ms" color="text-sky-400" tint="bg-sky-500/10" loading={isLoading} href="/hosts" deltaGoodWhen="down" />
         <StatCard icon={ShieldAlert} label="Incidents" value={data?.active_incidents} color="text-amber-400" tint="bg-amber-500/10" alert={!!data?.active_incidents} loading={isLoading} href="/alerts?tab=incidents" deltaGoodWhen="down" />
         <StatCard icon={ArrowUpDown} label="Syslog 24h" value={data?.syslog_stats?.total_24h} color="text-violet-400" tint="bg-violet-500/10" loading={isLoading} href="/syslog" deltaGoodWhen="down" />

@@ -305,8 +305,8 @@ function HostNode({ host, radius, angle, inclination, speed }: HostNodeProps) {
             <p className="font-medium text-slate-200">{host.host.name}</p>
             <p className="text-[10px] text-slate-500 font-mono">{host.host.hostname}</p>
             <div className="flex items-center gap-2 mt-1">
-              <span className={`text-[10px] ${isOffline ? 'text-red-400' : host.host.maintenance ? 'text-amber-400' : 'text-emerald-400'}`}>
-                {host.online === null ? 'Unknown' : host.online ? 'Online' : 'Offline'}
+              <span className={`text-[10px] ${isOffline ? 'text-red-400' : host.host.maintenance ? 'text-amber-400' : host.online === null ? 'text-slate-400' : 'text-emerald-400'}`}>
+                {host.online === null ? 'Not observed' : host.online ? 'Online' : 'Offline'}
               </span>
               {host.latency != null && (
                 <span className="text-[10px] font-mono text-slate-400">{host.latency.toFixed(0)}ms</span>
@@ -428,6 +428,7 @@ export function GravityWidget({ hosts }: GravityWidgetProps) {
 
   const onlineCount = hosts.filter((h) => h.online === true && !h.host.maintenance).length;
   const offlineCount = hosts.filter((h) => h.online === false && !h.host.maintenance).length;
+  const unknownCount = hosts.filter((h) => h.online === null && !h.host.maintenance).length;
   const maintCount = hosts.filter((h) => h.host.maintenance).length;
 
   return (
@@ -446,6 +447,12 @@ export function GravityWidget({ hosts }: GravityWidgetProps) {
           <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full" style={{ background: 'var(--ng-card-bg)', border: '1.5px solid var(--ng-card-border)' }}>
             <StatusDot status="maintenance" />
             <span className="text-amber-400 font-medium">{maintCount}</span>
+          </span>
+        )}
+        {unknownCount > 0 && (
+          <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full" style={{ background: 'var(--ng-card-bg)', border: '1.5px solid var(--ng-card-border)' }} title="Not observed — nobody is currently checking these hosts">
+            <StatusDot status="unknown" />
+            <span className="text-slate-400 font-medium">{unknownCount}</span>
           </span>
         )}
         <span className="text-xs text-slate-500 px-2">{hosts.length} total</span>
