@@ -34,6 +34,27 @@ async def save(
     return snap
 
 
+async def last_timestamp(
+    db: AsyncSession,
+    entity_type: str,
+    entity_id: int,
+) -> datetime | None:
+    """When this entity was last collected.
+
+    Deliberately selects only the timestamp: get_latest would pull data_json
+    with it, which runs to ~100 kB a row, and this is called for every
+    integration on every scheduler tick.
+    """
+    result = await db.execute(
+        select(Snapshot.timestamp)
+        .where(Snapshot.entity_type == entity_type, Snapshot.entity_id == entity_id)
+        .order_by(Snapshot.timestamp.desc())
+        .limit(1)
+    )
+    row = result.first()
+    return row[0] if row else None
+
+
 async def get_latest(
     db: AsyncSession,
     entity_type: str,

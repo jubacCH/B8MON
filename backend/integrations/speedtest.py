@@ -73,6 +73,12 @@ class SpeedtestIntegration(BaseIntegration):
     single_instance = True
     description = "Measure internet speed using speedtest-cli."
 
+    # A speedtest deliberately saturates the connection for 30-60 s. Polled on
+    # the default cadence, runs overlapped continuously: readings swung between
+    # 1.29 and 176 Mbps on the same line within five minutes, and the uplink was
+    # never idle. Hourly is frequent enough to spot a degraded connection.
+    default_interval_seconds = 3600
+
     config_fields = [
         ConfigField(key="server_id", label="Server ID (optional)",
                     placeholder="Leave empty for auto-select", required=False),
