@@ -292,7 +292,10 @@ async def collect_problems(db, scheduler, now: float, process_start: float) -> l
                 REGISTRY.get_sample_value(
                     "nodeglow_scheduler_job_runs_total", {"job": name, "status": status}
                 )
-                for status in ("success", "failure")
+                # "degraded" belongs here: a job that only ever completes while
+                # logging errors reports nothing else, and skipping it would
+                # hide exactly the failure this check exists for.
+                for status in ("success", "failure", "degraded")
             )
             if not instrumented:
                 continue
