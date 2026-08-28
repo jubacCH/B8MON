@@ -16,6 +16,22 @@ from integrations._base import Alert, BaseIntegration, CollectorResult, ConfigFi
 # ── API Client ────────────────────────────────────────────────────────────────
 
 
+_NET_IP_RE = re.compile(r"\bip=([0-9]{1,3}(?:\.[0-9]{1,3}){3})/")
+
+
+def extract_ipv4(net_config: str | None) -> str | None:
+    """Pull the static IPv4 out of a Proxmox netN line.
+
+    Reads e.g. "name=eth0,bridge=vmbr0,ip=10.10.30.70/24,..." -> "10.10.30.70".
+    Returns None for DHCP or anything unparseable, leaving the caller to fall
+    back to the hostname.
+    """
+    if not net_config:
+        return None
+    match = _NET_IP_RE.search(net_config)
+    return match.group(1) if match else None
+
+
 class ProxmoxAPI:
     """Thin async client for the Proxmox REST API."""
 
@@ -58,7 +74,50 @@ class ProxmoxAPI:
             logger.debug("Failed to fetch LXC config node=%s ctid=%d: %s", node, ctid, exc)
             return {}
 
-    async def fetch_guest_macs(self, guests: list[dict]) -> dict[int, str]:
+    async def fetch_guest_network(self, guests: list[dict]) -> dict[int, dict]:
+        """Static IPv4 and MAC per guest, read from its config.
+
+        Only containers are consulted: their config carries the address directly.
+        A VM would need the guest agent, which is often absent, so those keep
+        falling back to the hostname.
+
+        Discovery needs the address because a guest name only pings correctly
+        where internal names resolve internally. Without split-horizon DNS the
+        name resolves to the site's public IP, the check fails on NAT hairpin,
+        and a perfectly healthy host reads as down.
+        """
+        containers = [g for g in guests if g.get("type") != "VM"]
+        if not containers:
+            return {}
+
+        _mac_re = re.compile(r"([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})", re.I)
+
+        async def _one(g):
+            vmid = g.get("id") or g.get("vmid")
+            node = g.get("node", "")
+            mac = ip = None
+            try:
+                cfg = await self.lxc_config(node, vmid)
+                for key in sorted(cfg.keys()):
+                    if not key.startswith("net"):
+                        continue
+                    val = str(cfg[key])
+                    if mac is None:
+                        m = _mac_re.search(val)
+                        if m:
+                            mac = m.group(1).upper()
+                    if ip is None:
+                        ip = extract_ipv4(val)
+                    if mac and ip:
+                        break
+            except Exception:  # noqa: BLE001 — one bad guest must not stop the rest
+                pass
+            return vmid, {"mac": mac, "ip": ip}
+
+        results = await asyncio.gather(*[_one(g) for g in containers])
+        return {vmid: info for vmid, info in results if info.get("mac") or info.get("ip")}
+
+    async def _unused_fetch_guest_macs(self, guests: list[dict]) -> dict[int, str]:
         _mac_re = re.compile(r"([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})", re.I)
 
         async def _one(g):
@@ -364,6 +423,12 @@ async def import_proxmox_hosts(cluster_name: str, data: dict, db) -> dict:
                 host.name = hostname
                 host.hostname = hostname
                 changed = True
+            # Backfill the address on hosts discovered before it was recorded,
+            # which is what left healthy containers showing as down.
+            if host.source == "proxmox" and not host.ip_address and g.get("ip"):
+                host.ip_address = g["ip"]
+                changed = True
+
             # Store stable source_key for future matching
             if host.source_detail != source_key:
                 host.source_detail = source_key
@@ -375,6 +440,7 @@ async def import_proxmox_hosts(cluster_name: str, data: dict, db) -> dict:
             new_host = PingHost(
                 name=hostname,
                 hostname=hostname,
+                ip_address=g.get("ip") or None,
                 check_type="icmp",
                 enabled=g.get("running", False),
                 source="proxmox",
@@ -435,6 +501,21 @@ class ProxmoxIntegration(BaseIntegration):
                 api.cluster_tasks(),
             )
             data = parse_cluster_data(resources, status, tasks)
+
+            # Attach each container's static address. Host discovery needs it: a
+            # guest name only pings correctly where internal names resolve
+            # internally. Without split-horizon DNS the name resolves to the
+            # site's public IP, the check fails on NAT hairpin, and a perfectly
+            # healthy container reads as down.
+            try:
+                containers = data.get("containers", [])
+                network = await api.fetch_guest_network(containers)
+                for c in containers:
+                    info = network.get(c.get("id")) or {}
+                    if info.get("ip"):
+                        c["ip"] = info["ip"]
+            except Exception as net_exc:  # noqa: BLE001 — addresses are a bonus
+                logger.debug("Could not resolve container addresses: %s", net_exc)
 
             # Fetch backup storage content (additive — does not replace existing data)
             try:
