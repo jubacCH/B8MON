@@ -113,6 +113,20 @@ impl Config {
         Ok(cfg)
     }
 
+    /// Minimal in-memory config for unit tests. Never reads or writes a file.
+    #[cfg(test)]
+    pub fn for_test() -> Self {
+        Config {
+            server: "http://localhost:8000".to_string(),
+            token: String::new(),
+            interval: default_interval(),
+            enrollment_key: String::new(),
+            allow_insecure_tls: false,
+            update_public_key: String::new(),
+            config_path: PathBuf::new(),
+        }
+    }
+
     /// Save current config to file (preserves token after enrollment).
     pub fn save(&self) -> anyhow::Result<()> {
         #[derive(Serialize)]
