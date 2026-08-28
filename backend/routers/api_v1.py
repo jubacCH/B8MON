@@ -868,7 +868,7 @@ async def patch_agent(
     agent_id: int,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _key: ApiKey = Depends(require_api_key),
+    _key: ApiKey = Depends(require_editor),
 ):
     agent = await db.get(Agent, agent_id)
     if not agent:
@@ -899,7 +899,7 @@ async def patch_agent(
 async def delete_agent(
     agent_id: int,
     db: AsyncSession = Depends(get_db),
-    _key: ApiKey = Depends(require_api_key),
+    _key: ApiKey = Depends(require_admin),
 ):
     agent = await db.get(Agent, agent_id)
     if not agent:
@@ -928,7 +928,7 @@ async def delete_agent(
 async def uninstall_agent(
     agent_id: int,
     db: AsyncSession = Depends(get_db),
-    _key: ApiKey = Depends(require_api_key),
+    _key: ApiKey = Depends(require_admin),
 ):
     agent = await db.get(Agent, agent_id)
     if not agent:
