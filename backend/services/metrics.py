@@ -14,6 +14,7 @@ Design notes:
 """
 from __future__ import annotations
 
+import contextvars
 import functools
 import logging
 import time
@@ -174,7 +175,56 @@ def _refresh_syslog_buffer_metric() -> None:
         pass
 
 
+log = logging.getLogger("nodeglow.metrics")
+
 T = TypeVar("T")
+
+
+# ── Degraded-run detection ───────────────────────────────────────────────────
+#
+# A job that catches a failure, logs it and returns normally used to count as a
+# success and advance last_success. Three production outages hid behind exactly
+# that: the ping insert failed on every run for four months while the job
+# reported success and the table stayed empty.
+#
+# The signal is the ERROR record itself. A ContextVar rather than a plain
+# counter, because jobs share an event loop and errors must be attributed to the
+# job that logged them — asyncio copies the context per task, so each run gets
+# its own bucket.
+
+_job_errors: contextvars.ContextVar[list | None] = contextvars.ContextVar(
+    "nodeglow_job_errors", default=None
+)
+
+
+class _JobErrorCollector(logging.Handler):
+    """Collects ERROR records into the bucket of the job currently running."""
+
+    def __init__(self):
+        super().__init__(level=logging.ERROR)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        bucket = _job_errors.get()
+        if bucket is None:
+            return  # not inside an instrumented job
+        try:
+            bucket.append(record.getMessage())
+        except Exception:  # noqa: BLE001 — logging must never break a job
+            bucket.append(record.msg)
+
+
+_collector = _JobErrorCollector()
+_collector_installed = False
+
+
+def _ensure_collector() -> None:
+    """Attach the collector to the root logger once."""
+    global _collector_installed
+    if not _collector_installed:
+        logging.getLogger().addHandler(_collector)
+        _collector_installed = True
+
+
 
 
 def instrument_job(name: str) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
@@ -191,7 +241,9 @@ def instrument_job(name: str) -> Callable[[Callable[..., Awaitable[T]]], Callabl
         @functools.wraps(fn)
         async def wrapper(*args, **kwargs):
             from services.tracing import tracer
+            _ensure_collector()
             start = time.time()
+            token = _job_errors.set([])
             with tracer.start_as_current_span(f"scheduler.{name}") as span:
                 try:
                     result = await fn(*args, **kwargs)
@@ -200,10 +252,29 @@ def instrument_job(name: str) -> Callable[[Callable[..., Awaitable[T]]], Callabl
                     SCHEDULER_JOB_DURATION.labels(job=name).observe(time.time() - start)
                     span.set_attribute("error", True)
                     span.set_attribute("error.type", type(exc).__name__)
+                    _job_errors.reset(token)
                     raise
-                SCHEDULER_JOB_RUNS.labels(job=name, status="success").inc()
+
+                errors = _job_errors.get() or []
+                _job_errors.reset(token)
                 SCHEDULER_JOB_DURATION.labels(job=name).observe(time.time() - start)
-                SCHEDULER_JOB_LAST_SUCCESS.labels(job=name).set(time.time())
+
+                if errors:
+                    # The job returned, but it reported a problem on the way. Do
+                    # not advance last_success: that timestamp is the one signal
+                    # a swallowed failure cannot fake, and the self-check relies
+                    # on it to notice a job that has stopped working properly.
+                    SCHEDULER_JOB_RUNS.labels(job=name, status="degraded").inc()
+                    span.set_attribute("degraded", True)
+                    span.set_attribute("degraded.errors", len(errors))
+                    span.set_attribute("degraded.first", errors[0][:200])
+                    log.warning(
+                        "Job %s completed but logged %d error(s); first: %s",
+                        name, len(errors), errors[0][:200],
+                    )
+                else:
+                    SCHEDULER_JOB_RUNS.labels(job=name, status="success").inc()
+                    SCHEDULER_JOB_LAST_SUCCESS.labels(job=name).set(time.time())
                 return result
         return wrapper
     return decorator

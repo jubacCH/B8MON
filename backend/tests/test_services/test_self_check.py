@@ -358,3 +358,29 @@ async def test_instrumented_job_that_only_ever_failed_is_reported(db):
         )
 
     assert [p.key for p in problems] == ["job:disk_space_check"]
+
+
+async def test_job_that_only_ever_degrades_is_still_judged(db):
+    """A job completing but always logging errors must not look uninstrumented.
+
+    instrument_job records such a run as 'degraded' and deliberately does not
+    advance last_success. If the instrumentation probe ignored that status, the
+    job would be skipped as unmonitored — hiding precisely the failure mode the
+    degraded status was introduced to expose.
+    """
+    from services.self_check import collect_problems
+
+    scheduler = FakeScheduler([FakeJob("ping_checks", 60)])
+
+    def sample(metric, labels):
+        if metric == "nodeglow_scheduler_job_runs_total":
+            return 42.0 if labels.get("status") == "degraded" else None
+        return None  # last_success never set
+
+    with patch("services.self_check._active_sources", new=AsyncMock(return_value={})), \
+         patch("prometheus_client.REGISTRY.get_sample_value", side_effect=sample):
+        problems = await collect_problems(
+            db, scheduler, now=NOW, process_start=NOW - 100_000
+        )
+
+    assert [p.key for p in problems] == ["job:ping_checks"]
