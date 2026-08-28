@@ -33,6 +33,27 @@ from services import snapshot as snap_svc
 from services.audit import log_action
 
 logger = logging.getLogger(__name__)
+
+
+# ── API key usage tracking ───────────────────────────────────────────────────
+#
+# last_used answers "was this key used recently", not "exactly when". Writing it
+# on every authenticated request made a two-row table the most expensive
+# statement in the database — 17'059 writes totalling 380 s, with 22 ms of that
+# sitting in each request's own path — and left a dead tuple behind every time.
+API_KEY_LAST_USED_RESOLUTION = timedelta(minutes=5)
+
+
+def should_record_use(last_used, now) -> bool:
+    """Whether last_used is stale enough to be worth a write."""
+    if last_used is None:
+        return True
+    # A timestamp in the future (clock adjustment, restored backup) must not
+    # freeze recording until it catches up.
+    if last_used > now:
+        return True
+    return (now - last_used) >= API_KEY_LAST_USED_RESOLUTION
+
 router = APIRouter(prefix="/api/v1", tags=["API v1"])
 
 
@@ -77,16 +98,25 @@ async def require_api_key(request: Request, db: AsyncSession = Depends(get_db)) 
             api_key = result.scalar_one_or_none()
             if api_key:
                 # Migrate legacy key to HMAC on successful auth
+                dirty = False
                 hmac_hash = _hash_key(key)
                 if api_key.key_hash != hmac_hash:
                     api_key.key_hash = hmac_hash
+                    dirty = True
                     logger.warning("Migrated legacy SHA256 API key '%s' to HMAC. Consider rotating this key.", api_key.name)
                 # Mark the algo even when the hash already matched — legacy
                 # rows created before migration column existed are NULL.
                 if api_key.hash_algo != "hmac":
                     api_key.hash_algo = "hmac"
-                api_key.last_used = datetime.utcnow()
-                await db.commit()
+                    dirty = True
+
+                now = datetime.utcnow()
+                if should_record_use(api_key.last_used, now):
+                    api_key.last_used = now
+                    dirty = True
+
+                if dirty:
+                    await db.commit()
                 return api_key
         raise HTTPException(status_code=401, detail="Invalid or disabled API key.")
 
