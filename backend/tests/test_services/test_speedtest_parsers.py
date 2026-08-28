@@ -74,3 +74,18 @@ def test_missing_fields_do_not_raise():
 def test_ookla_tolerates_a_missing_server_block():
     result = parse_ookla_result({**OOKLA, "server": None})
     assert result["server_name"] == ""
+
+
+def test_ookla_binary_name_cannot_collide_with_the_pip_entry_point():
+    """The Ookla binary must not be looked up as plain "speedtest".
+
+    The speedtest-cli pip package installs an entry point of that name, and in
+    the image `COPY --from=builder /install /usr/local` lands after the Ookla
+    download — so the plain name resolved to the Python script. Detection would
+    then have found the legacy tool and invoked it with Ookla's arguments,
+    taking the integration out entirely.
+    """
+    from integrations.speedtest import LEGACY_BIN, OOKLA_BIN
+
+    assert OOKLA_BIN != "speedtest"
+    assert OOKLA_BIN != LEGACY_BIN

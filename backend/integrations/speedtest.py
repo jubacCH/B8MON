@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 # satellite and congested mobile stay well under it.
 MAX_PLAUSIBLE_PING_MS = 10_000
 
-OOKLA_BIN = "speedtest"
+# Deliberately not "speedtest": the speedtest-cli pip package installs an entry
+# point of that name, so the plain name cannot distinguish the two tools.
+OOKLA_BIN = "ookla-speedtest"
 LEGACY_BIN = "speedtest-cli"
 
 
