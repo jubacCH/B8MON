@@ -67,6 +67,12 @@ class BaseIntegration(ABC):
     # ── Config fields (override in subclass) ─────────────────────────────────
     config_fields: list[ConfigField] = []
 
+    # How often this integration should be polled, in seconds. Collectors that
+    # are expensive or disruptive override this — a speedtest saturates the
+    # uplink while it runs and must not be scheduled like a cheap API poll.
+    # An explicit poll_interval_seconds in the instance config still wins.
+    default_interval_seconds: int = 60
+
     def __init__(self, config: dict[str, Any] | None = None):
         """Initialize with decrypted config dict."""
         self.config = config or {}

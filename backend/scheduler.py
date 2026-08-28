@@ -91,10 +91,16 @@ async def run_integration_checks():
     auto-populated from the cluster_name on first successful poll.
     """
     from integrations import get_registry
+    from database import get_setting
+    from services.integration_schedule import effective_interval, is_due
 
     registry = get_registry()
     if not registry:
         return
+
+    async with AsyncSessionLocal() as db:
+        # Fallback cadence for integrations that specify none of their own.
+        integration_interval = int(await get_setting(db, "proxmox_interval", "60"))
 
     async with AsyncSessionLocal() as db:
         # Pull only the IDs in id-order, then re-fetch each cfg fresh inside
@@ -150,6 +156,19 @@ async def run_integration_checks():
                             _span.set_attribute("error", True)
                             continue
                         instance = integration_cls(config=config_dict)
+                        # Respect this integration's own cadence. Sharing one
+                        # interval across all of them meant a speedtest — which
+                        # saturates the uplink for 30-60 s — was polled as often
+                        # as a cheap API call, so runs overlapped permanently.
+                        interval = effective_interval(
+                            integration_cls, config_dict, integration_interval
+                        )
+                        last_run = await snap_svc.last_timestamp(
+                            db, integration_type, cfg.id
+                        )
+                        if not is_due(last_run, datetime.utcnow(), interval):
+                            continue
+
                         result = await instance.collect()
 
                         if result.success:

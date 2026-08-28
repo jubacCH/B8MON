@@ -138,6 +138,21 @@ def _parse_form_config(integration_cls: type[BaseIntegration], form: dict,
                 config[field.key] = field.default
         else:
             config[field.key] = raw if raw else (field.default or "")
+
+    # Not declared per class (see api_config_fields), so extract it here too.
+    # Empty means "use the integration's default", which effective_interval
+    # resolves — storing 0 or "" would be indistinguishable from an explicit
+    # choice, so the key is simply omitted.
+    raw_interval = form.get("poll_interval_seconds", "")
+    if isinstance(raw_interval, str):
+        raw_interval = raw_interval.strip()
+    if raw_interval not in ("", None):
+        try:
+            parsed = int(raw_interval)
+            if parsed > 0:
+                config["poll_interval_seconds"] = parsed
+        except (TypeError, ValueError):
+            pass  # leave unset; the default applies
     return config
 
 
@@ -162,6 +177,20 @@ async def api_config_fields(integration_type: str):
             "default": f.default if f.default is not None else "",
             "options": f.options if hasattr(f, "options") and f.options else None,
         })
+
+    # Offered on every integration rather than declared in each class: how often
+    # to poll is a property of the deployment, not of the integration. The
+    # placeholder shows what it would do if left empty.
+    default_interval = getattr(integration_cls, "default_interval_seconds", 60)
+    fields.append({
+        "key": "poll_interval_seconds",
+        "label": "Poll interval (seconds)",
+        "field_type": "number",
+        "placeholder": f"Default: {default_interval}",
+        "required": False,
+        "default": "",
+        "options": None,
+    })
     return JSONResponse({
         "type": integration_type,
         "display_name": integration_cls.display_name,
