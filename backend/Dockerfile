@@ -12,9 +12,30 @@ WORKDIR /app
 
 # iputils-ping for ICMP checks, snmp for SNMP monitoring, gosu for privilege drop
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        iputils-ping snmp gosu libcap2-bin \
+        iputils-ping snmp gosu libcap2-bin ca-certificates curl \
     && setcap cap_net_raw+ep /usr/bin/ping \
     && rm -rf /var/lib/apt/lists/*
+
+# Ookla speedtest CLI. The pip package speedtest-cli is unmaintained since 2021
+# and reports a fixed ping of 1800000 ms against some connections; it stays
+# installed as a fallback for images built without network access to Ookla.
+ARG TARGETARCH=amd64
+ARG OOKLA_VERSION=1.2.0
+RUN set -eux; \
+    case "$TARGETARCH" in \
+        amd64) ookla_arch=x86_64 ;; \
+        arm64) ookla_arch=aarch64 ;; \
+        arm) ookla_arch=armhf ;; \
+        *) ookla_arch="" ;; \
+    esac; \
+    if [ -n "$ookla_arch" ]; then \
+        curl -fsSL "https://install.speedtest.net/app/cli/ookla-speedtest-${OOKLA_VERSION}-linux-${ookla_arch}.tgz" \
+            | tar -xz -C /usr/local/bin speedtest \
+        && chmod +x /usr/local/bin/speedtest \
+        && /usr/local/bin/speedtest --version >/dev/null; \
+    else \
+        echo "No Ookla build for $TARGETARCH — falling back to speedtest-cli"; \
+    fi
 
 COPY --from=builder /install /usr/local
 
