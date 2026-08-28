@@ -62,11 +62,30 @@ JOB_ID_PREFIXES = ("src:",)
 
 
 def metric_name_for(job_id: str) -> str:
-    """Translate a scheduler job id into the label used by its metrics."""
+    """Translate a scheduler job id into the label used by its metrics.
+
+    A last resort. Prefer :func:`metric_name_of_job`, which reads the label off
+    the instrumented function rather than inferring it.
+    """
     for prefix in JOB_ID_PREFIXES:
         if job_id.startswith(prefix):
             return job_id[len(prefix):]
     return job_id
+
+
+def metric_name_of_job(job) -> str:
+    """The metric label for a scheduler job.
+
+    Ask the instrumented function directly; it knows the label it records
+    under. Guessing from the job id is only a fallback, and it was wrong for
+    four jobs — ``disk_space`` records as ``disk_space_check``, ``dns_resolve``
+    as ``dns_resolution``. The lookup returned nothing for those, the watcher
+    read that as "never instrumented", and skipped them permanently. The disk
+    check, whose silent failures this module was written for, was one of them.
+    """
+    from services.metrics import metric_name_of
+
+    return metric_name_of(getattr(job, "func", None)) or metric_name_for(job.id)
 
 
 def _humanise(seconds: float) -> str:
@@ -280,8 +299,9 @@ async def collect_problems(db, scheduler, now: float, process_start: float) -> l
     try:
         from prometheus_client import REGISTRY
 
+        jobs_by_id = {job.id: job for job in scheduler.get_jobs()}
         for job_id, interval in _job_intervals(scheduler).items():
-            name = metric_name_for(job_id)
+            name = metric_name_of_job(jobs_by_id[job_id])
             if name in JOB_CHECK_EXCLUDE:
                 continue
 

@@ -276,5 +276,18 @@ def instrument_job(name: str) -> Callable[[Callable[..., Awaitable[T]]], Callabl
                     SCHEDULER_JOB_RUNS.labels(job=name, status="success").inc()
                     SCHEDULER_JOB_LAST_SUCCESS.labels(job=name).set(time.time())
                 return result
+
+        # Carry the metric label on the function itself, so a watcher holding a
+        # scheduler job can read the name its metrics are actually recorded
+        # under instead of guessing it from the job id. Four jobs registered
+        # under an id that differed from this label, and the self-check silently
+        # skipped every one of them — including the disk check whose 2729
+        # unnoticed failures are the reason the self-check exists.
+        wrapper.metric_name = name
         return wrapper
     return decorator
+
+
+def metric_name_of(fn) -> str | None:
+    """The metric label a job function records under, if it is instrumented."""
+    return getattr(fn, "metric_name", None)
