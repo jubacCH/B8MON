@@ -59,7 +59,7 @@ export interface SyslogStats {
 export interface SpeedtestData {
   download_mbps: number;
   upload_mbps: number;
-  ping_ms: number;
+  ping_ms: number | null;
   server_name: string;
   timestamp: string;
 }

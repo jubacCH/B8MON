@@ -519,7 +519,7 @@ export default function DashboardPage() {
                 <p className="text-[10px] text-slate-500 uppercase">Up Mbps</p>
               </div>
               <div>
-                <p className="text-2xl font-bold text-emerald-400">{Math.round(data.speedtest_data.ping_ms)}</p>
+                <p className="text-2xl font-bold text-emerald-400">{data.speedtest_data.ping_ms === null ? '—' : Math.round(data.speedtest_data.ping_ms)}</p>
                 <p className="text-[10px] text-slate-500 uppercase">Ping ms</p>
               </div>
             </div>
