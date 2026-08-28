@@ -22,7 +22,8 @@ _PHASE2_SCHEMAS = [
         host_id     UInt32 NOT NULL,
         host_name   LowCardinality(String) DEFAULT '',
         success     UInt8  NOT NULL,
-        latency_ms  Nullable(Float32)
+        latency_ms  Nullable(Float32),
+        probe_id    UInt32 DEFAULT 0
     )
     ENGINE = MergeTree()
     PARTITION BY toYYYYMMDD(timestamp)
@@ -82,6 +83,10 @@ _PHASE3_ALTERS = [
     "ALTER TABLE ping_checks ADD COLUMN IF NOT EXISTS host_name LowCardinality(String) DEFAULT ''",
     "ALTER TABLE agent_metrics ADD COLUMN IF NOT EXISTS agent_name LowCardinality(String) DEFAULT ''",
     "ALTER TABLE bandwidth_metrics ADD COLUMN IF NOT EXISTS source_name LowCardinality(String) DEFAULT ''",
+    # Which probe produced a result; 0 is the core. Added rather than made part
+    # of ORDER BY, because prepending a sort key needs a full table rewrite and
+    # every existing row is legitimately probe 0.
+    "ALTER TABLE ping_checks ADD COLUMN IF NOT EXISTS probe_id UInt32 DEFAULT 0",
 ]
 
 _schemas_applied = False
@@ -218,11 +223,12 @@ async def _do_insert(client, table: str, data: list, columns: list[str]) -> None
 async def insert_ping_checks(rows: list[dict]) -> None:
     """Bulk-insert ping check results.
 
-    Each row: {timestamp, host_id, host_name, success (bool), latency_ms (float|None)}
+    Each row: {timestamp, host_id, host_name, success (bool), latency_ms (float|None),
+    probe_id (int, 0 = checked by the core)}
     """
     if not rows:
         return
-    columns = ["timestamp", "host_id", "host_name", "success", "latency_ms"]
+    columns = ["timestamp", "host_id", "host_name", "success", "latency_ms", "probe_id"]
     data = [
         [
             r.get("timestamp") or datetime.utcnow(),
@@ -230,6 +236,7 @@ async def insert_ping_checks(rows: list[dict]) -> None:
             str(r.get("host_name") or ""),
             1 if r.get("success") else 0,
             float(r["latency_ms"]) if r.get("latency_ms") is not None else None,
+            int(r.get("probe_id") or 0),
         ]
         for r in rows
     ]

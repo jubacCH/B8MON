@@ -272,6 +272,42 @@ async def _active_sources(db) -> dict[str, bool]:
     return active
 
 
+async def _probe_problems(db, now: float) -> list[Problem]:
+    """Probes that have gone quiet while hosts depend on them."""
+    from sqlalchemy import func, select
+
+    from database import PingHost
+    from models.agent import Agent
+    from services.probes import ProbeState, problems_for
+
+    rows = (await db.execute(
+        select(Agent).where(Agent.is_probe == True)  # noqa: E712
+    )).scalars().all()
+    if not rows:
+        return []
+
+    counts = dict((await db.execute(
+        select(PingHost.probe_id, func.count())
+        .where(PingHost.probe_id.isnot(None), PingHost.enabled == True)  # noqa: E712
+        .group_by(PingHost.probe_id)
+    )).all())
+
+    states = [
+        ProbeState(
+            probe_id=a.id,
+            name=a.name or a.hostname or f"agent-{a.id}",
+            interval_seconds=a.probe_interval_seconds,
+            last_report=a.last_seen.timestamp() if a.last_seen else None,
+        )
+        for a in rows
+    ]
+
+    return [
+        Problem(key=p["key"], title=p["title"], severity=p["severity"], summary=p["summary"])
+        for p in problems_for(states, counts, now)
+    ]
+
+
 async def collect_problems(db, scheduler, now: float, process_start: float) -> list[Problem]:
     """Gather everything currently wrong with Nodeglow itself."""
     problems: list[Problem] = []
@@ -295,7 +331,17 @@ async def collect_problems(db, scheduler, now: float, process_start: float) -> l
         if problem:
             problems.append(problem)
 
-    # 2. Jobs that stopped completing.
+    # 2. Probes that went quiet.
+    #
+    # Deliberately not covered by the ping_checks freshness source above. With
+    # several writers that stream stays fresh while one probe is dead, so a
+    # global check would see nothing wrong while a whole site went unobserved.
+    try:
+        problems.extend(await _probe_problems(db, now))
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Self-check probe pass failed: %s", exc)
+
+    # 3. Jobs that stopped completing.
     try:
         from prometheus_client import REGISTRY
 

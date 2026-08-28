@@ -95,7 +95,9 @@ CREATE TABLE IF NOT EXISTS ping_checks
     host_id     UInt32 NOT NULL,
     host_name   LowCardinality(String) DEFAULT '',
     success     UInt8  NOT NULL,
-    latency_ms  Nullable(Float32)
+    latency_ms  Nullable(Float32),
+    -- Which probe produced this result; 0 means the core checked it itself.
+    probe_id    UInt32 DEFAULT 0
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
