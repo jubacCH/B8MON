@@ -3,6 +3,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 # Stores last dashboard API timing for /system/status display
+from services._sampling import select_sample_indices
+
 _last_perf: dict = {}
 
 # ── Anomaly baseline sampling ────────────────────────────────────────────────
@@ -20,27 +22,8 @@ BASELINE_KEEP_NEWEST = 6
 
 
 def select_baseline_indices(total: int, budget: int, keep_newest: int) -> list[int]:
-    """Pick which snapshots to load, newest-exact and evenly spaced before that.
-
-    Returns sorted, unique indices into a chronologically ordered sequence.
-    """
-    if total <= 0:
-        return []
-    if total <= budget:
-        return list(range(total))
-
-    keep_newest = min(keep_newest, total)
-    tail_start = total - keep_newest
-    picked = set(range(tail_start, total))
-
-    remaining = budget - keep_newest
-    if remaining > 0 and tail_start > 0:
-        # Evenly spaced across everything before the tail, so the baseline
-        # describes the whole window rather than just its most recent slice.
-        step = tail_start / remaining
-        picked.update(min(int(i * step), tail_start - 1) for i in range(remaining))
-
-    return sorted(picked)
+    """See :func:`services._sampling.select_sample_indices`."""
+    return select_sample_indices(total, budget, keep_newest)
 
 
 

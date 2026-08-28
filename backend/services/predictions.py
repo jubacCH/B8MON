@@ -12,6 +12,15 @@ from sqlalchemy import select
 
 from models.integration import IntegrationConfig, Snapshot
 
+from services._sampling import select_sample_indices
+
+# A disk-fill trend is a line through time; a few hundred points define it just
+# as well as tens of thousands. The newest are kept exactly so a sudden change
+# is not smoothed away.
+PREDICTION_SAMPLE_BUDGET = 200
+PREDICTION_KEEP_NEWEST = 10
+
+
 logger = logging.getLogger(__name__)
 
 # Storage integration types (all use standardized "storage_pools" key)
@@ -47,9 +56,15 @@ async def predict_disk_full(db: AsyncSession, days_back: int = 14) -> dict[str, 
     for cfg in configs:
         label = f"{_int_meta(cfg.type)['label']}: {cfg.name}"
 
-        # Get snapshot history
-        snap_result = await db.execute(
-            select(Snapshot)
+        # Get snapshot history.
+        #
+        # Ids first: data_json runs to ~100 kB a row, and a week of proxmox
+        # snapshots is 18'443 rows / 909 MB. Loading all of it per integration
+        # made this ~9.6 s, which the dashboard paid for on every cache miss.
+        # A disk-fill trend does not need every sample — an evenly spaced subset
+        # describes the same line.
+        id_rows = (await db.execute(
+            select(Snapshot.id)
             .where(
                 Snapshot.entity_type == cfg.type,
                 Snapshot.entity_id == cfg.id,
@@ -57,8 +72,22 @@ async def predict_disk_full(db: AsyncSession, days_back: int = 14) -> dict[str, 
                 Snapshot.timestamp >= since,
             )
             .order_by(Snapshot.timestamp.asc())
-        )
-        snapshots = snap_result.scalars().all()
+        )).all()
+
+        if len(id_rows) < 3:
+            continue
+
+        wanted = [
+            id_rows[i][0] for i in select_sample_indices(
+                len(id_rows), PREDICTION_SAMPLE_BUDGET, PREDICTION_KEEP_NEWEST
+            )
+        ]
+
+        snapshots = (await db.execute(
+            select(Snapshot)
+            .where(Snapshot.id.in_(wanted))
+            .order_by(Snapshot.timestamp.asc())
+        )).scalars().all()
         if len(snapshots) < 3:
             continue
 
