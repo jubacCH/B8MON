@@ -24,6 +24,7 @@ async def settings_json(request: Request, db: AsyncSession = Depends(get_db)):
         return err
     keys = [
         "site_name", "timezone", "ping_interval", "latency_threshold_ms",
+        "agent_server_url",
         "proxmox_interval", "notify_enabled", "notify_grace_minutes",
         "telegram_bot_token", "telegram_chat_id",
         "discord_webhook_url", "webhook_url", "webhook_secret",
@@ -90,6 +91,7 @@ async def settings_json(request: Request, db: AsyncSession = Depends(get_db)):
 async def save_settings(
     request: Request,
     site_name:          str = Form("NODEGLOW"),
+    agent_server_url:   str = Form(""),
     ping_interval:      str = Form("60"),
     proxmox_interval:   str = Form("60"),
     ping_retention:     str = Form("30"),
@@ -112,6 +114,10 @@ async def save_settings(
     if err := require_admin(request):
         return err
     await set_setting(db, "site_name", site_name.strip())
+    # The address agents call back on. Needed wherever the proxy in front of
+    # this app does not pass a usable X-Forwarded-Host, and as an override
+    # when agents must reach the server on a different name than operators do.
+    await set_setting(db, "agent_server_url", agent_server_url.strip().rstrip("/"))
 
     try:
         p_interval = max(10, min(3600, int(ping_interval)))
