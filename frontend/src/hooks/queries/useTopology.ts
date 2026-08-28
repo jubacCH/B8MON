@@ -5,7 +5,9 @@ interface TopologyNode {
   id: number;
   name: string;
   hostname: string;
-  status: 'up' | 'down';
+  // 'unknown' covers a host nobody is currently observing (e.g. its probe
+  // went silent) — distinct from both 'up' and 'down'.
+  status: 'up' | 'down' | 'unknown';
   check_type: string;
   source: string;
   maintenance: boolean;

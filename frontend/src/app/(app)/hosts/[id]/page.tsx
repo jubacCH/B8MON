@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { useHost, useHostHistory, useHosts } from '@/hooks/queries/useHosts';
+import { useAgents } from '@/hooks/queries/useAgents';
 import { formatLatency, uptimeColor, timeAgo } from '@/lib/utils';
 import { EChart } from '@/components/charts/EChart';
 import { ArrowLeft, RefreshCw, Cpu, MemoryStick, HardDrive, Clock, Activity, Network, Wifi, Pencil, Cable, Zap, Users, ArrowUpDown, FileText, AlertTriangle, Scan, Check, X, Lock, Shield } from 'lucide-react';
@@ -1589,6 +1590,7 @@ function MaintenanceCard({ host, hostId }: { host: any; hostId: number | string 
 /* ── Edit Host Modal ── */
 
 const editInputClass = 'w-full px-3 py-2 text-sm bg-white/[0.06] border border-white/[0.08] rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500/50';
+const editSelectClass = `${editInputClass} [&>option]:text-[var(--ng-text-primary)]`;
 
 function EditHostModal({ open, onClose, host, onSaved }: {
   open: boolean;
@@ -1597,11 +1599,15 @@ function EditHostModal({ open, onClose, host, onSaved }: {
   host: any;
   onSaved: () => void;
 }) {
+  const { data: agents } = useAgents();
+  const probes = (agents ?? []).filter((a) => a.is_probe);
+
   const [form, setForm] = useState({
     name: '',
     hostname: '',
     latency_threshold_ms: '',
     enabled: true,
+    probe_id: '' as string,
   });
   const [saving, setSaving] = useState(false);
 
@@ -1613,6 +1619,7 @@ function EditHostModal({ open, onClose, host, onSaved }: {
         hostname: host.hostname ?? '',
         latency_threshold_ms: host.latency_threshold_ms ? String(host.latency_threshold_ms) : '',
         enabled: host.enabled !== false,
+        probe_id: host.probe_id != null ? String(host.probe_id) : '',
       });
     }
   }, [open, host]);
@@ -1625,6 +1632,7 @@ function EditHostModal({ open, onClose, host, onSaved }: {
         hostname: form.hostname,
         latency_threshold_ms: form.latency_threshold_ms ? Number(form.latency_threshold_ms) : null,
         enabled: form.enabled,
+        probe_id: form.probe_id ? Number(form.probe_id) : null,
       });
       onSaved();
       onClose();
@@ -1655,6 +1663,23 @@ function EditHostModal({ open, onClose, host, onSaved }: {
               <span className="text-sm text-slate-300">Enabled</span>
             </label>
           </div>
+        </div>
+        <div>
+          <label className="block text-xs text-slate-400 mb-1">Checked By</label>
+          <select
+            value={form.probe_id}
+            onChange={(e) => setForm({ ...form, probe_id: e.target.value })}
+            className={editSelectClass}
+          >
+            <option value="">Core (default)</option>
+            {probes.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            Which agent runs checks for this host. Core checks it directly unless a probe is
+            assigned — pick one for hosts on a network the core cannot reach.
+          </p>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>

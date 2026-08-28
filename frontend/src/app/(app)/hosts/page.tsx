@@ -102,7 +102,7 @@ function hostStatusKey(h: HostStatus): 'disabled' | 'maintenance' | 'unknown' | 
 function hostStatusLabel(h: HostStatus): string {
   const key = hostStatusKey(h);
   const labels: Record<string, string> = {
-    disabled: 'Disabled', maintenance: 'Maint.', unknown: '—',
+    disabled: 'Disabled', maintenance: 'Maint.', unknown: 'Not observed',
     offline: 'Offline', error: 'Port Error', online: 'Online',
   };
   return labels[key];
@@ -149,6 +149,7 @@ function HostsPageInner() {
       result = result.filter((h) => {
         if (statusFilter === 'online') return h.online === true && !h.maintenance && !h.port_error;
         if (statusFilter === 'offline') return h.online === false && !h.maintenance;
+        if (statusFilter === 'unknown') return h.online === null && !h.maintenance;
         if (statusFilter === 'error') return h.online === true && h.port_error && !h.maintenance;
         if (statusFilter === 'maintenance') return h.maintenance;
         return true;
@@ -277,6 +278,7 @@ function HostsPageInner() {
 
   const onlineCount = hosts?.filter((h) => h.online === true && !h.maintenance && !h.port_error).length ?? 0;
   const offlineCount = hosts?.filter((h) => h.online === false && !h.maintenance).length ?? 0;
+  const unknownCount = hosts?.filter((h) => h.online === null && !h.maintenance).length ?? 0;
   const errorCount = hosts?.filter((h) => h.online === true && h.port_error && !h.maintenance).length ?? 0;
   const maintCount = hosts?.filter((h) => h.maintenance).length ?? 0;
 
@@ -333,6 +335,7 @@ function HostsPageInner() {
           { key: 'all', label: `All (${hosts?.length ?? 0})` },
           { key: 'online', label: `Online (${onlineCount})`, color: 'text-emerald-400' },
           { key: 'offline', label: `Offline (${offlineCount})`, color: 'text-red-400' },
+          ...(unknownCount > 0 ? [{ key: 'unknown', label: `Not Observed (${unknownCount})`, color: 'text-slate-400' }] : []),
           ...(errorCount > 0 ? [{ key: 'error', label: `Port Error (${errorCount})`, color: 'text-orange-400' }] : []),
           { key: 'maintenance', label: `Maintenance (${maintCount})`, color: 'text-amber-400' },
         ].map((f) => (

@@ -20,6 +20,9 @@ function spiralPosition(index: number, total: number): [number, number, number] 
 function hostColor(host: HostStat): string {
   if (host.host.maintenance) return '#FBBF24';
   if (host.online === false) return '#F87171';
+  // A host nobody is currently observing (probe silent, never checked) must
+  // never read as healthy — it gets its own neutral color, not green.
+  if (host.online === null) return '#64748B';
   if (host.host.port_error) return '#FB923C';
   return '#34D399';
 }
@@ -166,7 +169,10 @@ function HostNode({ host, position }: HostNodeProps) {
             {host.online === false && (
               <span className="ml-2 text-red-400">offline</span>
             )}
-            {host.online !== false && host.host.port_error && (
+            {host.online === null && (
+              <span className="ml-2 text-slate-400">not observed</span>
+            )}
+            {host.online === true && host.host.port_error && (
               <span className="ml-2 text-orange-400">port error</span>
             )}
             {host.host.maintenance && (

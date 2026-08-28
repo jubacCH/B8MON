@@ -8,11 +8,12 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useAgents } from '@/hooks/queries/useAgents';
-import { get, del } from '@/lib/api';
+import { useHostsV1 } from '@/hooks/queries/useHosts';
+import { get, del, patch } from '@/lib/api';
 import { useToastStore } from '@/stores/toast';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useQueryClient } from '@tanstack/react-query';
-import { Plus, X, Copy, Check, Terminal, Monitor, Trash2, Tag, Cpu } from 'lucide-react';
+import { Plus, X, Copy, Check, Terminal, Monitor, Trash2, Tag, Cpu, Radio, Server } from 'lucide-react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { timeAgo } from '@/lib/utils';
 import Link from 'next/link';
@@ -165,10 +166,20 @@ function AddAgentDialog({ onClose }: { onClose: () => void }) {
 export default function AgentsPage() {
   useEffect(() => { document.title = 'Agents | Nodeglow'; }, []);
   const { data: agents, isLoading } = useAgents();
+  const { data: hosts } = useHostsV1();
   const [showAdd, setShowAdd] = useState(false);
   const toast = useToastStore((s) => s.show);
   const qc = useQueryClient();
   const { confirm, ConfirmDialogElement } = useConfirm();
+  const [togglingProbe, setTogglingProbe] = useState<number | null>(null);
+
+  // Number of hosts each probe is currently responsible for.
+  const hostCountByProbe = new Map<number, number>();
+  for (const h of hosts ?? []) {
+    if (h.probe_id != null) {
+      hostCountByProbe.set(h.probe_id, (hostCountByProbe.get(h.probe_id) ?? 0) + 1);
+    }
+  }
 
   async function handleDelete(agentId: number, name: string, e: React.MouseEvent) {
     e.preventDefault();
@@ -181,6 +192,26 @@ export default function AgentsPage() {
       toast('Agent decommissioned', 'success');
     } catch {
       toast('Failed to delete agent', 'error');
+    }
+  }
+
+  async function handleToggleProbe(agentId: number, name: string, currentlyProbe: boolean, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setTogglingProbe(agentId);
+    try {
+      await patch(`/api/v1/agents/${agentId}`, { is_probe: !currentlyProbe });
+      qc.invalidateQueries({ queryKey: ['agents'] });
+      toast(
+        currentlyProbe
+          ? `${name} is no longer a probe`
+          : `${name} now checks hosts in its network as a probe`,
+        'success',
+      );
+    } catch {
+      toast('Failed to update probe mode', 'error');
+    } finally {
+      setTogglingProbe(null);
     }
   }
 
@@ -231,6 +262,11 @@ export default function AgentsPage() {
                       <Tag size={10} /> v{agent.agent_version}
                     </Badge>
                   )}
+                  {agent.is_probe && (
+                    <Badge className="bg-violet-500/10 text-violet-300 border-violet-500/30">
+                      <Radio size={10} /> Probe
+                    </Badge>
+                  )}
                   <button
                     onClick={(e) => handleDelete(agent.id, agent.name, e)}
                     className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-white/[0.06] transition-colors"
@@ -249,6 +285,30 @@ export default function AgentsPage() {
                     Last seen: {timeAgo(agent.last_seen)}
                   </p>
                 )}
+                {/* Probe mode: lets this agent check hosts in its own network
+                    without the core reaching into it directly. */}
+                <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Radio size={13} className={agent.is_probe ? 'text-violet-400' : 'text-slate-500'} />
+                    <span className="text-xs text-slate-400">Probe mode</span>
+                    {agent.is_probe && (
+                      <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                        <Server size={11} />
+                        {hostCountByProbe.get(agent.id) ?? 0} host{(hostCountByProbe.get(agent.id) ?? 0) === 1 ? '' : 's'}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={!!agent.is_probe}
+                    onClick={(e) => handleToggleProbe(agent.id, agent.name, !!agent.is_probe, e)}
+                    disabled={togglingProbe === agent.id}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors disabled:opacity-50 ${agent.is_probe ? 'bg-violet-500' : 'bg-slate-600'}`}
+                  >
+                    <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${agent.is_probe ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </button>
+                </div>
               </GlassCard>
             </Link>
           );

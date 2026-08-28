@@ -14,7 +14,9 @@ interface TopoNode {
   id: number;
   name: string;
   hostname: string;
-  status: 'up' | 'down';
+  // 'unknown' covers a host nobody is currently observing (e.g. its probe
+  // went silent) — it must render distinctly, never as 'up' or 'down'.
+  status: 'up' | 'down' | 'unknown';
   check_type: string;
   source: string;
   maintenance: boolean;
@@ -110,6 +112,8 @@ function layoutTree(tree: TreeNode, offsetX: number): { nodes: LayoutNode[]; wid
 function nodeColors(n: TopoNode) {
   if (n.maintenance) return { fill: '#78350f', stroke: '#f59e0b', text: '#fbbf24', dot: '#fbbf24', line: '#78350f' };
   if (n.status === 'down') return { fill: '#450a0a', stroke: '#dc2626', text: '#f87171', dot: '#f87171', line: '#7f1d1d' };
+  // Not observed: neutral slate, never the green "up" treatment.
+  if (n.status === 'unknown') return { fill: '#1e293b', stroke: '#64748b', text: '#94a3b8', dot: '#94a3b8', line: '#334155' };
   return { fill: '#022c22', stroke: '#059669', text: '#34d399', dot: '#34d399', line: '#064e3b' };
 }
 
@@ -278,7 +282,7 @@ function TopologyCanvas({
       ctx.fillText(host, ln.x + 34, ln.y + 35);
 
       // Status text right side
-      const statusText = ln.node.maintenance ? 'MAINT' : ln.node.status === 'up' ? 'UP' : 'DOWN';
+      const statusText = ln.node.maintenance ? 'MAINT' : ln.node.status === 'up' ? 'UP' : ln.node.status === 'unknown' ? 'N/OBS' : 'DOWN';
       ctx.fillStyle = c.dot;
       ctx.globalAlpha = 0.7;
       ctx.font = `700 9px ui-sans-serif, system-ui, sans-serif`;
@@ -425,6 +429,7 @@ export default function TopologyPage() {
 
   const onlineCount = data?.nodes.filter((n) => n.status === 'up' && !n.maintenance).length ?? 0;
   const offlineCount = data?.nodes.filter((n) => n.status === 'down' && !n.maintenance).length ?? 0;
+  const unknownCount = data?.nodes.filter((n) => n.status === 'unknown' && !n.maintenance).length ?? 0;
   const maintCount = data?.nodes.filter((n) => n.maintenance).length ?? 0;
   const connectedCount = data?.edges.length ?? 0;
 
@@ -433,11 +438,12 @@ export default function TopologyPage() {
       <PageHeader title="Network Topology" description="Infrastructure dependency map" />
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         {[
           { label: 'Nodes', value: data?.nodes.length ?? 0, color: 'var(--ng-text-primary)' },
           { label: 'Online', value: onlineCount, color: '#34d399' },
           { label: 'Offline', value: offlineCount, color: '#f87171' },
+          { label: 'Not Observed', value: unknownCount, color: '#94a3b8' },
           { label: 'Maintenance', value: maintCount, color: '#fbbf24' },
           { label: 'Connections', value: connectedCount, color: '#38bdf8' },
         ].map((s) => (
